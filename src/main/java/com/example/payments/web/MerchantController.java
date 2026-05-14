@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -63,7 +63,7 @@ public class MerchantController {
             HttpServletRequest request
     ) throws IOException, WriterException {
         merchantService.detail(merchantId);
-        String cashierUrl = ServletUriComponentsBuilder.fromContextPath(request)
+        String cashierUrl = UriComponentsBuilder.fromUriString(RequestUrlSupport.origin(request))
                 .path("/cashier.html")
                 .queryParam("merchantId", merchantId)
                 .build()

@@ -163,6 +163,7 @@
     }
 
     .result {
+      display: none;
       margin-top: 16px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -407,7 +408,10 @@
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" });
       return;
     }
-    const extra = { cashier: true };
+    const extra = {
+      cashier: true,
+      cashierDesktopQr: !isMobilePayClient()
+    };
     if (currentMerchant) {
       extra.merchantId = currentMerchant.merchantId;
       extra.merchantName = currentMerchant.name;

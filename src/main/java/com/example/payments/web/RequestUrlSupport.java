@@ -3,6 +3,7 @@ package com.example.payments.web;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.util.UriUtils;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 
 final class RequestUrlSupport {
@@ -22,9 +23,19 @@ final class RequestUrlSupport {
         return apiBase(request) + "/alipay/return/" + encode(channelId);
     }
 
-    private static String origin(HttpServletRequest request) {
-        String scheme = firstNonBlank(firstHeader(request, "X-Forwarded-Proto"), request.getScheme());
-        String host = firstNonBlank(firstHeader(request, "X-Forwarded-Host"), request.getHeader("Host"));
+    static String origin(HttpServletRequest request) {
+        String forwardedProto = firstHeader(request, "X-Forwarded-Proto");
+        String forwardedHost = firstHeader(request, "X-Forwarded-Host");
+        String browserOrigin = firstNonBlank(
+                originFromHeader(firstHeader(request, "Origin")),
+                originFromHeader(firstHeader(request, "Referer"))
+        );
+        if (forwardedProto == null && forwardedHost == null && browserOrigin != null) {
+            return browserOrigin;
+        }
+
+        String scheme = firstNonBlank(forwardedProto, request.getScheme());
+        String host = firstNonBlank(forwardedHost, request.getHeader("Host"));
         if (host == null) {
             host = request.getServerName();
             if (!isDefaultPort(scheme, request.getServerPort())) {
@@ -56,6 +67,25 @@ final class RequestUrlSupport {
 
     private static String firstNonBlank(String value, String fallback) {
         return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private static String originFromHeader(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            URI uri = URI.create(value);
+            if (uri.getScheme() == null || uri.getHost() == null) {
+                return null;
+            }
+            String origin = uri.getScheme() + "://" + uri.getHost();
+            if (!isDefaultPort(uri.getScheme(), uri.getPort()) && uri.getPort() > 0) {
+                origin = origin + ":" + uri.getPort();
+            }
+            return origin;
+        } catch (IllegalArgumentException ignored) {
+            return null;
+        }
     }
 
     private static boolean hasPort(String host) {

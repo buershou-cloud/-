@@ -15,7 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -42,7 +42,7 @@ public class CashierQrController {
             throw new IllegalArgumentException("Product is not enabled on channel: " + product);
         }
 
-        String cashierUrl = ServletUriComponentsBuilder.fromContextPath(request)
+        String cashierUrl = UriComponentsBuilder.fromUriString(RequestUrlSupport.origin(request))
                 .path("/cashier.html")
                 .queryParam("channelId", channelId)
                 .queryParamIfPresent("product", java.util.Optional.ofNullable(product).map(Enum::name))

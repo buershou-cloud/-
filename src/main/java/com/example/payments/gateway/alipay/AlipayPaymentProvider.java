@@ -55,6 +55,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     @Override
     public GatewayResponse pay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        if (cashierDesktopQr(request) && shouldUsePrecreateForDesktop(request.product())) {
+            return precreate(channel, request);
+        }
         return switch (request.product()) {
             case ALIPAY_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
             case ALIPAY_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
@@ -200,6 +203,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "payee_user_id", asString(valueFromExtra(request.extra(), "payee_user_id", null)));
         putIfText(bizContent, "payee_logon_id", asString(valueFromExtra(request.extra(), "payee_logon_id", null)));
         merge(bizContent, request.extra());
+        removeInternalExtras(bizContent);
         AlipayGatewayResponse response = client.execute(channel, METHOD_PREAUTH_FREEZE, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null);
     }
@@ -225,7 +229,35 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfPresent(bizContent, "royalty_info", request.royaltyInfo());
         putDirectSubMerchant(channel, bizContent);
         merge(bizContent, request.extra());
+        removeInternalExtras(bizContent);
         return bizContent;
+    }
+
+    private static boolean cashierDesktopQr(PayCreateRequest request) {
+        Object value = valueFromExtra(request.extra(), "cashierDesktopQr", false);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return Boolean.parseBoolean(asString(value));
+    }
+
+    private static boolean shouldUsePrecreateForDesktop(PaymentProduct product) {
+        return switch (product) {
+            case ALIPAY_WAP,
+                 ALIPAY_PAGE,
+                 ALIPAY_JSAPI,
+                 ALIPAY_DIRECT_WAP,
+                 ALIPAY_DIRECT_PAGE,
+                 ALIPAY_DIRECT_JSAPI -> true;
+            default -> false;
+        };
+    }
+
+    private static void removeInternalExtras(Map<String, Object> bizContent) {
+        bizContent.remove("cashier");
+        bizContent.remove("cashierDesktopQr");
+        bizContent.remove("merchantId");
+        bizContent.remove("merchantName");
     }
 
     private static void putDirectSubMerchant(PaymentGatewayProperties.Channel channel, Map<String, Object> bizContent) {

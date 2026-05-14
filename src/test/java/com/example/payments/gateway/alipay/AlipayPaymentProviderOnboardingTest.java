@@ -1,10 +1,14 @@
 package com.example.payments.gateway.alipay;
 
 import com.example.payments.config.PaymentGatewayProperties;
+import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
+import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentProduct;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,10 +53,53 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.bizContent).containsEntry("out_biz_no", "LEGACY-001");
     }
 
+    @Test
+    void desktopCashierMapsRedirectProductsToPrecreateQr() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_WAP,
+                        "CASHIER-001",
+                        "cashier",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-direct"),
+                        Map.of("cashier", true, "cashierDesktopQr", true, "merchantName", "demo"),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.precreate");
+        assertThat(client.bizContent)
+                .containsEntry("product_code", "FACE_TO_FACE_PAYMENT")
+                .doesNotContainKeys("cashier", "cashierDesktopQr", "merchantName");
+        assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/CASHIER-001");
+        assertThat(response.redirectUrl()).isNull();
+    }
+
     private static PaymentGatewayProperties.Channel channel() {
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("ali-direct");
         channel.setProvider("ALIPAY_DIRECT");
+        return channel;
+    }
+
+    private static PaymentGatewayProperties.Channel standardChannel() {
+        PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
+        channel.setId("ali-main");
+        channel.setProvider("ALIPAY");
         return channel;
     }
 
@@ -73,6 +120,13 @@ class AlipayPaymentProviderOnboardingTest {
         ) {
             this.method = method;
             this.bizContent = new LinkedHashMap<>(bizContent);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("code", "10000");
+            response.put("msg", "Success");
+            if ("alipay.trade.precreate".equals(method)) {
+                response.put("out_trade_no", asString(bizContent.get("out_trade_no")));
+                response.put("qr_code", "https://qr.alipay.test/" + bizContent.get("out_trade_no"));
+            }
             return new AlipayGatewayResponse(
                     method,
                     "mock_response",
@@ -81,9 +135,13 @@ class AlipayPaymentProviderOnboardingTest {
                     "Success",
                     null,
                     null,
-                    Map.of("code", "10000", "msg", "Success"),
+                    response,
                     Map.of()
             );
+        }
+
+        private static String asString(Object value) {
+            return value == null ? null : String.valueOf(value);
         }
     }
 }
