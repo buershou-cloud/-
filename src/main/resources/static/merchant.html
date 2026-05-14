@@ -312,6 +312,26 @@
       background: #7465bd;
     }
 
+    .merchant-qr-layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .merchant-qr-image {
+      width: 240px;
+      height: 240px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .merchant-qr-info {
+      display: grid;
+      gap: 14px;
+    }
+
     .tab-pane {
       display: none;
     }
@@ -471,6 +491,10 @@
         padding-right: 0;
       }
 
+      .merchant-qr-layout {
+        grid-template-columns: 1fr;
+      }
+
       .api-label {
         text-align: left;
       }
@@ -521,6 +545,7 @@
     <section class="portal-card">
       <div class="portal-tabs">
         <button class="portal-tab active" type="button" data-tab="api">API信息</button>
+        <button class="portal-tab" type="button" data-tab="qr">收款二维码</button>
         <button class="portal-tab" type="button" data-tab="orders">订单列表</button>
       </div>
 
@@ -581,6 +606,24 @@
             </div>
             <p id="apiMessage" class="portal-message"></p>
             <div class="confirm-row"><button class="btn" id="saveSignModeBtn" type="button">确定修改</button></div>
+          </div>
+        </div>
+
+        <div id="tab-qr" class="tab-pane">
+          <div class="order-section">
+            <h2 class="section-title">收款二维码</h2>
+            <div class="merchant-qr-layout">
+              <img id="merchantQrImage" class="merchant-qr-image" alt="商户收款二维码">
+              <div class="merchant-qr-info">
+                <p class="muted">客户扫码后进入商户收银台，只需要输入金额，系统会按商户可用支付通道自动路由。</p>
+                <label>收银台链接
+                  <div class="copy-field"><input id="merchantCashierUrl" readonly><button class="copy-btn" type="button" data-copy-source="merchantCashierUrl">复制</button></div>
+                </label>
+                <div class="actions">
+                  <button class="btn" id="openMerchantCashierBtn" type="button">打开收银台</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -662,6 +705,10 @@
       : fallback;
   }
 
+  function merchantCashierUrl(merchantId) {
+    return `${window.location.origin}/cashier.html?merchantId=${encodeURIComponent(merchantId)}`;
+  }
+
   function updateMerchantFields(merchant, apiBase) {
     $("merchantTitle").textContent = merchant.name;
     $("merchantSub").textContent = `${merchant.merchantId} · 费率 ${merchant.feeRateText}`;
@@ -672,6 +719,10 @@
     $("rsaPublicKey").value = merchant.rsa2PublicKey || "";
     $("rsaPrivateKey").value = merchant.rsa2PrivateKey || "";
     $("signMode").value = merchant.signMode || "MD5_RSA2";
+    const cashierUrl = merchantCashierUrl(merchant.merchantId);
+    $("merchantCashierUrl").value = cashierUrl;
+    $("merchantCashierUrl").setAttribute("value", cashierUrl);
+    $("merchantQrImage").src = `/api/v1/merchants/${encodeURIComponent(merchant.merchantId)}/cashier-qr?t=${Date.now()}`;
   }
 
   function renderOrders(orders) {
@@ -765,6 +816,11 @@
 
   $("saveSignModeBtn").addEventListener("click", async () => {
     await mutateMerchant("/sign-mode", { signMode: $("signMode").value });
+  });
+
+  $("openMerchantCashierBtn").addEventListener("click", () => {
+    const url = $("merchantCashierUrl").value;
+    if (url) window.open(url, "_blank", "noopener");
   });
 
   if (params.get("merchantId")) {

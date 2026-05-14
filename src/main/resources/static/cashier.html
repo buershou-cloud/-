@@ -214,6 +214,7 @@
 <script>
   const params = new URLSearchParams(location.search);
   const channelId = params.get("channelId");
+  const merchantId = params.get("merchantId");
   const preferredProduct = params.get("product");
   const productLabels = {
     ALIPAY_ORDER_CODE: "订单码",
@@ -228,8 +229,21 @@
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
     ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
   };
+  const cashierProductPreference = [
+    "ALIPAY_ORDER_CODE",
+    "ALIPAY_DIRECT_ORDER_CODE",
+    "ALIPAY_F2F",
+    "ALIPAY_DIRECT_F2F",
+    "ALIPAY_WAP",
+    "ALIPAY_DIRECT_WAP",
+    "ALIPAY_PAGE",
+    "ALIPAY_DIRECT_PAGE",
+    "ALIPAY_JSAPI",
+    "ALIPAY_DIRECT_JSAPI"
+  ];
 
   let currentChannel;
+  let currentMerchant;
   let currentProduct;
 
   const $ = (id) => document.getElementById(id);
@@ -255,21 +269,46 @@
       .filter((product) => productLabels[product]);
   }
 
-  async function loadChannel() {
-    if (!channelId) {
-      throw { code: "BAD_REQUEST", message: "缺少 channelId" };
-    }
-    const channels = await request("/api/v1/channels");
-    currentChannel = channels.find((channel) => channel.id === channelId);
-    if (!currentChannel) {
-      throw { code: "BAD_REQUEST", message: "支付通道不存在" };
-    }
-    $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
-    $("channelText").textContent = currentChannel.id;
-    $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
+  function merchantChannels(merchant, channels) {
+    const allowed = merchant.channelIds && merchant.channelIds.length
+      ? new Set(merchant.channelIds)
+      : new Set(channels.map((channel) => channel.id));
+    return channels.filter((channel) => channel.enabled !== false && allowed.has(channel.id));
+  }
 
-    const options = productOptions(currentChannel);
-    currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : options[0];
+  function merchantProduct(merchant, channels) {
+    const products = new Set(merchantChannels(merchant, channels).flatMap(productOptions));
+    if (preferredProduct && products.has(preferredProduct)) {
+      return preferredProduct;
+    }
+    return cashierProductPreference.find((product) => products.has(product));
+  }
+
+  async function loadChannel() {
+    const channels = await request("/api/v1/channels");
+    if (channelId) {
+      currentChannel = channels.find((channel) => channel.id === channelId);
+      if (!currentChannel) {
+        throw { code: "BAD_REQUEST", message: "支付通道不存在" };
+      }
+      $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
+      $("channelText").textContent = currentChannel.id;
+      $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
+      const options = productOptions(currentChannel);
+      currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : options[0];
+    } else if (merchantId) {
+      currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
+      const availableChannels = merchantChannels(currentMerchant, channels);
+      $("cashierTitle").textContent = `${currentMerchant.name} 收银台`;
+      $("cashierHint").textContent = "输入金额后发起支付，订单将按商户可用支付通道自动路由。";
+      $("subject").value = `${currentMerchant.name} 扫码收款`;
+      $("channelText").textContent = availableChannels.map((channel) => channel.id).join("、") || "-";
+      $("providerText").textContent = "商户收款码";
+      currentProduct = merchantProduct(currentMerchant, channels);
+    } else {
+      throw { code: "BAD_REQUEST", message: "缺少 channelId 或 merchantId" };
+    }
+
     if (!currentProduct) {
       $("payButton").disabled = true;
       writeResult({ code: "NO_PRODUCT", message: "当前通道没有可用于收银台的支付产品" });
@@ -289,15 +328,22 @@
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" });
       return;
     }
+    const extra = { cashier: true };
+    if (currentMerchant) {
+      extra.merchantId = currentMerchant.merchantId;
+      extra.merchantName = currentMerchant.name;
+    }
     const payload = {
       product: currentProduct,
       outTradeNo: orderNo(),
       subject: $("subject").value,
       totalAmount: amount,
-      channelIds: [currentChannel.id],
       timeoutExpress: "10m",
-      extra: { cashier: true }
+      extra
     };
+    if (currentChannel) {
+      payload.channelIds = [currentChannel.id];
+    }
     writeResult("正在发起支付...");
     try {
       const data = await request("/api/v1/payments/pay", {

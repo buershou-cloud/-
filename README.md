@@ -53,6 +53,7 @@ Open `http://localhost:8080/` for the built-in demo console. If you use another 
 - `POST /api/v1/payments/onboarding`
 - `GET /api/v1/channels`
 - `PATCH /api/v1/channels/{channelId}`
+- `GET /api/v1/merchants/{merchantId}/cashier-qr`
 - `POST /api/v1/alipay/notify/{channelId}`
 
 ## Example Pay Request

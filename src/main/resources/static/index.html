@@ -298,6 +298,49 @@
       overflow-x: auto;
     }
 
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 14px;
+      padding: 12px 0 2px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .page-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .page-btn {
+      min-width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .page-btn.active {
+      border-color: var(--primary);
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .page-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -1137,6 +1180,7 @@
                 <tbody id="recentOrders"></tbody>
               </table>
             </div>
+            <div id="orderPagination" class="pagination"></div>
             <pre id="dashboardResult" class="operation-result">等待订单操作</pre>
           </div>
         </section>
@@ -1474,6 +1518,8 @@
   const state = {
     channels: [],
     orders: [],
+    orderPage: 1,
+    orderPageSize: 10,
     merchants: [],
     complaintAuto: null,
     editingChannelId: null,
@@ -1694,9 +1740,12 @@
     `;
   }
 
-  async function loadOrders() {
+  async function loadOrders(resetPage = false) {
     const query = orderQueryString();
     state.orders = await request(`/api/v1/orders/recent${query}`);
+    if (resetPage) {
+      state.orderPage = 1;
+    }
     renderOrders();
     renderProfitShareOrders();
   }
@@ -2003,7 +2052,13 @@
   }
 
   function renderOrders() {
-    $("recentOrders").innerHTML = state.orders.map((order) => `
+    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    if (state.orderPage > totalPages) {
+      state.orderPage = totalPages;
+    }
+    const start = (state.orderPage - 1) * state.orderPageSize;
+    const pageOrders = state.orders.slice(start, start + state.orderPageSize);
+    $("recentOrders").innerHTML = pageOrders.map((order) => `
       <tr>
         <td>${html(order.outTradeNo)}</td>
         <td class="muted">${html(order.tradeNo || "-")}</td>
@@ -2016,6 +2071,26 @@
         <td>${orderActionCell(order)}</td>
       </tr>
     `).join("");
+    renderOrderPagination(totalPages, start, pageOrders.length);
+  }
+
+  function renderOrderPagination(totalPages, start, pageCount) {
+    const container = $("orderPagination");
+    if (!container) return;
+    if (!state.orders.length) {
+      container.innerHTML = '<span>暂无订单</span>';
+      return;
+    }
+    const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+    const end = start + pageCount;
+    container.innerHTML = `
+      <span>共 ${state.orders.length} 笔订单，当前 ${start + 1}-${end} 笔</span>
+      <div class="page-buttons">
+        <button class="page-btn" type="button" data-order-page="${state.orderPage - 1}" ${state.orderPage <= 1 ? "disabled" : ""}>上一页</button>
+        ${pages.map((page) => `<button class="page-btn ${page === state.orderPage ? "active" : ""}" type="button" data-order-page="${page}">${page}</button>`).join("")}
+        <button class="page-btn" type="button" data-order-page="${state.orderPage + 1}" ${state.orderPage >= totalPages ? "disabled" : ""}>下一页</button>
+      </div>
+    `;
   }
 
   function fillProfitShareOrder(outTradeNo) {
@@ -2585,15 +2660,25 @@
     await handleOrderAction(actionButton.dataset.orderNo, actionButton.dataset.orderAction);
   });
 
+  $("orderPagination").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-order-page]");
+    if (!button || button.disabled) return;
+    const page = Number(button.dataset.orderPage);
+    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    state.orderPage = Math.min(Math.max(page, 1), totalPages);
+    closeOrderMenus("");
+    renderOrders();
+  });
+
   $("orderFilterForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await loadOrders();
+    await loadOrders(true);
     setDashboardResult({ message: `已查询到 ${state.orders.length} 笔订单` });
   });
 
   $("resetOrderFilterBtn").addEventListener("click", async () => {
     $("orderFilterForm").reset();
-    await loadOrders();
+    await loadOrders(true);
     setDashboardResult({ message: "订单筛选已重置" });
   });
 

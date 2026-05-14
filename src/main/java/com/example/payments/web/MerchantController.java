@@ -5,6 +5,13 @@ import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.DemoMerchantUpdateRequest;
 import com.example.payments.merchant.DemoMerchantView;
 import com.example.payments.merchant.MerchantSignModeRequest;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.WriterException;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -13,7 +20,10 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
 
 @RestController
@@ -39,6 +49,24 @@ public class MerchantController {
     @GetMapping("/{merchantId}")
     public DemoMerchantView detail(@PathVariable String merchantId) {
         return merchantService.detail(merchantId);
+    }
+
+    @GetMapping(value = "/{merchantId}/cashier-qr", produces = MediaType.IMAGE_PNG_VALUE)
+    public byte[] cashierQr(
+            @PathVariable String merchantId,
+            HttpServletRequest request
+    ) throws IOException, WriterException {
+        merchantService.detail(merchantId);
+        String cashierUrl = ServletUriComponentsBuilder.fromContextPath(request)
+                .path("/cashier.html")
+                .queryParam("merchantId", merchantId)
+                .build()
+                .toUriString();
+
+        BitMatrix matrix = new QRCodeWriter().encode(cashierUrl, BarcodeFormat.QR_CODE, 320, 320);
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        MatrixToImageWriter.writeToStream(matrix, "PNG", output);
+        return output.toByteArray();
     }
 
     @PatchMapping("/{merchantId}")
