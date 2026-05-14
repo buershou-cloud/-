@@ -20,7 +20,7 @@ payment:
     # These operation names can be overridden per real Alipay contract/product.
     complaint-list-method: alipay.merchant.tradecomplain.batchquery
     complaint-detail-method: alipay.merchant.tradecomplain.query
-    onboarding-method: alipay.open.agent.create
+    onboarding-method: ant.merchant.expand.indirect.zft.simplecreate
   channels:
     - id: ali-main
       provider: ALIPAY

@@ -76,7 +76,7 @@ public class PaymentGatewayProperties {
     public static class Operations {
         private String complaintListMethod = "alipay.merchant.tradecomplain.batchquery";
         private String complaintDetailMethod = "alipay.merchant.tradecomplain.query";
-        private String onboardingMethod = "alipay.open.agent.create";
+        private String onboardingMethod = "ant.merchant.expand.indirect.zft.simplecreate";
 
         public String getComplaintListMethod() {
             return complaintListMethod;

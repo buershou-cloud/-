@@ -9,7 +9,7 @@ Spring Boot payment gateway skeleton for these Alipay flows:
 - 订单码: `alipay.trade.precreate`
 - JSAPI 支付: `alipay.trade.create`
 - 直付通支付: standard trade API plus `app_auth_token`, `settle_info`, `sub_merchant`, or extra contract fields
-- 直付通进件: configurable method, default `alipay.open.agent.create`
+- 直付通进件: `ant.merchant.expand.indirect.zft.simplecreate`
 - 查询投诉: configurable list/detail methods
 - 退款: `alipay.trade.refund`
 - 分账: `alipay.trade.order.settle`
@@ -73,6 +73,16 @@ Open `http://localhost:8080/` for the built-in demo console. If you use another 
 For WAP/page payments, the response contains `redirectHtml`. Return it directly to the browser.
 For QR/order-code payments, the response contains `qrCode`.
 
+## Direct Pay Onboarding
+
+The default onboarding operation follows the Alipay official direct-pay standard onboarding API:
+
+- Method: `ant.merchant.expand.indirect.zft.simplecreate`
+- Official external merchant field: `external_id`
+- Required business fields include `alias_name`, `contact_infos`, `default_settle_rule`, `service`, and `mcc`.
+
+The API still accepts `outBizNo` for the local request shape and maps it into `biz_content.external_id` for the direct-pay standard onboarding method.
+
 ## Production Notes
 
 This project intentionally keeps persistence out of the first skeleton. Before production, add:
@@ -81,4 +91,4 @@ This project intentionally keeps persistence out of the first skeleton. Before p
 - Idempotency on `outTradeNo` and `outRequestNo`.
 - Gateway response signature verification through certificate mode or the official Alipay SDK.
 - Notify processing with transaction locks and reconciliation jobs.
-- Real direct-pay onboarding payloads based on the signed Alipay contract.
+- Complete direct-pay onboarding payloads based on the signed Alipay contract and uploaded image OSS keys.

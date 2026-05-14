@@ -32,6 +32,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_REFUND = "alipay.trade.refund";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
+    private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
 
     private final PaymentGatewayProperties properties;
     private final AlipayOpenApiClient client;
@@ -130,8 +131,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     @Override
     public GatewayResponse onboard(PaymentGatewayProperties.Channel channel, OnboardingRequest request) {
         Map<String, Object> bizContent = new LinkedHashMap<>(request.payload());
-        bizContent.putIfAbsent("out_biz_no", request.outBizNo());
         String method = hasText(request.method()) ? request.method() : properties.getOperations().getOnboardingMethod();
+        putOnboardingExternalId(method, bizContent, request.outBizNo());
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, null, null);
     }
@@ -237,6 +238,16 @@ public class AlipayPaymentProvider implements PaymentProvider {
             );
         }
         bizContent.putIfAbsent("sub_merchant", Map.of("merchant_id", smid));
+    }
+
+    private static void putOnboardingExternalId(String method, Map<String, Object> bizContent, String externalId) {
+        if (METHOD_DIRECT_ZFT_SIMPLE_CREATE.equals(method)) {
+            Object legacyOutBizNo = bizContent.remove("out_biz_no");
+            String value = firstText(externalId, firstText(asString(bizContent.get("external_id")), asString(legacyOutBizNo)));
+            putIfText(bizContent, "external_id", value);
+            return;
+        }
+        bizContent.putIfAbsent("out_biz_no", externalId);
     }
 
     private GatewayResponse apiResponse(String channelId, AlipayGatewayResponse response, String fallbackOutTradeNo, String qrCode) {
