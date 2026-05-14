@@ -42,6 +42,16 @@ ALI_MAIN_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----..."
 
 Open `http://localhost:8080/` for the built-in demo console. If you use another port, replace `8080`.
 
+## MySQL Schema
+
+The MySQL database script is in `database/mysql/payment_gateway_schema.sql`.
+
+```bash
+mysql -uroot -p < database/mysql/payment_gateway_schema.sql
+```
+
+This creates the `payment_gateway` database with tables for channels, merchants, orders, refunds, profit sharing, settlements, onboarding, and complaints.
+
 ## Main Endpoints
 
 - `POST /api/v1/payments/pay`

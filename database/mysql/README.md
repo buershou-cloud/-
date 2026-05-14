@@ -1,0 +1,34 @@
+# MySQL Database
+
+This folder contains the MySQL schema for the payment gateway.
+
+## Import
+
+```bash
+mysql -uroot -p < database/mysql/payment_gateway_schema.sql
+```
+
+The script creates database `payment_gateway`, all core tables, a merchant order summary view, and demo records for:
+
+- channels: `ali-main`, `ali-backup`, `ali-direct`
+- merchants: `M10001`, `M10002`, `M10003`
+- channel product mappings
+- merchant channel mappings
+- complaint auto query config
+
+Demo keys in the SQL file are placeholders. Replace them in production.
+
+## Core Tables
+
+- `pay_channel`: payment channel configuration
+- `pay_channel_product`: enabled products for each channel
+- `merchant`: merchant profile and signing keys
+- `merchant_channel`: merchant allowed channels
+- `pay_order`: payment orders
+- `payment_attempt`: channel routing attempts
+- `refund_order`: refund records
+- `profit_sharing_order`: profit sharing records
+- `settlement_record`: settlement batches
+- `onboarding_record`: Alipay direct onboarding records
+- `complaint_record`: complaint query records
+- `complaint_auto_config`: automatic complaint query settings
