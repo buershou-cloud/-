@@ -1,0 +1,2459 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>支付平台管理</title>
+  <style>
+    :root {
+      --sidebar: #031528;
+      --sidebar-soft: #08213a;
+      --primary: #1677ff;
+      --primary-soft: #e8f3ff;
+      --page: #f3f5f8;
+      --surface: #ffffff;
+      --line: #dde3eb;
+      --text: #0f172a;
+      --muted: #718096;
+      --green: #52c41a;
+      --green-soft: #effce8;
+      --red: #ff4d4f;
+      --red-soft: #fff1f0;
+      --yellow: #faad14;
+      --yellow-soft: #fff7df;
+      --shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-width: 360px;
+      background: var(--page);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      letter-spacing: 0;
+    }
+
+    button,
+    input,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 240px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--sidebar);
+      color: #c8d6e5;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 76px;
+      padding: 0 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 19px;
+      font-weight: 800;
+    }
+
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .nav {
+      padding: 16px 0 24px;
+    }
+
+    .nav-title {
+      padding: 12px 16px 8px;
+      color: #6f839a;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .nav-btn {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      align-items: center;
+      width: 100%;
+      min-height: 46px;
+      padding: 0 18px;
+      border: 0;
+      background: transparent;
+      color: #c8d6e5;
+      cursor: pointer;
+      text-align: left;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.06);
+      color: #fff;
+    }
+
+    .nav-btn.active {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .nav-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      color: currentColor;
+      font-size: 18px;
+    }
+
+    .shell {
+      min-width: 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 76px;
+      padding: 0 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(10px);
+    }
+
+    .top-title {
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      color: var(--muted);
+      font-size: 16px;
+    }
+
+    .admin-dot {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 800;
+    }
+
+    .content {
+      padding: 26px 28px 42px;
+    }
+
+    .page {
+      display: none;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+      margin-bottom: 22px;
+    }
+
+    .metric-card {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      align-items: center;
+      min-height: 118px;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+
+    .metric-icon {
+      display: grid;
+      place-items: center;
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .metric-icon.blue {
+      background: var(--primary-soft);
+      color: var(--primary);
+    }
+
+    .metric-icon.green {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .metric-icon.red {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .metric-icon.yellow {
+      background: var(--yellow-soft);
+      color: var(--yellow);
+    }
+
+    .metric-title {
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .metric-value {
+      margin-top: 8px;
+      color: #0b1220;
+      font-size: 30px;
+      font-weight: 850;
+      line-height: 1;
+    }
+
+    .metric-sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .panel + .panel {
+      margin-top: 18px;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 62px;
+      padding: 0 22px;
+      border-bottom: 1px solid #eef1f5;
+    }
+
+    .panel-title {
+      font-size: 18px;
+      font-weight: 820;
+    }
+
+    .panel-body {
+      padding: 22px;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 860px;
+    }
+
+    th,
+    td {
+      height: 54px;
+      padding: 0 14px;
+      border-bottom: 1px solid #edf1f5;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #fafafa;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    td {
+      color: #0f172a;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .amount-green {
+      color: #38b000;
+      font-weight: 850;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: var(--primary-soft);
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .tag::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 26px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .status.success {
+      background: var(--green-soft);
+      color: #38b000;
+    }
+
+    .status.pending {
+      background: #f3f4f6;
+      color: #9ca3af;
+    }
+
+    .status.refunded {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .status.frozen {
+      background: var(--yellow-soft);
+      color: #c98500;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      padding: 7px 14px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn:hover {
+      filter: brightness(0.96);
+    }
+
+    .btn.secondary {
+      border-color: var(--line);
+      background: #fff;
+      color: #0f172a;
+    }
+
+    .btn.danger {
+      background: var(--red);
+    }
+
+    .btn.small {
+      min-height: 34px;
+      padding: 6px 10px;
+      font-size: 13px;
+    }
+
+    .order-menu {
+      position: relative;
+      width: max-content;
+    }
+
+    .order-action-menu {
+      position: absolute;
+      right: 0;
+      z-index: 3;
+      display: grid;
+      gap: 6px;
+      min-width: 132px;
+      margin-top: 6px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      box-shadow: var(--shadow);
+    }
+
+    .order-action-menu .btn {
+      justify-content: flex-start;
+      width: 100%;
+    }
+
+    .work-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(360px, 0.68fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    label,
+    .field-label {
+      display: grid;
+      gap: 7px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #cfd8e3;
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      padding: 8px 10px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .check {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 36px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .check input {
+      width: 15px;
+      min-height: 15px;
+      accent-color: var(--primary);
+    }
+
+    .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .operation-result {
+      margin-top: 12px;
+      min-height: 38px;
+      max-height: 84px;
+      overflow: auto;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      color: var(--muted);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .channel-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .channel-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+    }
+
+    .channel-main {
+      min-width: 0;
+    }
+
+    .channel-side {
+      display: grid;
+      gap: 18px;
+      align-content: start;
+    }
+
+    .route-panel {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .route-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .route-list strong {
+      color: var(--text);
+    }
+
+    .channel-toolbar {
+      display: grid;
+      grid-template-columns: minmax(260px, 420px);
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .channel-main .stat-row {
+      margin-bottom: 16px;
+    }
+
+    .add-channel-form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .add-channel-form label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .add-channel-form input,
+    .add-channel-form select,
+    .add-channel-form textarea {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .add-channel-form textarea {
+      min-height: 78px;
+      resize: vertical;
+      line-height: 1.45;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-weight: 650;
+    }
+
+    .add-channel-form input[type="checkbox"] {
+      width: 14px;
+      min-height: 14px;
+      accent-color: var(--primary);
+    }
+
+    .channel-toolbar label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .channel-table input,
+    .channel-table select {
+      width: 100%;
+      min-width: 74px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 0 9px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .channel-table input[type="checkbox"] {
+      width: 14px;
+      min-width: 14px;
+      height: 14px;
+      padding: 0;
+      accent-color: var(--primary);
+    }
+
+    .channel-table th,
+    .channel-table td {
+      white-space: nowrap;
+    }
+
+    .channel-table .product-cell {
+      min-width: 380px;
+      white-space: normal;
+    }
+
+    .product-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .product-checks {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(126px, 1fr));
+      gap: 8px;
+    }
+
+    .product-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 5px 8px;
+      border: 1px solid #dbeafe;
+      border-radius: 7px;
+      background: #eff6ff;
+      color: var(--primary);
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .channel-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .channel-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, 0.42);
+    }
+
+    .channel-dialog {
+      width: min(760px, 100%);
+      max-height: min(86vh, 820px);
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .channel-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .channel-modal-head h3 {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .channel-modal-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 18px;
+    }
+
+    .channel-form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .channel-form-grid .wide {
+      grid-column: 1 / -1;
+    }
+
+    .add-channel-form input:disabled,
+    .add-channel-form select:disabled {
+      color: var(--muted);
+      background: #f8fafc;
+    }
+
+    .qr-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(15, 23, 42, 0.42);
+    }
+
+    .qr-dialog {
+      width: min(420px, 100%);
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      background: #fff;
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.24);
+      overflow: hidden;
+    }
+
+    .qr-head,
+    .qr-body {
+      padding: 18px;
+    }
+
+    .qr-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .qr-head h3 {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .qr-body {
+      display: grid;
+      gap: 14px;
+      justify-items: center;
+    }
+
+    .qr-image {
+      width: 260px;
+      height: 260px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .qr-link {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      background: #f8fbff;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+
+    .channel-card {
+      display: grid;
+      gap: 12px;
+      min-height: 154px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .channel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .channel-name {
+      font-size: 16px;
+      font-weight: 850;
+    }
+
+    .channel-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .mini {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #eef2f7;
+      color: #475569;
+      font-size: 12px;
+      font-weight: 750;
+    }
+
+    .switch {
+      display: inline-grid;
+      grid-template-columns: 44px;
+      align-items: center;
+      width: 44px;
+      height: 24px;
+      padding: 2px;
+      border: 0;
+      border-radius: 999px;
+      background: #a9b4c2;
+      cursor: pointer;
+    }
+
+    .switch span {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+      transition: transform 0.16s ease;
+    }
+
+    .switch[aria-checked="true"] {
+      background: var(--primary);
+    }
+
+    .switch[aria-checked="true"] span {
+      transform: translateX(20px);
+    }
+
+    .stat-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .small-stat {
+      min-height: 86px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .small-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .small-stat strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 23px;
+      font-weight: 850;
+    }
+
+    @media (max-width: 1100px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .sidebar {
+        position: static;
+        height: auto;
+      }
+
+      .brand {
+        height: 64px;
+      }
+
+      .nav {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: 8px;
+      }
+
+      .nav-title {
+        display: none;
+      }
+
+      .nav-btn {
+        border-radius: 8px;
+      }
+
+      .overview-grid,
+      .work-grid,
+      .channel-layout,
+      .channel-grid,
+      .stat-row {
+        grid-template-columns: 1fr;
+      }
+
+      .channel-toolbar {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 14px 16px;
+      }
+
+      .content {
+        padding: 16px;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .channel-form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .metric-card {
+        grid-template-columns: 58px minmax(0, 1fr);
+        padding: 18px;
+      }
+
+      .metric-value {
+        font-size: 25px;
+      }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">◆</div>
+      <span>支付平台管理</span>
+    </div>
+    <nav class="nav" aria-label="主导航">
+      <div class="nav-title">概览</div>
+      <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">▦</span><span>订单管理</span></button>
+      <button class="nav-btn" data-page="complaints"><span class="nav-icon"></span><span>投诉查询</span></button>
+      <div class="nav-title">直付通</div>
+      <button class="nav-btn" data-page="onboard"><span class="nav-icon">♧</span><span>子商户进件</span></button>
+      <div class="nav-title">系统</div>
+      <button class="nav-btn" data-page="channels"><span class="nav-icon">◎</span><span>支付通道</span></button>
+      <button class="nav-btn" data-page="merchants"><span class="nav-icon">⌂</span><span>商户管理</span></button>
+      <button class="nav-btn" data-page="reports"><span class="nav-icon">▥</span><span>对账报表</span></button>
+    </nav>
+  </aside>
+
+  <section class="shell">
+    <header class="topbar">
+      <div id="pageTitle" class="top-title">订单管理</div>
+      <div class="top-actions">
+        <span id="healthText">服务检测中</span>
+        <span>2026/5/13</span>
+        <span class="admin-dot">管</span>
+      </div>
+    </header>
+
+    <main class="content">
+      <section id="page-dashboard" class="page active">
+        <div class="overview-grid">
+          <article class="metric-card">
+            <div class="metric-icon blue">$</div>
+            <div>
+              <div class="metric-title">今日交易额</div>
+              <div class="metric-value">¥12,680.00</div>
+              <div class="metric-sub">48 笔</div>
+            </div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-icon green">✓</div>
+            <div>
+              <div class="metric-title">本月交易额</div>
+              <div class="metric-value">¥386,240.00</div>
+              <div class="metric-sub">1284 笔</div>
+            </div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-icon red">↺</div>
+            <div>
+              <div class="metric-title">今日退款额</div>
+              <div class="metric-value">¥320.00</div>
+              <div class="metric-sub">3 笔</div>
+            </div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-icon yellow">♙</div>
+            <div>
+              <div class="metric-title">商户总数</div>
+              <div class="metric-value">12</div>
+              <div class="metric-sub">10 个活跃</div>
+            </div>
+          </article>
+        </div>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2 class="panel-title">支付订单</h2>
+          </div>
+          <div class="panel-body">
+            <form id="orderFilterForm">
+              <div class="form-grid">
+                <label>开始时间<input id="orderBeginTime" type="datetime-local"></label>
+                <label>结束时间<input id="orderEndTime" type="datetime-local"></label>
+                <label>订单号<input id="orderOutTradeNo" placeholder="商户订单号"></label>
+                <label>支付宝交易号<input id="orderTradeNo" placeholder="支付宝交易号"></label>
+                <label>支付通道
+                  <select id="orderChannelFilter">
+                    <option value="">全部通道</option>
+                  </select>
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn" type="submit">查询订单</button>
+                <button class="btn secondary" id="resetOrderFilterBtn" type="button">重置</button>
+              </div>
+            </form>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                <tr>
+                  <th>订单号</th>
+                  <th>支付宝交易号</th>
+                  <th>支付通道</th>
+                  <th>商户</th>
+                  <th>类型</th>
+                  <th>金额</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                  <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="recentOrders"></tbody>
+              </table>
+            </div>
+            <pre id="dashboardResult" class="operation-result">等待订单操作</pre>
+          </div>
+        </section>
+      </section>
+
+      <section id="page-onboard" class="page">
+        <div class="work-grid">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">子商户进件</h2></div>
+            <div class="panel-body">
+              <form id="onboardForm">
+                <div class="form-grid">
+                  <label>外部业务号<input id="onboardOutBizNo" value="ONBOARD202605130001"></label>
+                  <label>接口方法<input id="onboardMethod" value="alipay.open.agent.create"></label>
+                  <label>App Auth Token<input id="onboardAppAuthToken"></label>
+                  <label class="wide">指定通道<span id="onboardChannelChecks" class="checks"></span></label>
+                  <label class="wide">进件请求体<textarea id="onboardPayload">{
+  "out_biz_no": "ONBOARD202605130001",
+  "account": "demo@example.com",
+  "contact_info": {
+    "contact_name": "演示联系人",
+    "contact_mobile": "13800000000"
+  }
+}</textarea></label>
+                </div>
+                <div class="form-actions"><button class="btn" type="submit">提交进件</button></div>
+              </form>
+            </div>
+          </section>
+          <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>时间</th></tr></thead><tbody><tr><td>ONBOARD202605120001</td><td>示例商户A</td><td><span class="status success">已通过</span></td><td>2026-05-12</td></tr><tr><td>ONBOARD202605130001</td><td>示例商户B</td><td><span class="status pending">审核中</span></td><td>2026-05-13</td></tr></tbody></table></div></div></section>
+        </div>
+      </section>
+
+      <section id="page-complaints" class="page">
+        <div class="work-grid">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">投诉查询</h2></div>
+            <div class="panel-body">
+              <form id="complaintForm">
+                <div class="form-grid">
+                  <label>投诉单号<input id="complaintId"></label>
+                  <label>接口方法<input id="complaintMethod" placeholder="留空使用默认"></label>
+                  <label>开始时间<input id="complaintBeginTime" value="2026-05-01 00:00:00"></label>
+                  <label>结束时间<input id="complaintEndTime" value="2026-05-13 23:59:59"></label>
+                  <label>页码<input id="complaintPageNum" type="number" value="1"></label>
+                  <label>每页数量<input id="complaintPageSize" type="number" value="10"></label>
+                  <label>自动查询范围(分钟)<input id="complaintAutoLookbackMinutes" type="number" min="1" value="1440"></label>
+                  <label>App Auth Token<input id="complaintAppAuthToken"></label>
+                  <label class="wide">指定通道<span id="complaintChannelChecks" class="checks"></span></label>
+                  <label class="wide">扩展参数<textarea id="complaintExtra">{}</textarea></label>
+                </div>
+                <div class="form-actions">
+                  <button class="btn" type="submit">查询投诉</button>
+                  <button class="btn" id="startComplaintAutoBtn" type="button">开启每分钟自动查询</button>
+                  <button class="btn secondary" id="runComplaintAutoBtn" type="button">立即查询全部通道</button>
+                  <button class="btn danger" id="stopComplaintAutoBtn" type="button">停止自动查询</button>
+                </div>
+              </form>
+              <pre id="complaintResult" class="operation-result">等待投诉查询</pre>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">自动查询</h2></div>
+            <div class="panel-body">
+              <div class="stat-row" id="complaintAutoStats"></div>
+              <pre id="complaintAutoResult" class="operation-result">自动查询未开启</pre>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="page-channels" class="page">
+        <div class="channel-layout">
+          <section class="panel channel-main">
+            <div class="panel-head">
+              <h2 class="panel-title">支付通道</h2>
+              <div class="form-actions" style="margin:0">
+                <button class="btn" id="toggleAddChannelBtn">新增通道</button>
+                <button class="btn secondary" id="refreshChannelsBtn">刷新</button>
+                <button class="btn" id="enableAllBtn">启用全部</button>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="stat-row" id="channelSummary"></div>
+              <div class="table-wrap">
+                <table class="channel-table">
+                  <thead>
+                    <tr>
+                      <th>开关</th>
+                      <th>通道</th>
+                      <th>AppID</th>
+                      <th>SMID</th>
+                      <th>密钥</th>
+                      <th>今日</th>
+                      <th>支持产品</th>
+                      <th>最小金额</th>
+                      <th>最大金额</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody id="channelTableBody"></tbody>
+                </table>
+              </div>
+              <pre id="operationResult" class="operation-result hidden">操作结果会显示在这里</pre>
+            </div>
+          </section>
+
+        </div>
+      </section>
+
+      <section id="page-merchants" class="page">
+        <section class="panel">
+          <div class="panel-head"><h2 class="panel-title">商户管理</h2><button class="btn" id="addMerchantBtn" type="button">新增商户</button></div>
+          <div class="panel-body">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                <tr>
+                  <th>商户号</th>
+                  <th>名称</th>
+                  <th>费率</th>
+                  <th>状态</th>
+                  <th>今日交易</th>
+                  <th>结算状态</th>
+                  <th>支付通道</th>
+                  <th>轮询</th>
+                  <th>操作</th>
+                </tr>
+                </thead>
+                <tbody id="merchantTableBody"></tbody>
+              </table>
+            </div>
+            <pre id="merchantResult" class="operation-result hidden">商户操作结果</pre>
+          </div>
+        </section>
+      </section>
+
+      <section id="page-reports" class="page">
+        <section class="panel">
+          <div class="panel-head"><h2 class="panel-title">对账报表</h2><button class="btn secondary">导出 CSV</button></div>
+          <div class="panel-body">
+            <div class="stat-row">
+              <div class="small-stat"><span>应结算</span><strong>¥88,420.00</strong></div>
+              <div class="small-stat"><span>手续费</span><strong>¥530.52</strong></div>
+              <div class="small-stat"><span>差错单</span><strong>0</strong></div>
+            </div>
+            <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>日期</th><th>支付笔数</th><th>支付金额</th><th>退款金额</th><th>结算状态</th></tr></thead><tbody><tr><td>2026-05-13</td><td>48</td><td>¥12,680.00</td><td>¥320.00</td><td><span class="status pending">待结算</span></td></tr><tr><td>2026-05-12</td><td>61</td><td>¥18,906.50</td><td>¥0.00</td><td><span class="status success">已结算</span></td></tr></tbody></table></div>
+          </div>
+        </section>
+      </section>
+    </main>
+  </section>
+</div>
+
+<div id="merchantModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="merchantModalTitle">新增商户</h3>
+      <button class="btn secondary small" id="closeMerchantModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="merchantForm" class="add-channel-form">
+        <div class="channel-form-grid">
+          <label>商户号<input id="merchantId" placeholder="留空自动生成"></label>
+          <label>商户名称<input id="merchantName" required placeholder="例如 示例门店"></label>
+          <label>费率(%)<input id="merchantFeeRate" type="number" min="0" step="0.01" value="0.60"></label>
+          <label>状态
+            <select id="merchantStatus">
+              <option value="正常">正常</option>
+              <option value="待审核">待审核</option>
+              <option value="停用">停用</option>
+            </select>
+          </label>
+          <label>今日交易<input id="merchantTodayAmount" type="number" min="0" step="0.01" value="0.00"></label>
+          <label>轮询方式
+            <select id="merchantRoutingMode">
+              <option value="ROUND_ROBIN">轮询</option>
+              <option value="RANDOM">随机</option>
+              <option value="PRIORITY">顺序</option>
+              <option value="WEIGHTED_RANDOM">权重随机</option>
+            </select>
+          </label>
+          <label class="wide">可用支付通道<span id="merchantChannelChecks" class="checks"></span></label>
+        </div>
+        <div class="form-actions"><button class="btn" id="merchantSubmitBtn" type="submit">保存商户</button></div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div id="merchantDetailModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantDetailTitle">
+    <div class="channel-modal-head">
+      <h3 id="merchantDetailTitle">商户明细</h3>
+      <button class="btn secondary small" id="closeMerchantDetailBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <div class="channel-form-grid">
+        <label>商户号<input id="detailMerchantId" readonly></label>
+        <label>商户名称<input id="detailMerchantName" readonly></label>
+        <label>费率<input id="detailMerchantFeeRate" readonly></label>
+        <label>结算状态<input id="detailMerchantSettlement" readonly></label>
+        <label class="wide">MD5 密钥<textarea id="detailMerchantMd5Key" readonly></textarea></label>
+        <label class="wide">RSA2 公钥<textarea id="detailMerchantRsaPublicKey" readonly></textarea></label>
+        <label class="wide">RSA2 私钥<textarea id="detailMerchantRsaPrivateKey" readonly></textarea></label>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="addChannelPanel" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="channelModalTitle">新增通道</h3>
+      <button class="btn secondary small" id="closeAddChannelBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="addChannelForm" class="add-channel-form">
+        <input id="channelFormMode" type="hidden" value="create">
+        <div class="channel-form-grid">
+          <label>通道编号<input id="newChannelId" required placeholder="例如 ali-store-01"></label>
+          <label>通道类型
+            <select id="newChannelProvider">
+              <option value="ALIPAY">支付宝官方产品</option>
+              <option value="ALIPAY_DIRECT">支付宝直付通</option>
+            </select>
+          </label>
+          <label>支付宝 AppID<input id="newChannelAppId" required placeholder="支付宝开放平台 AppID"></label>
+          <label class="direct-channel-field hidden">二级商户 SMID<input id="newChannelSubMerchantId" placeholder="支付宝直付通二级商户 SMID"></label>
+          <label>最小金额<input id="newChannelPayMin" type="number" min="0" step="0.01" value="0.01"></label>
+          <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
+          <label class="wide">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥或证书公钥内容"></textarea></label>
+          <label class="wide">应用私钥<textarea id="newChannelMerchantPrivateKey" required placeholder="应用 RSA2 私钥"></textarea></label>
+          <label>App Auth Token<input id="newChannelAppAuthToken" placeholder="服务商/直付通授权 token，可留空"></label>
+          <label>网关地址<input id="newChannelGatewayUrl" value="https://openapi.alipay.com/gateway.do"></label>
+          <label>异步通知地址<input id="newChannelNotifyUrl" readonly placeholder="根据当前域名自动生成"></label>
+          <label>同步返回地址<input id="newChannelReturnUrl" readonly placeholder="根据当前域名自动生成"></label>
+        </div>
+        <div class="form-actions"><button class="btn" id="channelSubmitBtn" type="submit">添加通道</button></div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div id="qrModal" class="qr-modal hidden">
+  <section class="qr-dialog">
+    <div class="qr-head">
+      <h3 id="qrTitle">通道二维码</h3>
+      <button class="btn secondary small" id="closeQrBtn" type="button">关闭</button>
+    </div>
+    <div class="qr-body">
+      <img id="qrImage" class="qr-image" alt="收银台二维码">
+      <div id="qrLink" class="qr-link"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+  const state = {
+    channels: [],
+    orders: [],
+    merchants: [],
+    complaintAuto: null,
+    editingChannelId: null,
+    editingMerchantId: null
+  };
+
+  const channelCheckTargets = [
+    "onboardChannelChecks",
+    "complaintChannelChecks"
+  ];
+
+  const productLabels = {
+    ALIPAY_ORDER_CODE: "订单码",
+    ALIPAY_F2F: "当面付",
+    ALIPAY_WAP: "WAP手机",
+    ALIPAY_PAGE: "PC网页",
+    ALIPAY_JSAPI: "JSAPI",
+    ALIPAY_PREAUTH: "预授权",
+    ALIPAY_DIRECT_WAP: "直付通WAP手机",
+    ALIPAY_DIRECT_F2F: "直付通当面付",
+    ALIPAY_DIRECT_PAGE: "直付通PC网页",
+    ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
+    ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
+  };
+
+  const standardProductIds = [
+    "ALIPAY_ORDER_CODE",
+    "ALIPAY_F2F",
+    "ALIPAY_WAP",
+    "ALIPAY_PAGE",
+    "ALIPAY_JSAPI",
+    "ALIPAY_PREAUTH"
+  ];
+  const directProductIds = [
+    "ALIPAY_DIRECT_ORDER_CODE",
+    "ALIPAY_DIRECT_F2F",
+    "ALIPAY_DIRECT_WAP",
+    "ALIPAY_DIRECT_PAGE",
+    "ALIPAY_DIRECT_JSAPI"
+  ];
+  const $ = (id) => document.getElementById(id);
+
+  function json(value) {
+    return JSON.stringify(value, null, 2);
+  }
+
+  function setConsole(value) {
+    const consoleElement = $("operationResult");
+    if (!consoleElement) return;
+    if (value && typeof value === "object" && value.message) {
+      consoleElement.textContent = value.message;
+      return;
+    }
+    consoleElement.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function appendConsole(title, value) {
+    const consoleElement = $("operationResult");
+    if (!consoleElement) return;
+    const current = consoleElement.textContent === "操作结果会显示在这里" ? "" : consoleElement.textContent + "\n\n";
+    consoleElement.textContent = current + `[${title}]\n${typeof value === "string" ? value : json(value)}`;
+  }
+
+  function setDashboardResult(value) {
+    const element = $("dashboardResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.message) {
+      element.textContent = value.message;
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function setComplaintResult(value) {
+    const element = $("complaintResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.message) {
+      element.textContent = value.message;
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function setComplaintAutoResult(value) {
+    const element = $("complaintAutoResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.lastMessage) {
+      element.textContent = value.lastMessage;
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function setMerchantResult(value) {
+    const element = $("merchantResult");
+    if (!element) return;
+    element.classList.remove("hidden");
+    if (value && typeof value === "object" && value.message) {
+      element.textContent = value.message;
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function html(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#039;");
+  }
+
+  async function request(path, options = {}) {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      ...options
+    });
+    const text = await response.text();
+    let data = text;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (ignored) {
+      data = text;
+    }
+    if (!response.ok) {
+      throw data;
+    }
+    return data;
+  }
+
+  function parseJson(id, fallback) {
+    const raw = $(id).value.trim();
+    if (!raw) {
+      return fallback;
+    }
+    try {
+      return JSON.parse(raw);
+    } catch (error) {
+      throw { code: "BAD_JSON", message: `${id} 不是合法 JSON` };
+    }
+  }
+
+  function compact(obj) {
+    return Object.fromEntries(Object.entries(obj).filter(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      if (value && typeof value === "object") return Object.keys(value).length > 0;
+      return value !== undefined && value !== null && value !== "";
+    }));
+  }
+
+  function checkedChannels(target) {
+    return Array.from(document.querySelectorAll(`#${target} input:checked`)).map((input) => input.value);
+  }
+
+  function statusCell(status) {
+    const className = status === "COMPLETED" ? "success"
+      : status === "REFUNDED" ? "refunded"
+      : status === "FROZEN" ? "frozen"
+      : "pending";
+    const label = status === "COMPLETED" ? "已完成"
+      : status === "REFUNDED" ? "已退款"
+      : status === "FROZEN" ? "冻结中"
+      : "未支付";
+    return `<span class="status ${className}">${label}</span>`;
+  }
+
+  function orderActionButtons(order) {
+    const actions = [];
+    if (order.status === "UNPAID") {
+      actions.push(["complete", "改已完成", "secondary"]);
+      actions.push(["manual-supplement", "手动补单", "secondary"]);
+    }
+    if (order.status === "COMPLETED") {
+      actions.push(["uncomplete", "改未完成", "secondary"]);
+      actions.push(["refund", "退款", "secondary"]);
+    }
+    if (order.preAuthorization && order.status === "FROZEN") {
+      actions.push(["convert-to-pay", "转支付", "secondary"]);
+    }
+    actions.push(["delete", "删除订单", "danger"]);
+    return actions.map(([action, label, kind]) => `
+      <button class="btn ${kind} small" type="button" data-order-action="${action}" data-order-no="${html(order.outTradeNo)}">${label}</button>
+    `).join("");
+  }
+
+  function orderActionCell(order) {
+    return `
+      <div class="order-menu">
+        <button class="btn secondary small" type="button" data-order-menu="${html(order.outTradeNo)}">操作</button>
+        <div class="order-action-menu hidden" data-order-menu-panel="${html(order.outTradeNo)}">${orderActionButtons(order)}</div>
+      </div>
+    `;
+  }
+
+  async function loadOrders() {
+    const query = orderQueryString();
+    state.orders = await request(`/api/v1/orders/recent${query}`);
+    renderOrders();
+  }
+
+  async function loadMerchants() {
+    const data = await request("/api/v1/merchants");
+    state.merchants = Array.isArray(data) ? data : data.value || [];
+    renderMerchants();
+  }
+
+  function renderMerchants() {
+    const tableBody = $("merchantTableBody");
+    if (!tableBody) return;
+    tableBody.innerHTML = state.merchants.map((merchant) => `
+      <tr>
+        <td>${html(merchant.merchantId)}</td>
+        <td>${html(merchant.name)}</td>
+        <td>${html(merchant.feeRateText)}</td>
+        <td><span class="status ${merchant.status === "正常" ? "success" : "pending"}">${html(merchant.status)}</span></td>
+        <td>${html(merchant.todayAmountText)}</td>
+        <td><span class="status ${merchant.settlementStatus === "已结算" ? "success" : "pending"}">${html(merchant.settlementStatus || "待结算")}</span></td>
+        <td>${merchantChannelText(merchant)}</td>
+        <td>${html(merchant.routingModeText || "轮询")}</td>
+        <td>
+          <div class="channel-actions">
+            <button class="btn secondary small" type="button" data-merchant-login="${html(merchant.merchantId)}">登录</button>
+            <button class="btn secondary small" type="button" data-merchant-edit="${html(merchant.merchantId)}">编辑</button>
+            <button class="btn secondary small" type="button" data-merchant-settle="${html(merchant.merchantId)}">结算</button>
+            <button class="btn secondary small" type="button" data-merchant-detail="${html(merchant.merchantId)}">明细</button>
+            <button class="btn danger small" type="button" data-merchant-delete="${html(merchant.merchantId)}">删除</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  function merchantChannelText(merchant) {
+    const channelIds = merchant.channelIds || [];
+    if (!channelIds.length) return '<span class="muted">全部通道</span>';
+    return `<div class="product-tags">${channelIds.map((channelId) => `<span class="tag">${html(channelId)}</span>`).join("")}</div>`;
+  }
+
+  function defaultMerchantChannelIds() {
+    const enabled = state.channels.filter((channel) => channel.enabled).map((channel) => channel.id);
+    return enabled.length ? enabled : state.channels.map((channel) => channel.id);
+  }
+
+  function renderMerchantChannelChecks(selectedIds = defaultMerchantChannelIds()) {
+    const selected = new Set(selectedIds || []);
+    const element = $("merchantChannelChecks");
+    if (!element) return;
+    element.innerHTML = state.channels.map((channel) => `
+      <label class="check">
+        <input type="checkbox" value="${html(channel.id)}" ${selected.has(channel.id) ? "checked" : ""}>
+        ${html(channel.id)}
+      </label>
+    `).join("");
+  }
+
+  function openMerchantModal() {
+    state.editingMerchantId = null;
+    $("merchantForm").reset();
+    $("merchantModalTitle").textContent = "新增商户";
+    $("merchantSubmitBtn").textContent = "保存商户";
+    $("merchantId").readOnly = false;
+    $("merchantId").removeAttribute("readonly");
+    $("merchantFeeRate").value = "0.60";
+    $("merchantTodayAmount").value = "0.00";
+    $("merchantRoutingMode").value = "ROUND_ROBIN";
+    renderMerchantChannelChecks();
+    $("merchantModal").classList.remove("hidden");
+    $("merchantModal").setAttribute("aria-hidden", "false");
+    $("merchantName").focus();
+  }
+
+  async function openEditMerchantModal(merchantId) {
+    const merchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
+    state.editingMerchantId = merchantId;
+    $("merchantForm").reset();
+    $("merchantModalTitle").textContent = `编辑商户 ${merchantId}`;
+    $("merchantSubmitBtn").textContent = "保存修改";
+    $("merchantId").value = merchant.merchantId || "";
+    $("merchantId").readOnly = true;
+    $("merchantId").setAttribute("readonly", "");
+    $("merchantName").value = merchant.name || "";
+    $("merchantFeeRate").value = merchant.feeRate ?? "0.60";
+    $("merchantStatus").value = merchant.status || "正常";
+    $("merchantTodayAmount").value = merchant.todayAmount ?? "0.00";
+    $("merchantRoutingMode").value = merchant.routingMode || "ROUND_ROBIN";
+    renderMerchantChannelChecks((merchant.channelIds || []).length ? merchant.channelIds : defaultMerchantChannelIds());
+    $("merchantModal").classList.remove("hidden");
+    $("merchantModal").setAttribute("aria-hidden", "false");
+    $("merchantName").focus();
+  }
+
+  function closeMerchantModal() {
+    $("merchantModal").classList.add("hidden");
+    $("merchantModal").setAttribute("aria-hidden", "true");
+    state.editingMerchantId = null;
+  }
+
+  function selectedMerchantChannelIds() {
+    return Array.from(document.querySelectorAll("#merchantChannelChecks input:checked"))
+      .map((input) => input.value);
+  }
+
+  function merchantPayload() {
+    const channelIds = selectedMerchantChannelIds();
+    if (!channelIds.length) {
+      throw { message: "请至少选择一个支付通道" };
+    }
+    return compact({
+      merchantId: $("merchantId").value,
+      name: $("merchantName").value,
+      feeRate: Number($("merchantFeeRate").value || 0),
+      status: $("merchantStatus").value,
+      todayAmount: Number($("merchantTodayAmount").value || 0),
+      channelIds,
+      routingMode: $("merchantRoutingMode").value
+    });
+  }
+
+  async function submitMerchant() {
+    const editing = Boolean(state.editingMerchantId);
+    const path = editing
+      ? `/api/v1/merchants/${encodeURIComponent(state.editingMerchantId)}`
+      : "/api/v1/merchants";
+    const data = await request(path, {
+      method: editing ? "PATCH" : "POST",
+      body: JSON.stringify(merchantPayload())
+    });
+    setMerchantResult({ message: editing ? `商户已修改：${data.merchantId}` : `商户已新增：${data.merchantId}` });
+    closeMerchantModal();
+    await loadMerchants();
+  }
+
+  async function deleteMerchant(merchantId) {
+    if (!window.confirm(`确定删除商户 ${merchantId} 吗？`)) return;
+    const data = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`, {
+      method: "DELETE"
+    });
+    setMerchantResult({ message: `商户已删除：${data.merchantId}` });
+    await loadMerchants();
+  }
+
+  async function settleMerchant(merchantId) {
+    const data = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}/settle`, {
+      method: "POST"
+    });
+    setMerchantResult({ message: `商户 ${data.merchantId} 已结算` });
+    await loadMerchants();
+  }
+
+  async function showMerchantDetail(merchantId) {
+    const merchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
+    $("merchantDetailTitle").textContent = `商户明细 ${merchant.merchantId}`;
+    $("detailMerchantId").value = merchant.merchantId || "";
+    $("detailMerchantName").value = merchant.name || "";
+    $("detailMerchantFeeRate").value = merchant.feeRateText || "";
+    $("detailMerchantSettlement").value = merchant.settlementStatus || "";
+    $("detailMerchantMd5Key").value = merchant.md5Key || "";
+    $("detailMerchantRsaPublicKey").value = merchant.rsa2PublicKey || "";
+    $("detailMerchantRsaPrivateKey").value = merchant.rsa2PrivateKey || "";
+    $("merchantDetailModal").classList.remove("hidden");
+    $("merchantDetailModal").setAttribute("aria-hidden", "false");
+  }
+
+  function closeMerchantDetail() {
+    $("merchantDetailModal").classList.add("hidden");
+    $("merchantDetailModal").setAttribute("aria-hidden", "true");
+  }
+
+  function loginMerchant(merchantId) {
+    window.location.href = `/merchant.html?merchantId=${encodeURIComponent(merchantId)}&demoLogin=1`;
+  }
+
+  function orderQueryString() {
+    const params = new URLSearchParams();
+    const values = {
+      beginTime: $("orderBeginTime")?.value,
+      endTime: $("orderEndTime")?.value,
+      outTradeNo: $("orderOutTradeNo")?.value,
+      tradeNo: $("orderTradeNo")?.value,
+      channelId: $("orderChannelFilter")?.value
+    };
+    Object.entries(values).forEach(([key, value]) => {
+      if (value && value.trim()) params.set(key, value.trim());
+    });
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+
+  async function handleOrderAction(outTradeNo, action) {
+    const encoded = encodeURIComponent(outTradeNo);
+    const endpoints = {
+      complete: { method: "POST", path: `/api/v1/orders/${encoded}/complete`, title: "订单已改为完成" },
+      "manual-supplement": { method: "POST", path: `/api/v1/orders/${encoded}/manual-supplement`, title: "手动补单完成" },
+      uncomplete: { method: "POST", path: `/api/v1/orders/${encoded}/uncomplete`, title: "订单已改为未完成" },
+      refund: { method: "POST", path: `/api/v1/orders/${encoded}/refund`, title: "退款处理完成" },
+      "convert-to-pay": { method: "POST", path: `/api/v1/orders/${encoded}/convert-to-pay`, title: "预授权已转支付" },
+      delete: { method: "DELETE", path: `/api/v1/orders/${encoded}`, title: "订单已删除" }
+    };
+    const endpoint = endpoints[action];
+    if (!endpoint) return;
+    if (action === "delete" && !window.confirm(`确定删除订单 ${outTradeNo} 吗？`)) return;
+    try {
+      const data = await request(endpoint.path, { method: endpoint.method });
+      setDashboardResult({ message: `${endpoint.title}: ${data.outTradeNo}` });
+      await loadOrders();
+    } catch (error) {
+      setDashboardResult(error);
+    }
+  }
+
+  function productCell(order) {
+    const label = order.preAuthorization ? `${order.productName} · 可转支付` : order.productName;
+    return `<span class="tag">${html(label)}</span>`;
+  }
+
+  function closeOrderMenus(exceptOrderNo) {
+    document.querySelectorAll("[data-order-menu-panel]").forEach((panel) => {
+      panel.classList.toggle("hidden", panel.dataset.orderMenuPanel !== exceptOrderNo);
+    });
+  }
+
+  function renderOrders() {
+    $("recentOrders").innerHTML = state.orders.map((order) => `
+      <tr>
+        <td>${html(order.outTradeNo)}</td>
+        <td class="muted">${html(order.tradeNo || "-")}</td>
+        <td>${html(order.channelId || "-")}</td>
+        <td>${html(order.merchantName)}</td>
+        <td>${productCell(order)}</td>
+        <td class="amount-green">${html(order.amountText)}</td>
+        <td>${statusCell(order.status)}</td>
+        <td class="muted">${html(order.createdAt)}</td>
+        <td>${orderActionCell(order)}</td>
+      </tr>
+    `).join("");
+  }
+
+  async function loadHealth() {
+    try {
+      const data = await request("/actuator/health");
+      $("healthText").textContent = `服务 ${data.status}`;
+    } catch (error) {
+      $("healthText").textContent = "服务异常";
+    }
+  }
+
+  async function loadChannels() {
+    const data = await request("/api/v1/channels");
+    state.channels = Array.isArray(data) ? data : data.value || [];
+    renderChannelChecks();
+    renderOrderChannelOptions();
+    renderChannels();
+  }
+
+  function renderChannelChecks() {
+    const checks = state.channels.map((channel) => `
+      <label class="check">
+        <input type="checkbox" value="${html(channel.id)}" ${channel.enabled ? "checked" : ""}>
+        ${html(channel.id)}
+      </label>
+    `).join("");
+    channelCheckTargets.forEach((target) => {
+      const element = $(target);
+      if (element) element.innerHTML = checks;
+    });
+  }
+
+  function renderOrderChannelOptions() {
+    const select = $("orderChannelFilter");
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">全部通道</option>' + state.channels.map((channel) => `
+      <option value="${html(channel.id)}">${html(channel.id)}</option>
+    `).join("");
+    select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
+  }
+
+  function renderChannels() {
+    renderChannelSummary();
+    const tableBody = $("channelTableBody");
+    if (!tableBody) return;
+    tableBody.innerHTML = state.channels.map((channel) => `
+      <tr data-channel-row="${html(channel.id)}">
+        <td>
+          <button class="switch" type="button" role="switch" aria-label="${html(channel.id)} 通道开关" aria-checked="${channel.enabled}" data-channel-toggle="${html(channel.id)}"><span></span></button>
+        </td>
+        <td>
+          <strong>${html(channel.id)}</strong>
+          <div class="muted">${html(channel.provider)}</div>
+        </td>
+        <td>${html(channel.appId || "-")}</td>
+        <td>
+          ${channel.provider === "ALIPAY_DIRECT"
+            ? `<input data-channel-input="${html(channel.id)}" data-field="subMerchantId" placeholder="二级商户 SMID" value="${html(channel.subMerchantId || "")}">`
+            : '<span class="muted">-</span>'}
+        </td>
+        <td>
+          <div class="product-tags">
+            <span class="mini">${channel.hasAlipayPublicKey ? "公钥已配" : "缺公钥"}</span>
+            <span class="mini">${channel.hasMerchantPrivateKey ? "私钥已配" : "缺私钥"}</span>
+            ${channel.provider === "ALIPAY_DIRECT" ? `<span class="mini">${channel.hasSubMerchantId ? "SMID已配" : "缺SMID"}</span>` : ""}
+          </div>
+        </td>
+        <td>${channel.dailyEnabled ? '<span class="status success">可用</span>' : '<span class="status pending">熔断</span>'}</td>
+        <td class="product-cell">
+          <div class="product-checks">
+            ${channelProductIds(channel).map((product) => `
+              <label class="product-check">
+                <input data-channel-product="${html(channel.id)}" type="checkbox" value="${html(product)}" ${(channel.products || []).includes(product) ? "checked" : ""}>
+                ${html(productLabels[product] || product)}
+              </label>
+            `).join("")}
+          </div>
+        </td>
+        <td><input data-channel-input="${html(channel.id)}" data-field="payMin" type="number" min="0" step="0.01" value="${html(channel.payMin ?? "")}"></td>
+        <td><input data-channel-input="${html(channel.id)}" data-field="payMax" type="number" min="0" step="0.01" value="${html(channel.payMax ?? "")}"></td>
+        <td>
+          <div class="channel-actions">
+            <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
+            <button class="btn secondary small" type="button" data-channel-save="${html(channel.id)}">保存</button>
+            <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">二维码</button>
+            <button class="btn danger small" type="button" data-channel-delete="${html(channel.id)}">删除</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+  }
+
+  async function setChannel(channelId, enabled) {
+    const data = await request(`/api/v1/channels/${channelId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ enabled })
+    });
+    setConsole(data);
+    await loadChannels();
+  }
+
+  function renderChannelSummary() {
+    const summary = $("channelSummary");
+    if (!summary) return;
+    const enabled = state.channels.filter((channel) => channel.enabled).length;
+    const eligible = state.channels.filter((channel) => channel.enabled && channel.dailyEnabled).length;
+    summary.innerHTML = `
+      <div class="small-stat"><span>启用通道</span><strong>${enabled}/${state.channels.length}</strong></div>
+      <div class="small-stat"><span>当前可路由</span><strong>${eligible}</strong></div>
+    `;
+  }
+
+  function channelProductIds(channel) {
+    return channel.provider === "ALIPAY_DIRECT" ? directProductIds : standardProductIds;
+  }
+
+  function channelPatchPayload(channelId) {
+    const payload = {};
+    document.querySelectorAll(`[data-channel-input="${CSS.escape(channelId)}"]`).forEach((input) => {
+      const field = input.dataset.field;
+      if (field === "priority" || field === "weight") {
+        payload[field] = Number(input.value);
+      } else if (field === "payMin" || field === "payMax") {
+        payload[field] = input.value === "" ? null : Number(input.value);
+      } else {
+        payload[field] = input.value;
+      }
+    });
+    payload.products = Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
+      .map((input) => input.value);
+    return payload;
+  }
+
+  async function saveChannel(channelId) {
+    const payload = channelPatchPayload(channelId);
+    const channel = state.channels.find((item) => item.id === channelId);
+    if (channel?.provider === "ALIPAY_DIRECT" && !payload.subMerchantId?.trim()) {
+      setConsole({ error: "支付宝直付通通道必须填写二级商户 SMID", channelId });
+      return;
+    }
+    if (!payload.products.length) {
+      setConsole({ error: "请至少勾选一个支付产品", channelId });
+      return;
+    }
+    const data = await request(`/api/v1/channels/${channelId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    });
+    setConsole(data);
+    await loadChannels();
+  }
+
+  async function deleteChannel(channelId) {
+    if (!window.confirm(`确定删除通道 ${channelId} 吗？`)) return;
+    const data = await request(`/api/v1/channels/${channelId}`, {
+      method: "DELETE"
+    });
+    setConsole({ message: "通道已删除", channel: data });
+    await loadChannels();
+  }
+
+  function cashierUrl(channelId) {
+    return `${location.origin}/cashier.html?channelId=${encodeURIComponent(channelId)}`;
+  }
+
+  function showCashierQr(channelId) {
+    const url = cashierUrl(channelId);
+    $("qrTitle").textContent = `${channelId} 收银台二维码`;
+    $("qrLink").textContent = url;
+    $("qrImage").src = `/api/v1/channels/${encodeURIComponent(channelId)}/cashier-qr?t=${Date.now()}`;
+    $("qrModal").classList.remove("hidden");
+  }
+
+  function hideCashierQr() {
+    $("qrModal").classList.add("hidden");
+    $("qrImage").removeAttribute("src");
+  }
+
+  function syncDirectChannelField() {
+    const direct = $("newChannelProvider").value === "ALIPAY_DIRECT";
+    document.querySelectorAll(".direct-channel-field").forEach((field) => {
+      field.classList.toggle("hidden", !direct);
+    });
+    $("newChannelSubMerchantId").required = direct;
+  }
+
+  function amountField(id) {
+    const value = $(id).value.trim();
+    return value === "" ? null : Number(value);
+  }
+
+  function appOrigin() {
+    return location.origin && location.origin !== "null" ? location.origin : "";
+  }
+
+  function callbackUrl(path, channelId) {
+    if (!channelId) return `${appOrigin()}${path}/{通道编号}`;
+    return `${appOrigin()}${path}/${encodeURIComponent(channelId)}`;
+  }
+
+  function syncChannelCallbackUrls() {
+    const channelId = (state.editingChannelId || $("newChannelId").value || "").trim();
+    $("newChannelNotifyUrl").value = callbackUrl("/api/v1/alipay/notify", channelId);
+    $("newChannelReturnUrl").value = callbackUrl("/api/v1/alipay/return", channelId);
+  }
+
+  function showChannelModal() {
+    $("addChannelPanel").classList.remove("hidden");
+    $("addChannelPanel").setAttribute("aria-hidden", "false");
+  }
+
+  function closeChannelModal() {
+    $("addChannelPanel").classList.add("hidden");
+    $("addChannelPanel").setAttribute("aria-hidden", "true");
+    resetChannelForm();
+  }
+
+  function resetChannelForm() {
+    state.editingChannelId = null;
+    $("addChannelForm").reset();
+    $("channelFormMode").value = "create";
+    $("channelModalTitle").textContent = "新增通道";
+    $("channelSubmitBtn").textContent = "添加通道";
+    $("newChannelId").readOnly = false;
+    $("newChannelId").removeAttribute("readonly");
+    $("newChannelProvider").disabled = false;
+    $("newChannelProvider").removeAttribute("disabled");
+    $("newChannelAlipayPublicKey").required = true;
+    $("newChannelAlipayPublicKey").setAttribute("required", "");
+    $("newChannelMerchantPrivateKey").required = true;
+    $("newChannelMerchantPrivateKey").setAttribute("required", "");
+    $("newChannelAlipayPublicKey").placeholder = "支付宝公钥或证书公钥内容";
+    $("newChannelMerchantPrivateKey").placeholder = "应用 RSA2 私钥";
+    $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
+    $("newChannelPayMin").value = "0.01";
+    $("newChannelPayMax").value = "50000";
+    $("newChannelGatewayUrl").value = "https://openapi.alipay.com/gateway.do";
+    syncChannelCallbackUrls();
+    syncDirectChannelField();
+  }
+
+  function openCreateChannelModal() {
+    resetChannelForm();
+    showChannelModal();
+    $("newChannelId").focus();
+  }
+
+  function openEditChannelModal(channelId) {
+    const channel = state.channels.find((item) => item.id === channelId);
+    if (!channel) {
+      setConsole({ error: "没有找到这个支付通道", channelId });
+      return;
+    }
+    resetChannelForm();
+    state.editingChannelId = channelId;
+    $("channelFormMode").value = "edit";
+    $("channelModalTitle").textContent = `编辑通道 ${channelId}`;
+    $("channelSubmitBtn").textContent = "保存修改";
+    $("newChannelId").value = channel.id;
+    $("newChannelId").readOnly = true;
+    $("newChannelId").setAttribute("readonly", "");
+    $("newChannelProvider").value = channel.provider;
+    $("newChannelProvider").disabled = true;
+    $("newChannelProvider").setAttribute("disabled", "");
+    $("newChannelAppId").value = channel.appId || "";
+    $("newChannelSubMerchantId").value = channel.subMerchantId || "";
+    $("newChannelPayMin").value = channel.payMin ?? "";
+    $("newChannelPayMax").value = channel.payMax ?? "";
+    $("newChannelGatewayUrl").value = channel.gatewayUrl || "https://openapi.alipay.com/gateway.do";
+    syncChannelCallbackUrls();
+    $("newChannelAlipayPublicKey").required = false;
+    $("newChannelAlipayPublicKey").removeAttribute("required");
+    $("newChannelMerchantPrivateKey").required = false;
+    $("newChannelMerchantPrivateKey").removeAttribute("required");
+    $("newChannelAlipayPublicKey").placeholder = channel.hasAlipayPublicKey ? "留空则不修改已配置公钥" : "未配置，请填写支付宝公钥";
+    $("newChannelMerchantPrivateKey").placeholder = channel.hasMerchantPrivateKey ? "留空则不修改已配置私钥" : "未配置，请填写应用 RSA2 私钥";
+    $("newChannelAppAuthToken").placeholder = channel.hasAppAuthToken ? "留空则不修改已配置授权 token" : "服务商/直付通授权 token，可留空";
+    syncDirectChannelField();
+    showChannelModal();
+    $("newChannelAppId").focus();
+  }
+
+  function channelFormPayload() {
+    const editing = Boolean(state.editingChannelId);
+    syncChannelCallbackUrls();
+    const payload = compact({
+      payMin: amountField("newChannelPayMin"),
+      payMax: amountField("newChannelPayMax"),
+      gatewayUrl: $("newChannelGatewayUrl").value,
+      appId: $("newChannelAppId").value,
+      subMerchantId: $("newChannelSubMerchantId").value,
+      notifyUrl: $("newChannelNotifyUrl").value,
+      returnUrl: $("newChannelReturnUrl").value
+    });
+
+    if (!editing) {
+      payload.id = $("newChannelId").value;
+      payload.provider = $("newChannelProvider").value;
+      payload.enabled = true;
+      payload.dailyEnabled = true;
+    }
+
+    const merchantPrivateKey = $("newChannelMerchantPrivateKey").value.trim();
+    const alipayPublicKey = $("newChannelAlipayPublicKey").value.trim();
+    const appAuthToken = $("newChannelAppAuthToken").value.trim();
+    if (!editing || merchantPrivateKey) payload.merchantPrivateKey = merchantPrivateKey;
+    if (!editing || alipayPublicKey) payload.alipayPublicKey = alipayPublicKey;
+    if (!editing || appAuthToken) payload.appAuthToken = appAuthToken;
+
+    return compact(payload);
+  }
+
+  async function submitChannelForm() {
+    const payload = channelFormPayload();
+    const editing = Boolean(state.editingChannelId);
+    const path = editing ? `/api/v1/channels/${encodeURIComponent(state.editingChannelId)}` : "/api/v1/channels";
+    const data = await request(path, {
+      method: editing ? "PATCH" : "POST",
+      body: JSON.stringify(payload)
+    });
+    setConsole(data);
+    closeChannelModal();
+    await loadChannels();
+  }
+
+  function onboardPayload() {
+    return compact({
+      outBizNo: $("onboardOutBizNo").value,
+      method: $("onboardMethod").value,
+      appAuthToken: $("onboardAppAuthToken").value,
+      channelIds: checkedChannels("onboardChannelChecks"),
+      payload: parseJson("onboardPayload", {})
+    });
+  }
+
+  function complaintPayload() {
+    return compact({
+      complaintId: $("complaintId").value,
+      method: $("complaintMethod").value,
+      beginTime: $("complaintBeginTime").value,
+      endTime: $("complaintEndTime").value,
+      pageNum: Number($("complaintPageNum").value),
+      pageSize: Number($("complaintPageSize").value),
+      appAuthToken: $("complaintAppAuthToken").value,
+      channelIds: checkedChannels("complaintChannelChecks"),
+      extra: parseJson("complaintExtra", {})
+    });
+  }
+
+  function complaintAutoPayload(enabled) {
+    return compact({
+      enabled,
+      method: $("complaintMethod").value,
+      pageSize: Number($("complaintPageSize").value || 50),
+      lookbackMinutes: Number($("complaintAutoLookbackMinutes").value || 1440),
+      appAuthToken: $("complaintAppAuthToken").value,
+      extra: parseJson("complaintExtra", {})
+    });
+  }
+
+  function renderComplaintAutoStatus() {
+    const stats = $("complaintAutoStats");
+    if (!stats) return;
+    const status = state.complaintAuto;
+    if (!status) {
+      stats.innerHTML = "";
+      return;
+    }
+    stats.innerHTML = `
+      <div class="small-stat"><span>自动查询</span><strong>${status.enabled ? "已开启" : "已停止"}</strong></div>
+      <div class="small-stat"><span>间隔</span><strong>${status.intervalSeconds} 秒</strong></div>
+      <div class="small-stat"><span>已执行</span><strong>${status.runCount} 次</strong></div>
+    `;
+    setComplaintAutoResult({
+      lastMessage: `${status.lastMessage || "暂无记录"}${status.lastFinishedAt ? `\n上次完成：${status.lastFinishedAt}` : ""}`
+    });
+  }
+
+  async function loadComplaintAutoStatus() {
+    state.complaintAuto = await request("/api/v1/payments/complaints/auto");
+    renderComplaintAutoStatus();
+  }
+
+  async function configureComplaintAuto(enabled) {
+    const data = await request("/api/v1/payments/complaints/auto", {
+      method: "PATCH",
+      body: JSON.stringify(complaintAutoPayload(enabled))
+    });
+    state.complaintAuto = data;
+    renderComplaintAutoStatus();
+  }
+
+  async function runComplaintAutoNow() {
+    const data = await request("/api/v1/payments/complaints/auto/run", {
+      method: "POST",
+      body: JSON.stringify(complaintAutoPayload(state.complaintAuto?.enabled))
+    });
+    state.complaintAuto = data;
+    renderComplaintAutoStatus();
+  }
+
+  async function postAndShow(title, path, payload) {
+    try {
+      const data = await request(path, { method: "POST", body: JSON.stringify(payload) });
+      appendConsole(title, data);
+      return data;
+    } catch (error) {
+      appendConsole(title, error);
+      return error;
+    }
+  }
+
+  function switchPage(page) {
+    document.querySelectorAll(".nav-btn").forEach((button) => {
+      button.classList.toggle("active", button.dataset.page === page);
+    });
+    document.querySelectorAll(".page").forEach((section) => {
+      section.classList.toggle("active", section.id === `page-${page}`);
+    });
+    const button = document.querySelector(`.nav-btn[data-page="${page}"]`);
+    $("pageTitle").textContent = button ? button.innerText.trim() : "支付平台管理";
+  }
+
+  document.querySelectorAll(".nav-btn").forEach((button) => {
+    button.addEventListener("click", () => switchPage(button.dataset.page));
+  });
+
+  document.querySelectorAll("[data-jump]").forEach((button) => {
+    button.addEventListener("click", () => switchPage(button.dataset.jump));
+  });
+
+  $("recentOrders").addEventListener("click", async (event) => {
+    const menuButton = event.target.closest("button[data-order-menu]");
+    if (menuButton) {
+      const panel = document.querySelector(`[data-order-menu-panel="${CSS.escape(menuButton.dataset.orderMenu)}"]`);
+      const willOpen = panel?.classList.contains("hidden");
+      closeOrderMenus(willOpen ? menuButton.dataset.orderMenu : "");
+      return;
+    }
+
+    const actionButton = event.target.closest("button[data-order-action]");
+    if (!actionButton) return;
+    event.preventDefault();
+    closeOrderMenus("");
+    await handleOrderAction(actionButton.dataset.orderNo, actionButton.dataset.orderAction);
+  });
+
+  $("orderFilterForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await loadOrders();
+    setDashboardResult({ message: `已查询到 ${state.orders.length} 笔订单` });
+  });
+
+  $("resetOrderFilterBtn").addEventListener("click", async () => {
+    $("orderFilterForm").reset();
+    await loadOrders();
+    setDashboardResult({ message: "订单筛选已重置" });
+  });
+
+  $("addMerchantBtn").addEventListener("click", openMerchantModal);
+
+  $("closeMerchantModalBtn").addEventListener("click", closeMerchantModal);
+
+  $("merchantModal").addEventListener("click", (event) => {
+    if (event.target.id === "merchantModal") closeMerchantModal();
+  });
+
+  $("merchantForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await submitMerchant();
+    } catch (error) {
+      setMerchantResult(error);
+    }
+  });
+
+  $("closeMerchantDetailBtn").addEventListener("click", closeMerchantDetail);
+
+  $("merchantDetailModal").addEventListener("click", (event) => {
+    if (event.target.id === "merchantDetailModal") closeMerchantDetail();
+  });
+
+  $("merchantTableBody").addEventListener("click", async (event) => {
+    const login = event.target.closest("button[data-merchant-login]");
+    if (login) {
+      loginMerchant(login.dataset.merchantLogin);
+      return;
+    }
+    const edit = event.target.closest("button[data-merchant-edit]");
+    if (edit) {
+      await openEditMerchantModal(edit.dataset.merchantEdit);
+      return;
+    }
+    const settle = event.target.closest("button[data-merchant-settle]");
+    if (settle) {
+      await settleMerchant(settle.dataset.merchantSettle);
+      return;
+    }
+    const detail = event.target.closest("button[data-merchant-detail]");
+    if (detail) {
+      await showMerchantDetail(detail.dataset.merchantDetail);
+      return;
+    }
+    const remove = event.target.closest("button[data-merchant-delete]");
+    if (remove) {
+      await deleteMerchant(remove.dataset.merchantDelete);
+    }
+  });
+
+  $("onboardForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await postAndShow("提交进件", "/api/v1/payments/onboarding", onboardPayload());
+  });
+
+  $("complaintForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const data = await request("/api/v1/payments/complaints/query", {
+        method: "POST",
+        body: JSON.stringify(complaintPayload())
+      });
+      setComplaintResult(data);
+    } catch (error) {
+      setComplaintResult(error);
+    }
+  });
+
+  $("startComplaintAutoBtn").addEventListener("click", async () => {
+    try {
+      await configureComplaintAuto(true);
+    } catch (error) {
+      setComplaintAutoResult(error);
+    }
+  });
+
+  $("stopComplaintAutoBtn").addEventListener("click", async () => {
+    try {
+      await configureComplaintAuto(false);
+    } catch (error) {
+      setComplaintAutoResult(error);
+    }
+  });
+
+  $("runComplaintAutoBtn").addEventListener("click", async () => {
+    try {
+      await runComplaintAutoNow();
+    } catch (error) {
+      setComplaintAutoResult(error);
+    }
+  });
+
+  $("refreshChannelsBtn").addEventListener("click", loadChannels);
+
+  $("enableAllBtn").addEventListener("click", async () => {
+    for (const channel of state.channels) {
+      if (!channel.enabled) {
+        await request(`/api/v1/channels/${channel.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ enabled: true })
+        });
+      }
+    }
+    await loadChannels();
+    setConsole({ message: "全部通道已启用", channels: state.channels });
+  });
+
+  $("channelTableBody").addEventListener("click", async (event) => {
+    const toggle = event.target.closest("button[data-channel-toggle]");
+    if (toggle) {
+      const channel = state.channels.find((item) => item.id === toggle.dataset.channelToggle);
+      if (channel) await setChannel(channel.id, !channel.enabled);
+      return;
+    }
+    const edit = event.target.closest("button[data-channel-edit]");
+    if (edit) {
+      openEditChannelModal(edit.dataset.channelEdit);
+      return;
+    }
+    const save = event.target.closest("button[data-channel-save]");
+    if (save) {
+      await saveChannel(save.dataset.channelSave);
+      return;
+    }
+    const qr = event.target.closest("button[data-channel-qr]");
+    if (qr) {
+      showCashierQr(qr.dataset.channelQr);
+      return;
+    }
+    const remove = event.target.closest("button[data-channel-delete]");
+    if (remove) {
+      await deleteChannel(remove.dataset.channelDelete);
+    }
+  });
+
+  $("addChannelForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitChannelForm();
+  });
+
+  $("newChannelId").addEventListener("input", syncChannelCallbackUrls);
+
+  $("newChannelProvider").addEventListener("change", syncDirectChannelField);
+
+  $("toggleAddChannelBtn").addEventListener("click", openCreateChannelModal);
+
+  $("closeAddChannelBtn").addEventListener("click", closeChannelModal);
+
+  $("addChannelPanel").addEventListener("click", (event) => {
+    if (event.target.id === "addChannelPanel") closeChannelModal();
+  });
+
+  $("closeQrBtn").addEventListener("click", hideCashierQr);
+
+  $("qrModal").addEventListener("click", (event) => {
+    if (event.target.id === "qrModal") hideCashierQr();
+  });
+
+  syncDirectChannelField();
+  syncChannelCallbackUrls();
+  setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
+
+  Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadComplaintAutoStatus()])
+    .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
+    .catch((error) => setConsole(error));
+</script>
+</body>
+</html>

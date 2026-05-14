@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>通道收银台</title>
+  <style>
+    :root {
+      --primary: #1677ff;
+      --text: #0f172a;
+      --muted: #64748b;
+      --line: #dbe3ef;
+      --bg: #f3f6fb;
+      --green: #38b000;
+      --red: #ff4d4f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    }
+
+    .shell {
+      width: min(520px, calc(100% - 28px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+      font-weight: 900;
+      font-size: 20px;
+    }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 22px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }
+
+    .head {
+      padding: 20px 22px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .head h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    form {
+      display: grid;
+      gap: 15px;
+      padding: 22px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    input,
+    select {
+      width: 100%;
+      height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 0 12px;
+      color: var(--text);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 800;
+      background: #fff;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--primary);
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    }
+
+    .amount {
+      height: 58px;
+      font-size: 26px;
+      letter-spacing: 0;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      height: 46px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0 22px 22px;
+    }
+
+    .mini {
+      min-height: 70px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fbff;
+    }
+
+    .mini span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .mini strong {
+      display: block;
+      margin-top: 7px;
+      overflow-wrap: anywhere;
+      font-size: 15px;
+    }
+
+    .result {
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #dbeafe;
+      padding: 14px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .ok {
+      color: var(--green);
+    }
+
+    .bad {
+      color: var(--red);
+    }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <div class="brand"><div class="logo">¥</div><div>通道收银台</div></div>
+  <section class="card">
+    <div class="head">
+      <h1 id="cashierTitle">收银台</h1>
+      <p id="cashierHint">输入金额后发起支付，订单将固定走当前二维码对应的支付通道。</p>
+    </div>
+    <form id="cashierForm">
+      <label>支付金额
+        <input id="amount" class="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+      </label>
+      <label>订单标题
+        <input id="subject" value="扫码收银台支付" required>
+      </label>
+      <button id="payButton" class="btn" type="submit" disabled>确认支付</button>
+    </form>
+    <div class="meta">
+      <div class="mini"><span>支付通道</span><strong id="channelText">-</strong></div>
+      <div class="mini"><span>通道类型</span><strong id="providerText">-</strong></div>
+    </div>
+  </section>
+  <pre id="result" class="result">等待输入金额...</pre>
+  <div id="paymentFormHolder" hidden></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const channelId = params.get("channelId");
+  const preferredProduct = params.get("product");
+  const productLabels = {
+    ALIPAY_ORDER_CODE: "订单码",
+    ALIPAY_F2F: "当面付",
+    ALIPAY_WAP: "WAP手机",
+    ALIPAY_PAGE: "PC网页",
+    ALIPAY_JSAPI: "JSAPI",
+    ALIPAY_PREAUTH: "预授权",
+    ALIPAY_DIRECT_WAP: "直付通WAP手机",
+    ALIPAY_DIRECT_F2F: "直付通当面付",
+    ALIPAY_DIRECT_PAGE: "直付通PC网页",
+    ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
+    ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
+  };
+
+  let currentChannel;
+  let currentProduct;
+
+  const $ = (id) => document.getElementById(id);
+
+  function writeResult(value) {
+    $("result").textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  }
+
+  async function request(url, options = {}) {
+    const response = await fetch(url, {
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...options
+    });
+    const text = await response.text();
+    const data = text ? JSON.parse(text) : {};
+    if (!response.ok) throw data;
+    return data;
+  }
+
+  function productOptions(channel) {
+    return (channel.products || [])
+      .filter((product) => product !== "ALIPAY_DIRECT")
+      .filter((product) => productLabels[product]);
+  }
+
+  async function loadChannel() {
+    if (!channelId) {
+      throw { code: "BAD_REQUEST", message: "缺少 channelId" };
+    }
+    const channels = await request("/api/v1/channels");
+    currentChannel = channels.find((channel) => channel.id === channelId);
+    if (!currentChannel) {
+      throw { code: "BAD_REQUEST", message: "支付通道不存在" };
+    }
+    $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
+    $("channelText").textContent = currentChannel.id;
+    $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
+
+    const options = productOptions(currentChannel);
+    currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : options[0];
+    if (!currentProduct) {
+      $("payButton").disabled = true;
+      writeResult({ code: "NO_PRODUCT", message: "当前通道没有可用于收银台的支付产品" });
+    } else {
+      $("payButton").disabled = false;
+    }
+  }
+
+  function orderNo() {
+    return `CASHIER${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
+  }
+
+  $("cashierForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const amount = Number($("amount").value);
+    if (!amount || amount < 0.01) {
+      writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" });
+      return;
+    }
+    const payload = {
+      product: currentProduct,
+      outTradeNo: orderNo(),
+      subject: $("subject").value,
+      totalAmount: amount,
+      channelIds: [currentChannel.id],
+      timeoutExpress: "10m",
+      extra: { cashier: true }
+    };
+    writeResult("正在发起支付...");
+    try {
+      const data = await request("/api/v1/payments/pay", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      writeResult(data);
+      if (data.redirectHtml) {
+        const holder = $("paymentFormHolder");
+        holder.innerHTML = data.redirectHtml;
+        const form = holder.querySelector("form");
+        if (form) form.submit();
+      }
+    } catch (error) {
+      writeResult(error);
+    }
+  });
+
+  loadChannel().catch(writeResult);
+</script>
+</body>
+</html>

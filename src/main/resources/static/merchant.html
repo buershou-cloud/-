@@ -1,0 +1,778 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>商户后台</title>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --panel: #fff;
+      --text: #0f172a;
+      --muted: #728197;
+      --line: #e2e8f0;
+      --primary: #1677ff;
+      --success: #52c41a;
+      --danger: #ff4d4f;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Microsoft YaHei", system-ui, sans-serif;
+    }
+
+    .shell {
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    h2 {
+      font-size: 18px;
+      font-weight: 900;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.06);
+      overflow: hidden;
+    }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .panel-body {
+      padding: 18px;
+    }
+
+    .login-wrap {
+      display: grid;
+      place-items: center;
+      min-height: calc(100vh - 48px);
+    }
+
+    .login-panel {
+      width: min(520px, 100%);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    input,
+    textarea {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      padding: 8px 10px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    textarea {
+      min-height: 130px;
+      resize: vertical;
+      line-height: 1.45;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-weight: 650;
+    }
+
+    .wide {
+      grid-column: 1 / -1;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      min-height: 36px;
+      border: 0;
+      border-radius: 7px;
+      padding: 0 14px;
+      background: var(--primary);
+      color: #fff;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 850;
+      cursor: pointer;
+    }
+
+    .btn.secondary {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+    }
+
+    .dashboard {
+      display: grid;
+      gap: 18px;
+    }
+
+    .portal-card {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .portal-tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 520px;
+      padding: 14px;
+      border-right: 1px solid var(--line);
+      background: #f8fafc;
+    }
+
+    .portal-tab {
+      width: 100%;
+      min-height: 54px;
+      border: 0;
+      border-radius: 7px;
+      padding: 0 14px;
+      background: transparent;
+      color: #334155;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .portal-tab.active {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 10px 24px rgba(22, 119, 255, 0.18);
+    }
+
+    .portal-content {
+      min-width: 0;
+    }
+
+    .portal-section {
+      padding: 24px 0;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .portal-section:last-child {
+      border-bottom: 0;
+    }
+
+    .section-title {
+      margin: 0 0 18px 252px;
+      color: #334155;
+      font-size: 16px;
+      font-weight: 900;
+    }
+
+    .api-row {
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr);
+      gap: 28px;
+      align-items: start;
+      margin-bottom: 14px;
+      padding-right: 170px;
+    }
+
+    .api-label {
+      padding-top: 10px;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 800;
+      text-align: right;
+    }
+
+    .copy-field {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 42px;
+      align-items: stretch;
+    }
+
+    .copy-field input,
+    .copy-field textarea,
+    .api-select {
+      border-radius: 4px 0 0 4px;
+      border-color: #d5dde5;
+      background: #eeeeef;
+      color: #334155;
+      font-weight: 650;
+    }
+
+    .copy-field textarea {
+      min-height: 70px;
+    }
+
+    .copy-btn {
+      border: 1px solid #d5dde5;
+      border-left: 0;
+      border-radius: 0 4px 4px 0;
+      background: #edf2f6;
+      color: #334155;
+      font-size: 12px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .api-select {
+      width: 100%;
+      min-height: 38px;
+      border-radius: 4px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .api-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-left: 252px;
+      margin-top: 8px;
+    }
+
+    .btn.info {
+      background: #18a8d8;
+    }
+
+    .btn.success {
+      background: #22c55e;
+    }
+
+    .btn.warning {
+      background: #ef4444;
+    }
+
+    .confirm-row {
+      margin-left: 252px;
+      width: min(720px, calc(100% - 420px));
+    }
+
+    .confirm-row .btn {
+      width: 100%;
+      background: #7465bd;
+    }
+
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    .order-section {
+      padding: 24px;
+    }
+
+    .order-section .section-title {
+      margin: 0 0 18px;
+    }
+
+    .order-section .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .portal-message {
+      margin: 0 170px 18px 252px;
+      color: #64748b;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .stat {
+      min-height: 84px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+    }
+
+    .stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 23px;
+      font-weight: 900;
+    }
+
+    .table-wrap {
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    th,
+    td {
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      background: #fafafa;
+      color: #334155;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: #f0fdf4;
+      color: #22a807;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .status.pending {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+
+    .docs {
+      display: grid;
+      gap: 14px;
+    }
+
+    pre {
+      margin: 0;
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dbeafe;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 800px) {
+      .shell {
+        padding: 16px;
+      }
+
+      .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .form-grid,
+      .stats {
+        grid-template-columns: 1fr;
+      }
+
+      .portal-card {
+        grid-template-columns: 1fr;
+      }
+
+      .portal-tabs {
+        min-height: auto;
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .portal-tab {
+        min-width: 120px;
+        text-align: center;
+      }
+
+      .api-row {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding-right: 0;
+      }
+
+      .api-label {
+        text-align: left;
+      }
+
+      .section-title,
+      .api-actions,
+      .confirm-row,
+      .portal-message {
+        width: auto;
+        margin-left: 0;
+        margin-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+<main class="shell">
+  <section id="loginView" class="login-wrap">
+    <div class="panel login-panel">
+      <div class="panel-head">
+        <h1>商户后台登录</h1>
+      </div>
+      <div class="panel-body">
+        <form id="loginForm">
+          <div class="form-grid">
+            <label>商户号<input id="loginMerchantId" required placeholder="例如 M10001"></label>
+            <label>MD5 密钥<input id="loginMd5Key" placeholder="商户明细里的 MD5 密钥"></label>
+          </div>
+          <div class="actions">
+            <button class="btn" type="submit">登录</button>
+            <a class="btn secondary" href="/">返回管理端</a>
+          </div>
+          <p id="loginMessage" class="muted" style="margin-top:14px"></p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section id="portalView" class="dashboard hidden">
+    <header class="topbar">
+      <div>
+        <h1 id="merchantTitle">商户后台</h1>
+        <p id="merchantSub" class="muted"></p>
+      </div>
+      <button class="btn secondary" id="logoutBtn" type="button">退出</button>
+    </header>
+
+    <section class="portal-card">
+      <div class="portal-tabs">
+        <button class="portal-tab active" type="button" data-tab="api">API信息</button>
+        <button class="portal-tab" type="button" data-tab="orders">订单列表</button>
+      </div>
+
+      <div class="portal-content">
+        <div id="tab-api" class="tab-pane active">
+          <div class="portal-section">
+            <div class="api-row">
+              <div class="api-label">接口地址</div>
+              <div class="copy-field"><input id="apiBase" readonly><button class="copy-btn" type="button" data-copy-source="apiBase">复制</button></div>
+            </div>
+            <div class="api-row">
+              <div class="api-label">商户ID</div>
+              <div class="copy-field"><input id="merchantApiId" readonly><button class="copy-btn" type="button" data-copy-source="merchantApiId">复制</button></div>
+            </div>
+          </div>
+
+          <div class="portal-section">
+            <h2 class="section-title">V1接口（MD5签名方式）：</h2>
+            <div class="api-row">
+              <div class="api-label">商户MD5密钥</div>
+              <div class="copy-field"><input id="md5Key" readonly><button class="copy-btn" type="button" data-copy-source="md5Key">复制</button></div>
+            </div>
+            <div class="api-actions">
+              <button class="btn info" id="showV1DocBtn" type="button">V1参数提示</button>
+              <button class="btn warning" id="resetMd5Btn" type="button">重置商户MD5密钥</button>
+            </div>
+          </div>
+
+          <div class="portal-section">
+            <h2 class="section-title">V2接口（RSA签名方式）：</h2>
+            <div class="api-row">
+              <div class="api-label">平台公钥</div>
+              <div class="copy-field"><textarea id="platformPublicKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="platformPublicKey">复制</button></div>
+            </div>
+            <div class="api-row">
+              <div class="api-label">商户公钥</div>
+              <div class="copy-field"><textarea id="rsaPublicKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="rsaPublicKey">复制</button></div>
+            </div>
+            <div class="api-row">
+              <div class="api-label">商户私钥</div>
+              <div class="copy-field"><textarea id="rsaPrivateKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="rsaPrivateKey">复制</button></div>
+            </div>
+            <div class="api-actions">
+              <button class="btn info" id="showV2DocBtn" type="button">V2参数提示</button>
+              <button class="btn success" id="generateRsaBtn" type="button">生成商户RSA密钥对</button>
+            </div>
+          </div>
+
+          <div class="portal-section">
+            <h2 class="section-title">签名方式开关设置：</h2>
+            <div class="api-row">
+              <div class="api-label">签名方式开关</div>
+              <select id="signMode" class="api-select">
+                <option value="MD5_RSA2">开启MD5+RSA签名（兼容模式）</option>
+                <option value="MD5">仅开启MD5签名</option>
+                <option value="RSA2">仅开启RSA2签名</option>
+              </select>
+            </div>
+            <p id="apiMessage" class="portal-message"></p>
+            <div class="confirm-row"><button class="btn" id="saveSignModeBtn" type="button">确定修改</button></div>
+          </div>
+        </div>
+
+        <div id="tab-orders" class="tab-pane">
+          <div class="order-section">
+            <h2 class="section-title">订单列表</h2>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                <tr>
+                  <th>订单号</th>
+                  <th>支付宝交易号</th>
+                  <th>通道</th>
+                  <th>类型</th>
+                  <th>金额</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                </tr>
+                </thead>
+                <tbody id="portalOrders"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  let currentPortal = null;
+
+  function json(value) {
+    return JSON.stringify(value, null, 2);
+  }
+
+  async function request(path, options = {}) {
+    const response = await fetch(path, {
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      ...options
+    });
+    const text = await response.text();
+    let data = text;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (ignored) {
+      data = text;
+    }
+    if (!response.ok) throw data;
+    return data;
+  }
+
+  function statusClass(status) {
+    return status === "COMPLETED" || status === "SUCCESS" ? "status" : "status pending";
+  }
+
+  function copyValue(sourceId) {
+    const element = $(sourceId);
+    const text = element?.value || element?.textContent || "";
+    if (!text) return;
+    navigator.clipboard?.writeText(text);
+    $("apiMessage").textContent = "已复制";
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll(".portal-tab").forEach((button) => {
+      button.classList.toggle("active", button.dataset.tab === tab);
+    });
+    document.querySelectorAll(".tab-pane").forEach((pane) => {
+      pane.classList.toggle("active", pane.id === `tab-${tab}`);
+    });
+  }
+
+  function dynamicApiBase(fallback = "") {
+    return window.location.origin && window.location.origin !== "null"
+      ? `${window.location.origin}/api/v1`
+      : fallback;
+  }
+
+  function updateMerchantFields(merchant, apiBase) {
+    $("merchantTitle").textContent = merchant.name;
+    $("merchantSub").textContent = `${merchant.merchantId} · 费率 ${merchant.feeRateText}`;
+    $("apiBase").value = dynamicApiBase(apiBase);
+    $("merchantApiId").value = merchant.merchantId;
+    $("md5Key").value = merchant.md5Key || "";
+    $("platformPublicKey").value = merchant.platformPublicKey || "";
+    $("rsaPublicKey").value = merchant.rsa2PublicKey || "";
+    $("rsaPrivateKey").value = merchant.rsa2PrivateKey || "";
+    $("signMode").value = merchant.signMode || "MD5_RSA2";
+  }
+
+  function renderOrders(orders) {
+    $("portalOrders").innerHTML = orders.map((order) => `
+      <tr>
+        <td>${order.outTradeNo}</td>
+        <td>${order.tradeNo || "-"}</td>
+        <td>${order.channelId || "-"}</td>
+        <td>${order.productName}</td>
+        <td>${order.amountText}</td>
+        <td><span class="${statusClass(order.status)}">${order.statusText}</span></td>
+        <td>${order.createdAt}</td>
+      </tr>
+    `).join("");
+  }
+
+  function renderPortal(data) {
+    currentPortal = data;
+    const merchant = data.merchant;
+    $("loginView").classList.add("hidden");
+    $("portalView").classList.remove("hidden");
+    updateMerchantFields(merchant, data.apiBase);
+    renderOrders(data.orders);
+  }
+
+  async function mutateMerchant(path, body = {}) {
+    if (!currentPortal) return;
+    const merchantId = currentPortal.merchant.merchantId;
+    const merchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}${path}`, {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    currentPortal.merchant = merchant;
+    updateMerchantFields(merchant, currentPortal.apiBase);
+    $("apiMessage").textContent = "修改成功";
+  }
+
+  async function login(demoLogin = false) {
+    const payload = {
+      merchantId: $("loginMerchantId").value,
+      md5Key: $("loginMd5Key").value,
+      demoLogin
+    };
+    try {
+      const data = await request("/api/v1/merchant-portal/login", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+      renderPortal(data);
+    } catch (error) {
+      $("loginMessage").textContent = error.message || "登录失败";
+    }
+  }
+
+  $("loginForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await login(false);
+  });
+
+  $("logoutBtn").addEventListener("click", () => {
+    $("portalView").classList.add("hidden");
+    $("loginView").classList.remove("hidden");
+    $("loginMd5Key").value = "";
+  });
+
+  document.querySelectorAll(".portal-tab").forEach((button) => {
+    button.addEventListener("click", () => switchTab(button.dataset.tab));
+  });
+
+  document.querySelectorAll("[data-copy-source]").forEach((button) => {
+    button.addEventListener("click", () => copyValue(button.dataset.copySource));
+  });
+
+  $("showV1DocBtn").addEventListener("click", () => {
+    $("apiMessage").textContent = "V1 使用 MD5 签名方式，对接参数使用接口地址、商户ID和商户MD5密钥。";
+  });
+
+  $("showV2DocBtn").addEventListener("click", () => {
+    $("apiMessage").textContent = "V2 使用 RSA2 签名方式，对接参数使用平台公钥、商户公钥和商户私钥。";
+  });
+
+  $("resetMd5Btn").addEventListener("click", async () => {
+    if (!window.confirm("确定重置商户 MD5 密钥吗？旧密钥会立即失效。")) return;
+    await mutateMerchant("/reset-md5");
+  });
+
+  $("generateRsaBtn").addEventListener("click", async () => {
+    if (!window.confirm("确定生成新的商户 RSA 密钥对吗？旧密钥会立即失效。")) return;
+    await mutateMerchant("/generate-rsa2");
+  });
+
+  $("saveSignModeBtn").addEventListener("click", async () => {
+    await mutateMerchant("/sign-mode", { signMode: $("signMode").value });
+  });
+
+  if (params.get("merchantId")) {
+    $("loginMerchantId").value = params.get("merchantId");
+  }
+  if (params.get("demoLogin") === "1" && params.get("merchantId")) {
+    login(true);
+  }
+</script>
+</body>
+</html>

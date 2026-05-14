@@ -1,0 +1,106 @@
+package com.example.payments.order;
+
+import java.math.BigDecimal;
+
+public class DemoOrder {
+
+    private String outTradeNo;
+    private String tradeNo;
+    private String channelId;
+    private String merchantId;
+    private String merchantName;
+    private String productName;
+    private BigDecimal amount;
+    private DemoOrderStatus status;
+    private String createdAt;
+    private boolean preAuthorization;
+    private boolean supplemented;
+
+    public DemoOrder(
+            String outTradeNo,
+            String tradeNo,
+            String channelId,
+            String merchantId,
+            String merchantName,
+            String productName,
+            BigDecimal amount,
+            DemoOrderStatus status,
+            String createdAt,
+            boolean preAuthorization
+    ) {
+        this.outTradeNo = outTradeNo;
+        this.tradeNo = tradeNo;
+        this.channelId = channelId;
+        this.merchantId = merchantId;
+        this.merchantName = merchantName;
+        this.productName = productName;
+        this.amount = amount;
+        this.status = status;
+        this.createdAt = createdAt;
+        this.preAuthorization = preAuthorization;
+    }
+
+    public String getOutTradeNo() {
+        return outTradeNo;
+    }
+
+    public String getTradeNo() {
+        return tradeNo;
+    }
+
+    public void setTradeNo(String tradeNo) {
+        this.tradeNo = tradeNo;
+    }
+
+    public String getChannelId() {
+        return channelId;
+    }
+
+    public String getMerchantId() {
+        return merchantId;
+    }
+
+    public String getMerchantName() {
+        return merchantName;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public void setProductName(String productName) {
+        this.productName = productName;
+    }
+
+    public BigDecimal getAmount() {
+        return amount;
+    }
+
+    public DemoOrderStatus getStatus() {
+        return status;
+    }
+
+    public void setStatus(DemoOrderStatus status) {
+        this.status = status;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public boolean isPreAuthorization() {
+        return preAuthorization;
+    }
+
+    public void setPreAuthorization(boolean preAuthorization) {
+        this.preAuthorization = preAuthorization;
+    }
+
+    public boolean isSupplemented() {
+        return supplemented;
+    }
+
+    public void setSupplemented(boolean supplemented) {
+        this.supplemented = supplemented;
+    }
+}

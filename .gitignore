@@ -1,0 +1,8 @@
+target/
+imported/
+*.log
+*.err.log
+.idea/
+.vscode/
+*.iml
+*.class

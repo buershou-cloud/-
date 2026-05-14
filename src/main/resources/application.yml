@@ -1,0 +1,91 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: payment-gateway
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+payment:
+  routing:
+    max-attempts: 3
+    failover: true
+    mode: ROUND_ROBIN
+  operations:
+    # These operation names can be overridden per real Alipay contract/product.
+    complaint-list-method: alipay.merchant.tradecomplain.batchquery
+    complaint-detail-method: alipay.merchant.tradecomplain.query
+    onboarding-method: alipay.open.agent.create
+  channels:
+    - id: ali-main
+      provider: ALIPAY
+      enabled: true
+      daily-enabled: true
+      priority: 10
+      weight: 2
+      pay-min: 0.01
+      pay-max: 50000.00
+      products:
+        - ALIPAY_WAP
+        - ALIPAY_F2F
+        - ALIPAY_PREAUTH
+        - ALIPAY_PAGE
+        - ALIPAY_ORDER_CODE
+        - ALIPAY_JSAPI
+      alipay:
+        gateway-url: https://openapi.alipay.com/gateway.do
+        app-id: ${ALI_MAIN_APP_ID:}
+        merchant-private-key: ${ALI_MAIN_PRIVATE_KEY:}
+        alipay-public-key: ${ALI_MAIN_PUBLIC_KEY:}
+        app-auth-token: ${ALI_MAIN_APP_AUTH_TOKEN:}
+        notify-url: ${ALI_MAIN_NOTIFY_URL:http://localhost:8080/api/v1/alipay/notify/ali-main}
+        return-url: ${ALI_MAIN_RETURN_URL:http://localhost:8080/payments/return}
+    - id: ali-backup
+      provider: ALIPAY
+      enabled: false
+      daily-enabled: true
+      priority: 20
+      weight: 1
+      pay-min: 0.01
+      pay-max: 10000.00
+      products:
+        - ALIPAY_WAP
+        - ALIPAY_F2F
+        - ALIPAY_PAGE
+        - ALIPAY_ORDER_CODE
+        - ALIPAY_JSAPI
+      alipay:
+        gateway-url: https://openapi.alipay.com/gateway.do
+        app-id: ${ALI_BACKUP_APP_ID:}
+        merchant-private-key: ${ALI_BACKUP_PRIVATE_KEY:}
+        alipay-public-key: ${ALI_BACKUP_PUBLIC_KEY:}
+        notify-url: ${ALI_BACKUP_NOTIFY_URL:http://localhost:8080/api/v1/alipay/notify/ali-backup}
+    - id: ali-direct
+      provider: ALIPAY_DIRECT
+      enabled: false
+      daily-enabled: true
+      priority: 30
+      weight: 1
+      pay-min: 0.01
+      pay-max: 50000.00
+      products:
+        - ALIPAY_DIRECT
+        - ALIPAY_DIRECT_WAP
+        - ALIPAY_DIRECT_F2F
+        - ALIPAY_DIRECT_PAGE
+        - ALIPAY_DIRECT_ORDER_CODE
+        - ALIPAY_DIRECT_JSAPI
+      alipay:
+        gateway-url: https://openapi.alipay.com/gateway.do
+        app-id: ${ALI_DIRECT_APP_ID:}
+        merchant-private-key: ${ALI_DIRECT_PRIVATE_KEY:}
+        alipay-public-key: ${ALI_DIRECT_PUBLIC_KEY:}
+        app-auth-token: ${ALI_DIRECT_APP_AUTH_TOKEN:}
+        sub-merchant-id: ${ALI_DIRECT_SMID:}
+        notify-url: ${ALI_DIRECT_NOTIFY_URL:http://localhost:8080/api/v1/alipay/notify/ali-direct}
+        return-url: ${ALI_DIRECT_RETURN_URL:http://localhost:8080/payments/return}
