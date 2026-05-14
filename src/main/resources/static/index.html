@@ -757,6 +757,10 @@
       grid-template-rows: auto minmax(0, 1fr);
     }
 
+    .merchant-detail-dialog {
+      width: min(1120px, 100%);
+    }
+
     .channel-modal-head {
       display: flex;
       align-items: center;
@@ -1389,7 +1393,7 @@
 </div>
 
 <div id="merchantDetailModal" class="channel-modal hidden" aria-hidden="true">
-  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantDetailTitle">
+  <section class="channel-dialog merchant-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantDetailTitle">
     <div class="channel-modal-head">
       <h3 id="merchantDetailTitle">商户明细</h3>
       <button class="btn secondary small" id="closeMerchantDetailBtn" type="button">关闭</button>
@@ -1400,9 +1404,20 @@
         <label>商户名称<input id="detailMerchantName" readonly></label>
         <label>费率<input id="detailMerchantFeeRate" readonly></label>
         <label>结算状态<input id="detailMerchantSettlement" readonly></label>
-        <label class="wide">MD5 密钥<textarea id="detailMerchantMd5Key" readonly></textarea></label>
-        <label class="wide">RSA2 公钥<textarea id="detailMerchantRsaPublicKey" readonly></textarea></label>
-        <label class="wide">RSA2 私钥<textarea id="detailMerchantRsaPrivateKey" readonly></textarea></label>
+      </div>
+      <div class="stat-row" id="merchantDetailStats" style="margin-top:16px"></div>
+      <div class="table-wrap" style="margin-top:18px">
+        <table>
+          <thead><tr><th>订单号</th><th>支付通道</th><th>类型</th><th>交易金额</th><th>状态</th><th>时间</th></tr></thead>
+          <tbody id="merchantDetailOrderRows"></tbody>
+        </table>
+      </div>
+      <h4 class="panel-title" style="margin-top:18px">结算记录</h4>
+      <div class="table-wrap" style="margin-top:10px">
+        <table>
+          <thead><tr><th>结算批次</th><th>日期</th><th>交易金额</th><th>退款金额</th><th>手续费</th><th>结算金额</th><th>状态</th></tr></thead>
+          <tbody id="merchantSettlementRows"></tbody>
+        </table>
       </div>
     </div>
   </section>
@@ -1620,6 +1635,16 @@
     }));
   }
 
+  function money(value) {
+    return `¥${Number(value || 0).toFixed(2)}`;
+  }
+
+  function sumAmounts(orders, predicate) {
+    return orders
+      .filter(predicate)
+      .reduce((total, order) => total + Number(order.amount || 0), 0);
+  }
+
   function checkedChannels(target) {
     return Array.from(document.querySelectorAll(`#${target} input:checked`)).map((input) => input.value);
   }
@@ -1827,16 +1852,90 @@
 
   async function showMerchantDetail(merchantId) {
     const merchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
+    const allOrders = await request("/api/v1/orders/recent");
+    const merchantOrders = allOrders.filter((order) => order.merchantId === merchantId);
+    const completedAmount = sumAmounts(merchantOrders, (order) => order.status === "COMPLETED");
+    const refundedAmount = sumAmounts(merchantOrders, (order) => order.status === "REFUNDED");
+    const frozenAmount = sumAmounts(merchantOrders, (order) => order.status === "FROZEN");
+    const unpaidAmount = sumAmounts(merchantOrders, (order) => order.status === "UNPAID");
+    const feeAmount = completedAmount * Number(merchant.feeRate || 0) / 100;
+    const settlementAmount = Math.max(completedAmount - feeAmount, 0);
+
     $("merchantDetailTitle").textContent = `商户明细 ${merchant.merchantId}`;
     $("detailMerchantId").value = merchant.merchantId || "";
     $("detailMerchantName").value = merchant.name || "";
     $("detailMerchantFeeRate").value = merchant.feeRateText || "";
     $("detailMerchantSettlement").value = merchant.settlementStatus || "";
-    $("detailMerchantMd5Key").value = merchant.md5Key || "";
-    $("detailMerchantRsaPublicKey").value = merchant.rsa2PublicKey || "";
-    $("detailMerchantRsaPrivateKey").value = merchant.rsa2PrivateKey || "";
+    renderMerchantDetailStats({
+      completedAmount,
+      refundedAmount,
+      frozenAmount,
+      unpaidAmount,
+      feeAmount,
+      settlementAmount
+    });
+    renderMerchantDetailOrders(merchantOrders);
+    renderMerchantSettlementRows(merchant, merchantOrders);
     $("merchantDetailModal").classList.remove("hidden");
     $("merchantDetailModal").setAttribute("aria-hidden", "false");
+  }
+
+  function renderMerchantDetailStats(summary) {
+    $("merchantDetailStats").innerHTML = `
+      <div class="small-stat"><span>交易金额</span><strong>${money(summary.completedAmount)}</strong></div>
+      <div class="small-stat"><span>退款金额</span><strong>${money(summary.refundedAmount)}</strong></div>
+      <div class="small-stat"><span>冻结金额</span><strong>${money(summary.frozenAmount)}</strong></div>
+      <div class="small-stat"><span>未支付金额</span><strong>${money(summary.unpaidAmount)}</strong></div>
+      <div class="small-stat"><span>手续费</span><strong>${money(summary.feeAmount)}</strong></div>
+      <div class="small-stat"><span>应结算</span><strong>${money(summary.settlementAmount)}</strong></div>
+    `;
+  }
+
+  function renderMerchantDetailOrders(orders) {
+    const rows = orders.map((order) => `
+      <tr>
+        <td>${html(order.outTradeNo)}</td>
+        <td>${html(order.channelId || "-")}</td>
+        <td>${productCell(order)}</td>
+        <td class="amount-green">${html(order.amountText)}</td>
+        <td>${statusCell(order.status)}</td>
+        <td class="muted">${html(order.createdAt)}</td>
+      </tr>
+    `).join("");
+    $("merchantDetailOrderRows").innerHTML = rows || '<tr><td colspan="6" class="muted">暂无交易订单</td></tr>';
+  }
+
+  function renderMerchantSettlementRows(merchant, orders) {
+    const grouped = new Map();
+    orders.forEach((order) => {
+      const date = (order.createdAt || "").slice(0, 10) || "未记录日期";
+      if (!grouped.has(date)) {
+        grouped.set(date, { date, completed: 0, refunded: 0, count: 0 });
+      }
+      const item = grouped.get(date);
+      item.count += 1;
+      if (order.status === "COMPLETED") item.completed += Number(order.amount || 0);
+      if (order.status === "REFUNDED") item.refunded += Number(order.amount || 0);
+    });
+    const dates = Array.from(grouped.values()).sort((left, right) => right.date.localeCompare(left.date));
+    const latestDate = dates[0]?.date || "";
+    const rows = dates.map((item) => {
+      const fee = item.completed * Number(merchant.feeRate || 0) / 100;
+      const settlement = Math.max(item.completed - fee, 0);
+      const status = merchant.settlementStatus === "已结算" || item.date < latestDate ? "已结算" : "待结算";
+      return `
+        <tr>
+          <td>SETTLE-${html(merchant.merchantId)}-${html(item.date.replaceAll("-", ""))}</td>
+          <td>${html(item.date)}</td>
+          <td class="amount-green">${money(item.completed)}</td>
+          <td>${money(item.refunded)}</td>
+          <td>${money(fee)}</td>
+          <td class="amount-green">${money(settlement)}</td>
+          <td><span class="status ${status === "已结算" ? "success" : "pending"}">${status}</span></td>
+        </tr>
+      `;
+    }).join("");
+    $("merchantSettlementRows").innerHTML = rows || '<tr><td colspan="7" class="muted">暂无结算记录</td></tr>';
   }
 
   function closeMerchantDetail() {
