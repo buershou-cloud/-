@@ -70,7 +70,8 @@ public class AlipayOpenApiClient {
             AlipayRequestOptions options
     ) {
         Map<String, String> params = signedParams(channel, method, bizContent, options);
-        String gatewayUrl = channel.getAlipay().getGatewayUrl();
+        Charset charset = charset(channel);
+        String gatewayUrl = gatewayWithCharset(channel.getAlipay().getGatewayUrl(), charset);
         StringBuilder form = new StringBuilder(2048);
         form.append("<!doctype html><html><head><meta charset=\"UTF-8\"></head><body>")
                 .append("<form id=\"alipay_submit\" name=\"alipay_submit\" action=\"")
@@ -83,6 +84,17 @@ public class AlipayOpenApiClient {
                 .append("\"/>"));
         form.append("</form><script>document.forms['alipay_submit'].submit();</script></body></html>");
         return form.toString();
+    }
+
+    public String pageUrl(
+            PaymentGatewayProperties.Channel channel,
+            String method,
+            Map<String, Object> bizContent,
+            AlipayRequestOptions options
+    ) {
+        Map<String, String> params = signedParams(channel, method, bizContent, options);
+        Charset charset = charset(channel);
+        return appendQuery(channel.getAlipay().getGatewayUrl(), formEncode(params, charset));
     }
 
     public boolean verifyNotify(PaymentGatewayProperties.Channel channel, Map<String, String> params) {
@@ -156,6 +168,17 @@ public class AlipayOpenApiClient {
         return params.entrySet().stream()
                 .map(entry -> urlEncode(entry.getKey(), charset) + "=" + urlEncode(entry.getValue(), charset))
                 .collect(Collectors.joining("&"));
+    }
+
+    private static String gatewayWithCharset(String gatewayUrl, Charset charset) {
+        return appendQuery(gatewayUrl, "charset=" + urlEncode(charset.name(), charset));
+    }
+
+    private static String appendQuery(String url, String query) {
+        if (url == null || url.isBlank() || query == null || query.isBlank()) {
+            return url;
+        }
+        return url + (url.contains("?") ? "&" : "?") + query;
     }
 
     private static String urlEncode(String value, Charset charset) {

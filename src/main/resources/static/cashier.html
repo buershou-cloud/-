@@ -176,6 +176,45 @@
       overflow-wrap: anywhere;
     }
 
+    .pay-panel {
+      display: none;
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 18px;
+      text-align: center;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .pay-panel.active {
+      display: grid;
+      gap: 12px;
+      justify-items: center;
+    }
+
+    .pay-panel h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .pay-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .pay-qr {
+      width: 260px;
+      max-width: 100%;
+      aspect-ratio: 1;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+    }
+
     .ok {
       color: var(--green);
     }
@@ -207,6 +246,11 @@
       <div class="mini"><span>通道类型</span><strong id="providerText">-</strong></div>
     </div>
   </section>
+  <section id="payPanel" class="pay-panel" aria-live="polite">
+    <h2 id="payPanelTitle">支付宝付款二维码</h2>
+    <img id="payQrImage" class="pay-qr" alt="支付宝付款二维码">
+    <p id="payPanelHint">请使用支付宝扫码付款，付款完成后返回商户页面查看订单状态。</p>
+  </section>
   <pre id="result" class="result">等待输入金额...</pre>
   <div id="paymentFormHolder" hidden></div>
 </main>
@@ -229,13 +273,25 @@
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
     ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
   };
-  const cashierProductPreference = [
+  const desktopProductPreference = [
     "ALIPAY_ORDER_CODE",
     "ALIPAY_DIRECT_ORDER_CODE",
     "ALIPAY_F2F",
     "ALIPAY_DIRECT_F2F",
     "ALIPAY_WAP",
     "ALIPAY_DIRECT_WAP",
+    "ALIPAY_PAGE",
+    "ALIPAY_DIRECT_PAGE",
+    "ALIPAY_JSAPI",
+    "ALIPAY_DIRECT_JSAPI"
+  ];
+  const mobileProductPreference = [
+    "ALIPAY_WAP",
+    "ALIPAY_DIRECT_WAP",
+    "ALIPAY_ORDER_CODE",
+    "ALIPAY_DIRECT_ORDER_CODE",
+    "ALIPAY_F2F",
+    "ALIPAY_DIRECT_F2F",
     "ALIPAY_PAGE",
     "ALIPAY_DIRECT_PAGE",
     "ALIPAY_JSAPI",
@@ -248,8 +304,24 @@
 
   const $ = (id) => document.getElementById(id);
 
+  function isMobilePayClient() {
+    return /AlipayClient|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+  }
+
   function writeResult(value) {
     $("result").textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  }
+
+  function hidePaymentQr() {
+    $("payPanel").classList.remove("active");
+    $("payQrImage").removeAttribute("src");
+  }
+
+  function showPaymentQr(text, title, hint) {
+    $("payPanelTitle").textContent = title;
+    $("payPanelHint").textContent = hint;
+    $("payQrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(text)}&t=${Date.now()}`;
+    $("payPanel").classList.add("active");
   }
 
   async function request(url, options = {}) {
@@ -281,7 +353,13 @@
     if (preferredProduct && products.has(preferredProduct)) {
       return preferredProduct;
     }
-    return cashierProductPreference.find((product) => products.has(product));
+    return chooseProduct([...products]);
+  }
+
+  function chooseProduct(options) {
+    const products = new Set(options || []);
+    const preference = isMobilePayClient() ? mobileProductPreference : desktopProductPreference;
+    return preference.find((product) => products.has(product));
   }
 
   async function loadChannel() {
@@ -295,7 +373,7 @@
       $("channelText").textContent = currentChannel.id;
       $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
       const options = productOptions(currentChannel);
-      currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : options[0];
+      currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : chooseProduct(options);
     } else if (merchantId) {
       currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
       const availableChannels = merchantChannels(currentMerchant, channels);
@@ -323,6 +401,7 @@
 
   $("cashierForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    hidePaymentQr();
     const amount = Number($("amount").value);
     if (!amount || amount < 0.01) {
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" });
@@ -351,7 +430,23 @@
         body: JSON.stringify(payload)
       });
       writeResult(data);
-      if (data.redirectHtml) {
+      if (data.qrCode) {
+        showPaymentQr(
+          data.qrCode,
+          "支付宝付款二维码",
+          "请使用支付宝扫码付款，付款完成后订单会自动回调更新。"
+        );
+      } else if (data.redirectUrl) {
+        if (isMobilePayClient()) {
+          location.href = data.redirectUrl;
+          return;
+        }
+        showPaymentQr(
+          data.redirectUrl,
+          "支付宝付款二维码",
+          "请使用手机支付宝扫码继续付款。"
+        );
+      } else if (data.redirectHtml) {
         const holder = $("paymentFormHolder");
         holder.innerHTML = data.redirectHtml;
         const form = holder.querySelector("form");

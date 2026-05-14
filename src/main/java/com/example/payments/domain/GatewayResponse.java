@@ -12,9 +12,25 @@ public record GatewayResponse(
         String tradeNo,
         String qrCode,
         String redirectHtml,
+        String redirectUrl,
         Map<String, Object> raw,
         List<ChannelAttempt> attempts
 ) {
+    public GatewayResponse(
+            String channelId,
+            PaymentStatus status,
+            String code,
+            String message,
+            String outTradeNo,
+            String tradeNo,
+            String qrCode,
+            String redirectHtml,
+            Map<String, Object> raw,
+            List<ChannelAttempt> attempts
+    ) {
+        this(channelId, status, code, message, outTradeNo, tradeNo, qrCode, redirectHtml, null, raw, attempts);
+    }
+
     public GatewayResponse withAttempts(List<ChannelAttempt> attempts) {
         return new GatewayResponse(
                 channelId,
@@ -25,6 +41,7 @@ public record GatewayResponse(
                 tradeNo,
                 qrCode,
                 redirectHtml,
+                redirectUrl,
                 raw,
                 List.copyOf(attempts)
         );
