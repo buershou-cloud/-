@@ -94,7 +94,7 @@ public class ChannelController {
         applyDefaultCallbackUrls(channel, servletRequest);
         validateDirectSubMerchant(channel, channelRegistry.isEnabled(channel));
         validateAmountRange(channel);
-        return view(channel);
+        return view(channelRegistry.save(channel));
     }
 
     @DeleteMapping("/{channelId}")

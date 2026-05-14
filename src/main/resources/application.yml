@@ -12,6 +12,12 @@ management:
         include: health,info
 
 payment:
+  database:
+    enabled: ${PAYMENT_DATABASE_ENABLED:false}
+    url: ${PAYMENT_DATABASE_URL:}
+    username: ${PAYMENT_DATABASE_USERNAME:}
+    password: ${PAYMENT_DATABASE_PASSWORD:}
+    driver-class-name: ${PAYMENT_DATABASE_DRIVER:com.mysql.cj.jdbc.Driver}
   routing:
     max-attempts: 3
     failover: true

@@ -59,6 +59,19 @@ mysql -uroot -p < database/mysql/payment_gateway_schema.sql
 
 This creates the `payment_gateway` database with tables for channels, merchants, orders, refunds, profit sharing, settlements, onboarding, and complaints.
 
+Enable MySQL persistence at startup with JVM arguments or environment variables:
+
+```bash
+java -jar target/payment-gateway-0.1.0-SNAPSHOT.jar \
+  --server.port=18081 \
+  --payment.database.enabled=true \
+  --payment.database.url="jdbc:mysql://127.0.0.1:3306/payment_gateway?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true" \
+  --payment.database.username=payment_gateway \
+  --payment.database.password="YOUR_DATABASE_PASSWORD"
+```
+
+When `payment.database.enabled` is false, the console still uses the built-in demo data.
+
 ## Main Endpoints
 
 - `POST /api/v1/payments/pay`
@@ -104,9 +117,8 @@ The API still accepts `outBizNo` for the local request shape and maps it into `b
 
 ## Production Notes
 
-This project intentionally keeps persistence out of the first skeleton. Before production, add:
+Before production, still harden these areas:
 
-- Payment order table and immutable attempt table.
 - Idempotency on `outTradeNo` and `outRequestNo`.
 - Gateway response signature verification through certificate mode or the official Alipay SDK.
 - Notify processing with transaction locks and reconciliation jobs.
