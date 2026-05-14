@@ -332,6 +332,77 @@
       gap: 14px;
     }
 
+    .doc-section {
+      padding: 24px;
+      border-bottom: 1px dashed var(--line);
+    }
+
+    .doc-section:last-child {
+      border-bottom: 0;
+    }
+
+    .doc-section h2 {
+      margin-bottom: 12px;
+    }
+
+    .doc-section p {
+      margin: 0 0 12px;
+      color: #475569;
+      font-size: 14px;
+      font-weight: 700;
+      line-height: 1.75;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin: 14px 0;
+    }
+
+    .doc-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fbfcfe;
+    }
+
+    .doc-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .doc-card strong {
+      display: block;
+      margin-top: 7px;
+      overflow-wrap: anywhere;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .doc-table {
+      margin: 12px 0 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: auto;
+    }
+
+    .doc-table table {
+      min-width: 760px;
+    }
+
+    .doc-section code {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: #eef6ff;
+      color: #0f5bd8;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
     .tab-pane {
       display: none;
     }
@@ -495,6 +566,10 @@
         grid-template-columns: 1fr;
       }
 
+      .doc-grid {
+        grid-template-columns: 1fr;
+      }
+
       .api-label {
         text-align: left;
       }
@@ -546,6 +621,7 @@
       <div class="portal-tabs">
         <button class="portal-tab active" type="button" data-tab="api">API信息</button>
         <button class="portal-tab" type="button" data-tab="qr">收款二维码</button>
+        <button class="portal-tab" type="button" data-tab="docs">开发文档</button>
         <button class="portal-tab" type="button" data-tab="orders">订单列表</button>
       </div>
 
@@ -648,6 +724,112 @@
             </div>
           </div>
         </div>
+
+        <div id="tab-docs" class="tab-pane">
+          <section class="doc-section">
+            <h2>协议规则</h2>
+            <div class="doc-grid">
+              <div class="doc-card"><span>接口地址</span><strong id="docApiBase">-</strong></div>
+              <div class="doc-card"><span>商户号</span><strong id="docMerchantId">-</strong></div>
+              <div class="doc-card"><span>请求方式</span><strong>POST / JSON / UTF-8</strong></div>
+              <div class="doc-card"><span>返回格式</span><strong>JSON</strong></div>
+            </div>
+            <p>所有商户接口都使用当前页面上方显示的接口地址。发起支付时必须在 <code>extra.merchantId</code> 里传入商户号，系统会按后台给该商户配置的支付通道自动路由。</p>
+          </section>
+
+          <section class="doc-section">
+            <h2>发起支付</h2>
+            <p>接口：<code>POST <span id="docPayUrl">/api/v1/payments/pay</span></code></p>
+            <div class="doc-table">
+              <table>
+                <thead><tr><th>字段</th><th>必填</th><th>示例</th><th>说明</th></tr></thead>
+                <tbody>
+                <tr><td>product</td><td>是</td><td>ALIPAY_ORDER_CODE</td><td>支付产品，见下方支付产品列表</td></tr>
+                <tr><td>outTradeNo</td><td>是</td><td>ORDER202605140001</td><td>商户订单号，需要保持唯一</td></tr>
+                <tr><td>subject</td><td>是</td><td>会员充值</td><td>订单标题</td></tr>
+                <tr><td>totalAmount</td><td>是</td><td>1.00</td><td>订单金额，单位元，最小 0.01</td></tr>
+                <tr><td>notifyUrl</td><td>否</td><td>https://你的域名/notify</td><td>异步通知地址</td></tr>
+                <tr><td>returnUrl</td><td>否</td><td>https://你的域名/return</td><td>同步返回地址</td></tr>
+                <tr><td>extra.merchantId</td><td>是</td><td id="docMerchantIdCell">M10001</td><td>当前商户号</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <pre id="docPayExample"></pre>
+          </section>
+
+          <section class="doc-section">
+            <h2>查询订单</h2>
+            <p>接口：<code>POST <span id="docQueryUrl">/api/v1/payments/query</span></code>。商户订单号和支付宝交易号二选一即可。</p>
+            <pre id="docQueryExample"></pre>
+          </section>
+
+          <section class="doc-section">
+            <h2>支付结果通知</h2>
+            <p>创建订单时传入 <code>notifyUrl</code> 后，上游支付结果会通知到该地址。商户系统收到通知后建议再调用查单接口确认最终状态，处理成功后返回 <code>success</code>。</p>
+            <div class="doc-table">
+              <table>
+                <thead><tr><th>字段</th><th>说明</th></tr></thead>
+                <tbody>
+                <tr><td>out_trade_no / outTradeNo</td><td>商户订单号</td></tr>
+                <tr><td>trade_no / tradeNo</td><td>支付宝交易号</td></tr>
+                <tr><td>trade_status</td><td>支付状态，成功状态通常为 TRADE_SUCCESS 或 TRADE_FINISHED</td></tr>
+                <tr><td>total_amount</td><td>支付金额</td></tr>
+                <tr><td>sign</td><td>上游通知签名，生产环境需要验签</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section">
+            <h2>订单退款</h2>
+            <p>接口：<code>POST <span id="docRefundUrl">/api/v1/payments/refund</span></code>。退款请求号 <code>outRequestNo</code> 需要保持唯一。</p>
+            <pre id="docRefundExample"></pre>
+          </section>
+
+          <section class="doc-section">
+            <h2>返回字段</h2>
+            <div class="doc-table">
+              <table>
+                <thead><tr><th>字段</th><th>说明</th></tr></thead>
+                <tbody>
+                <tr><td>status</td><td>SUCCESS、PENDING、FAILED 等支付状态</td></tr>
+                <tr><td>code</td><td>网关或上游接口返回码</td></tr>
+                <tr><td>message</td><td>处理结果说明</td></tr>
+                <tr><td>outTradeNo</td><td>商户订单号</td></tr>
+                <tr><td>tradeNo</td><td>支付宝交易号</td></tr>
+                <tr><td>qrCode</td><td>订单码/当面付类产品返回的二维码内容</td></tr>
+                <tr><td>redirectHtml</td><td>手机网站/电脑网站类产品返回的跳转表单</td></tr>
+                <tr><td>attempts</td><td>通道轮询尝试记录</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="doc-section">
+            <h2>签名说明</h2>
+            <p>商户后台提供 MD5 密钥、平台公钥、商户 RSA2 密钥对和签名方式开关。正式接入时建议所有请求都带签名，签名字段不要参与自身签名，空值不参与签名，参数按字段名升序拼接后再计算。</p>
+            <pre>MD5示例：sign = md5(排序后的参数键值对 + 商户MD5密钥)
+RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使用商户公钥验签</pre>
+          </section>
+
+          <section class="doc-section">
+            <h2>支付产品</h2>
+            <div class="doc-table">
+              <table>
+                <thead><tr><th>产品值</th><th>说明</th></tr></thead>
+                <tbody>
+                <tr><td>ALIPAY_ORDER_CODE</td><td>支付宝订单码</td></tr>
+                <tr><td>ALIPAY_F2F</td><td>支付宝当面付</td></tr>
+                <tr><td>ALIPAY_WAP</td><td>支付宝手机网站</td></tr>
+                <tr><td>ALIPAY_PAGE</td><td>支付宝电脑网站</td></tr>
+                <tr><td>ALIPAY_JSAPI</td><td>支付宝 JSAPI</td></tr>
+                <tr><td>ALIPAY_PREAUTH</td><td>支付宝预授权</td></tr>
+                <tr><td>ALIPAY_DIRECT_ORDER_CODE / ALIPAY_DIRECT_WAP / ALIPAY_DIRECT_PAGE / ALIPAY_DIRECT_JSAPI</td><td>支付宝直付通支付产品</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       </div>
     </section>
   </section>
@@ -710,9 +892,10 @@
   }
 
   function updateMerchantFields(merchant, apiBase) {
+    const apiRoot = dynamicApiBase(apiBase);
     $("merchantTitle").textContent = merchant.name;
     $("merchantSub").textContent = `${merchant.merchantId} · 费率 ${merchant.feeRateText}`;
-    $("apiBase").value = dynamicApiBase(apiBase);
+    $("apiBase").value = apiRoot;
     $("merchantApiId").value = merchant.merchantId;
     $("md5Key").value = merchant.md5Key || "";
     $("platformPublicKey").value = merchant.platformPublicKey || "";
@@ -723,6 +906,46 @@
     $("merchantCashierUrl").value = cashierUrl;
     $("merchantCashierUrl").setAttribute("value", cashierUrl);
     $("merchantQrImage").src = `/api/v1/merchants/${encodeURIComponent(merchant.merchantId)}/cashier-qr?t=${Date.now()}`;
+    updateDeveloperDocs(merchant, apiRoot);
+  }
+
+  function updateDeveloperDocs(merchant, apiRoot) {
+    const payUrl = `${apiRoot}/payments/pay`;
+    const queryUrl = `${apiRoot}/payments/query`;
+    const refundUrl = `${apiRoot}/payments/refund`;
+    $("docApiBase").textContent = apiRoot;
+    $("docMerchantId").textContent = merchant.merchantId;
+    $("docMerchantIdCell").textContent = merchant.merchantId;
+    $("docPayUrl").textContent = payUrl;
+    $("docQueryUrl").textContent = queryUrl;
+    $("docRefundUrl").textContent = refundUrl;
+    $("docPayExample").textContent = json({
+      product: "ALIPAY_ORDER_CODE",
+      outTradeNo: "ORDER202605140001",
+      subject: `${merchant.name} 订单`,
+      totalAmount: 1.00,
+      notifyUrl: `${window.location.origin}/notify`,
+      returnUrl: `${window.location.origin}/return`,
+      extra: {
+        merchantId: merchant.merchantId,
+        merchantName: merchant.name
+      }
+    });
+    $("docQueryExample").textContent = json({
+      outTradeNo: "ORDER202605140001",
+      extra: {
+        merchantId: merchant.merchantId
+      }
+    });
+    $("docRefundExample").textContent = json({
+      outTradeNo: "ORDER202605140001",
+      refundAmount: 1.00,
+      outRequestNo: "REFUND202605140001",
+      refundReason: "用户申请退款",
+      extra: {
+        merchantId: merchant.merchantId
+      }
+    });
   }
 
   function renderOrders(orders) {
