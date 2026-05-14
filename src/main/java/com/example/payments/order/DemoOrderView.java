@@ -16,7 +16,8 @@ public record DemoOrderView(
         String statusText,
         String createdAt,
         boolean preAuthorization,
-        boolean supplemented
+        boolean supplemented,
+        boolean profitShared
 ) {
     public static DemoOrderView from(DemoOrder order) {
         return new DemoOrderView(
@@ -32,7 +33,8 @@ public record DemoOrderView(
                 order.getStatus().getLabel(),
                 order.getCreatedAt(),
                 order.isPreAuthorization(),
-                order.isSupplemented()
+                order.isSupplemented(),
+                order.isProfitShared()
         );
     }
 }

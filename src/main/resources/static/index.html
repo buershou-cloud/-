@@ -1035,6 +1035,7 @@
     <nav class="nav" aria-label="主导航">
       <div class="nav-title">概览</div>
       <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">▦</span><span>订单管理</span></button>
+      <button class="nav-btn" data-page="sharing"><span class="nav-icon">$</span><span>分账处理</span></button>
       <button class="nav-btn" data-page="complaints"><span class="nav-icon"></span><span>投诉查询</span></button>
       <div class="nav-title">直付通</div>
       <button class="nav-btn" data-page="onboard"><span class="nav-icon">♧</span><span>子商户进件</span></button>
@@ -1135,6 +1136,56 @@
             <pre id="dashboardResult" class="operation-result">等待订单操作</pre>
           </div>
         </section>
+      </section>
+
+      <section id="page-sharing" class="page">
+        <div class="work-grid">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">分账处理</h2></div>
+            <div class="panel-body">
+              <form id="profitShareForm">
+                <div class="form-grid">
+                  <label>单笔订单号<input id="profitShareOutTradeNo" placeholder="填写商户订单号"></label>
+                  <label>批量支付通道
+                    <select id="profitShareChannel">
+                      <option value="">请选择通道</option>
+                    </select>
+                  </label>
+                  <label>收入方账号<input id="profitShareTransIn" placeholder="支付宝登录号或 2088 用户号"></label>
+                  <label>收入方账号类型
+                    <select id="profitShareTransInType">
+                      <option value="loginName">支付宝登录号</option>
+                      <option value="userId">支付宝用户号</option>
+                      <option value="cardAliasNo">支付宝绑卡编号</option>
+                    </select>
+                  </label>
+                  <label>分账金额<input id="profitShareAmount" type="number" min="0" step="0.01" placeholder="单笔必填；批量留空按订单金额"></label>
+                  <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS"></label>
+                  <label>操作员 ID<input id="profitShareOperatorId" placeholder="可选"></label>
+                  <label>App Auth Token<input id="profitShareAppAuthToken" placeholder="可选"></label>
+                  <label class="wide">分账说明<input id="profitShareDesc" value="订单分账"></label>
+                  <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
+                </div>
+                <div class="form-actions">
+                  <button class="btn" id="shareSingleBtn" type="button">单笔订单分账</button>
+                  <button class="btn secondary" id="shareChannelBtn" type="button">通道批量分账</button>
+                </div>
+              </form>
+              <pre id="profitShareResult" class="operation-result">等待分账操作</pre>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">可分账订单</h2></div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>订单号</th><th>通道</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody id="profitShareOrders"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="page-onboard" class="page">
@@ -1512,6 +1563,16 @@
     element.textContent = typeof value === "string" ? value : json(value);
   }
 
+  function setProfitShareResult(value) {
+    const element = $("profitShareResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.message) {
+      element.textContent = value.message + (value.items ? `\n${json(value.items)}` : "");
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
   function html(value) {
     return String(value ?? "")
       .replaceAll("&", "&amp;")
@@ -1586,6 +1647,7 @@
       actions.push(["manual-supplement", "手动补单", "secondary"]);
     }
     if (order.status === "COMPLETED") {
+      actions.push(["profit-share", "分账", "secondary"]);
       actions.push(["uncomplete", "改未完成", "secondary"]);
       actions.push(["refund", "退款", "secondary"]);
     }
@@ -1611,6 +1673,7 @@
     const query = orderQueryString();
     state.orders = await request(`/api/v1/orders/recent${query}`);
     renderOrders();
+    renderProfitShareOrders();
   }
 
   async function loadMerchants() {
@@ -1802,6 +1865,11 @@
   }
 
   async function handleOrderAction(outTradeNo, action) {
+    if (action === "profit-share") {
+      fillProfitShareOrder(outTradeNo);
+      switchPage("sharing");
+      return;
+    }
     const encoded = encodeURIComponent(outTradeNo);
     const endpoints = {
       complete: { method: "POST", path: `/api/v1/orders/${encoded}/complete`, title: "订单已改为完成" },
@@ -1825,7 +1893,8 @@
 
   function productCell(order) {
     const label = order.preAuthorization ? `${order.productName} · 可转支付` : order.productName;
-    return `<span class="tag">${html(label)}</span>`;
+    const shared = order.profitShared ? '<span class="tag">已分账</span>' : "";
+    return `<span class="tag">${html(label)}</span>${shared}`;
   }
 
   function closeOrderMenus(exceptOrderNo) {
@@ -1848,6 +1917,100 @@
         <td>${orderActionCell(order)}</td>
       </tr>
     `).join("");
+  }
+
+  function fillProfitShareOrder(outTradeNo) {
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    $("profitShareOutTradeNo").value = outTradeNo || "";
+    if (order) {
+      $("profitShareChannel").value = order.channelId || "";
+      $("profitShareAmount").value = order.amount ?? "";
+      $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
+    }
+    setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请填写收入方账号后提交单笔分账` });
+  }
+
+  function renderProfitShareOrders() {
+    const tableBody = $("profitShareOrders");
+    if (!tableBody) return;
+    const orders = state.orders.filter((order) => order.status === "COMPLETED" && order.tradeNo);
+    tableBody.innerHTML = orders.map((order) => `
+      <tr>
+        <td>${html(order.outTradeNo)}</td>
+        <td>${html(order.channelId || "-")}</td>
+        <td class="amount-green">${html(order.amountText)}</td>
+        <td>${order.profitShared ? '<span class="status success">已分账</span>' : '<span class="status pending">未分账</span>'}</td>
+        <td><button class="btn secondary small" type="button" data-share-order="${html(order.outTradeNo)}">选择</button></td>
+      </tr>
+    `).join("");
+  }
+
+  function profitShareRoyaltyParameter(amount) {
+    const transIn = $("profitShareTransIn").value.trim();
+    if (!transIn) {
+      throw { message: "请填写分账收入方账号" };
+    }
+    return compact({
+      royalty_type: "transfer",
+      trans_in_type: $("profitShareTransInType").value,
+      trans_in: transIn,
+      amount,
+      desc: $("profitShareDesc").value.trim()
+    });
+  }
+
+  function profitShareSinglePayload() {
+    const amount = amountField("profitShareAmount");
+    if (!amount) {
+      throw { message: "单笔订单分账必须填写分账金额" };
+    }
+    const outTradeNo = $("profitShareOutTradeNo").value.trim();
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    return compact({
+      outTradeNo,
+      tradeNo: order?.tradeNo,
+      outRequestNo: `${$("profitShareOutRequestPrefix").value || "PS"}_${outTradeNo}`,
+      royaltyParameters: [profitShareRoyaltyParameter(amount)],
+      operatorId: $("profitShareOperatorId").value,
+      appAuthToken: $("profitShareAppAuthToken").value,
+      channelIds: order?.channelId ? [order.channelId] : ($("profitShareChannel").value ? [$("profitShareChannel").value] : []),
+      extra: parseJson("profitShareExtra", {})
+    });
+  }
+
+  function profitShareBatchPayload() {
+    return compact({
+      channelId: $("profitShareChannel").value,
+      transIn: $("profitShareTransIn").value.trim(),
+      transInType: $("profitShareTransInType").value,
+      amount: amountField("profitShareAmount"),
+      desc: $("profitShareDesc").value.trim(),
+      outRequestNoPrefix: $("profitShareOutRequestPrefix").value,
+      operatorId: $("profitShareOperatorId").value,
+      appAuthToken: $("profitShareAppAuthToken").value,
+      extra: parseJson("profitShareExtra", {})
+    });
+  }
+
+  async function submitSingleProfitShare() {
+    const data = await request("/api/v1/payments/profit-sharing", {
+      method: "POST",
+      body: JSON.stringify(profitShareSinglePayload())
+    });
+    setProfitShareResult(data);
+    await loadOrders();
+  }
+
+  async function submitChannelProfitShare() {
+    if (!$("profitShareChannel").value) {
+      throw { message: "请选择要批量分账的支付通道" };
+    }
+    const data = await request("/api/v1/payments/profit-sharing/channel", {
+      method: "POST",
+      body: JSON.stringify(profitShareBatchPayload())
+    });
+    setProfitShareResult(data);
+    await loadOrders();
   }
 
   async function loadHealth() {
@@ -1881,10 +2044,15 @@
   }
 
   function renderOrderChannelOptions() {
-    const select = $("orderChannelFilter");
+    renderChannelSelect("orderChannelFilter", "全部通道");
+    renderChannelSelect("profitShareChannel", "请选择通道");
+  }
+
+  function renderChannelSelect(id, placeholder) {
+    const select = $(id);
     if (!select) return;
     const selected = select.value;
-    select.innerHTML = '<option value="">全部通道</option>' + state.channels.map((channel) => `
+    select.innerHTML = `<option value="">${placeholder}</option>` + state.channels.map((channel) => `
       <option value="${html(channel.id)}">${html(channel.id)}</option>
     `).join("");
     select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
@@ -2328,6 +2496,33 @@
     $("orderFilterForm").reset();
     await loadOrders();
     setDashboardResult({ message: "订单筛选已重置" });
+  });
+
+  $("profitShareForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+  });
+
+  $("shareSingleBtn").addEventListener("click", async () => {
+    try {
+      await submitSingleProfitShare();
+    } catch (error) {
+      setProfitShareResult(error);
+    }
+  });
+
+  $("shareChannelBtn").addEventListener("click", async () => {
+    try {
+      await submitChannelProfitShare();
+    } catch (error) {
+      setProfitShareResult(error);
+    }
+  });
+
+  $("profitShareOrders").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-share-order]");
+    if (button) {
+      fillProfitShareOrder(button.dataset.shareOrder);
+    }
   });
 
   $("addMerchantBtn").addEventListener("click", openMerchantModal);

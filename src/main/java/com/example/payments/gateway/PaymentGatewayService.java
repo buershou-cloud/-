@@ -10,17 +10,23 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.ProfitSharingBatchItem;
+import com.example.payments.domain.ProfitSharingBatchRequest;
+import com.example.payments.domain.ProfitSharingBatchResult;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.domain.RoutingMode;
 import com.example.payments.order.DemoOrderService;
+import com.example.payments.order.DemoOrderView;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.MerchantRouting;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -71,7 +77,67 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse profitSharing(ProfitSharingRequest request) {
-        return execute(null, request.channelIds(), null, null, channel -> provider(channel).profitSharing(channel, request));
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).profitSharing(channel, request));
+        if (response.status() != PaymentStatus.FAILED && hasText(request.outTradeNo())) {
+            orderService.markProfitShared(request.outTradeNo());
+        }
+        return response;
+    }
+
+    public ProfitSharingBatchResult profitSharingByChannel(ProfitSharingBatchRequest request) {
+        List<DemoOrderView> orders = orderService.shareableByChannel(request.channelId(), request.includeProfitShared());
+        List<ProfitSharingBatchItem> items = new ArrayList<>();
+        int success = 0;
+        int failed = 0;
+
+        for (DemoOrderView order : orders) {
+            String outRequestNo = outRequestNo(request, order);
+            ProfitSharingRequest sharingRequest = new ProfitSharingRequest(
+                    order.outTradeNo(),
+                    order.tradeNo(),
+                    outRequestNo,
+                    List.of(royaltyParameter(request, order)),
+                    request.operatorId(),
+                    request.appAuthToken(),
+                    List.of(request.channelId()),
+                    request.extra()
+            );
+            try {
+                GatewayResponse response = profitSharing(sharingRequest);
+                if (response.status() == PaymentStatus.FAILED) {
+                    failed++;
+                } else {
+                    success++;
+                }
+                items.add(new ProfitSharingBatchItem(
+                        order.outTradeNo(),
+                        order.tradeNo(),
+                        outRequestNo,
+                        response.status(),
+                        response.code(),
+                        response.message()
+                ));
+            } catch (RuntimeException ex) {
+                failed++;
+                items.add(new ProfitSharingBatchItem(
+                        order.outTradeNo(),
+                        order.tradeNo(),
+                        outRequestNo,
+                        PaymentStatus.FAILED,
+                        "PROFIT_SHARING_EXCEPTION",
+                        ex.getMessage()
+                ));
+            }
+        }
+
+        return new ProfitSharingBatchResult(
+                request.channelId(),
+                orders.size(),
+                success,
+                failed,
+                "通道 " + request.channelId() + " 已处理 " + orders.size() + " 笔订单，成功 " + success + " 笔，失败 " + failed + " 笔",
+                List.copyOf(items)
+        );
     }
 
     public GatewayResponse queryComplaints(ComplaintQueryRequest request) {
@@ -223,6 +289,37 @@ public class PaymentGatewayService {
         }
         String text = value.toString().trim();
         return text.isEmpty() ? fallback : text;
+    }
+
+    private static Map<String, Object> royaltyParameter(ProfitSharingBatchRequest request, DemoOrderView order) {
+        Map<String, Object> parameter = new LinkedHashMap<>();
+        parameter.put("royalty_type", "transfer");
+        parameter.put("trans_in_type", firstText(request.transInType(), "loginName"));
+        parameter.put("trans_in", request.transIn());
+        parameter.put("amount", amount(firstAmount(request.amount(), order.amount())));
+        parameter.put("desc", firstText(request.desc(), "通道批量分账 " + order.outTradeNo()));
+        return parameter;
+    }
+
+    private static String outRequestNo(ProfitSharingBatchRequest request, DemoOrderView order) {
+        String prefix = firstText(request.outRequestNoPrefix(), "PS");
+        return prefix + "_" + order.outTradeNo();
+    }
+
+    private static BigDecimal firstAmount(BigDecimal preferred, BigDecimal fallback) {
+        return preferred == null ? fallback : preferred;
+    }
+
+    private static String amount(BigDecimal amount) {
+        return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private static String firstText(String value, String fallback) {
+        return hasText(value) ? value.trim() : fallback;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private MerchantRouting merchantRouting(PayCreateRequest request) {

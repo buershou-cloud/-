@@ -96,6 +96,25 @@ public class DemoOrderService {
                 .toList();
     }
 
+    public synchronized List<DemoOrderView> shareableByChannel(String channelId, boolean includeProfitShared) {
+        if (!hasText(channelId)) {
+            throw new IllegalArgumentException("支付通道不能为空");
+        }
+        return orders.values().stream()
+                .filter(order -> Objects.equals(order.getChannelId(), channelId.trim()))
+                .filter(order -> order.getStatus() == DemoOrderStatus.COMPLETED)
+                .filter(order -> hasText(order.getTradeNo()))
+                .filter(order -> includeProfitShared || !order.isProfitShared())
+                .map(DemoOrderView::from)
+                .toList();
+    }
+
+    public synchronized DemoOrderView markProfitShared(String outTradeNo) {
+        DemoOrder order = order(outTradeNo);
+        order.setProfitShared(true);
+        return DemoOrderView.from(order);
+    }
+
     public synchronized DemoOrderView complete(String outTradeNo) {
         DemoOrder order = order(outTradeNo);
         if (order.isPreAuthorization()) {

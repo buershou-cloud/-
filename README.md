@@ -48,6 +48,7 @@ Open `http://localhost:8080/` for the built-in demo console. If you use another 
 - `POST /api/v1/payments/query`
 - `POST /api/v1/payments/refund`
 - `POST /api/v1/payments/profit-sharing`
+- `POST /api/v1/payments/profit-sharing/channel`
 - `POST /api/v1/payments/complaints/query`
 - `POST /api/v1/payments/onboarding`
 - `GET /api/v1/channels`

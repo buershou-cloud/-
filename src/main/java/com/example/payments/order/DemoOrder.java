@@ -15,6 +15,7 @@ public class DemoOrder {
     private String createdAt;
     private boolean preAuthorization;
     private boolean supplemented;
+    private boolean profitShared;
 
     public DemoOrder(
             String outTradeNo,
@@ -102,5 +103,13 @@ public class DemoOrder {
 
     public void setSupplemented(boolean supplemented) {
         this.supplemented = supplemented;
+    }
+
+    public boolean isProfitShared() {
+        return profitShared;
+    }
+
+    public void setProfitShared(boolean profitShared) {
+        this.profitShared = profitShared;
     }
 }

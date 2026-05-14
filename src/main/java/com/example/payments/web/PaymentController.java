@@ -8,6 +8,8 @@ import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentQueryRequest;
+import com.example.payments.domain.ProfitSharingBatchRequest;
+import com.example.payments.domain.ProfitSharingBatchResult;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
@@ -54,6 +56,11 @@ public class PaymentController {
     @PostMapping("/profit-sharing")
     public GatewayResponse profitSharing(@Valid @RequestBody ProfitSharingRequest request) {
         return paymentGatewayService.profitSharing(request);
+    }
+
+    @PostMapping("/profit-sharing/channel")
+    public ProfitSharingBatchResult profitSharingByChannel(@Valid @RequestBody ProfitSharingBatchRequest request) {
+        return paymentGatewayService.profitSharingByChannel(request);
     }
 
     @PostMapping("/complaints/query")
