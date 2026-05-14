@@ -375,7 +375,7 @@
       const options = productOptions(currentChannel);
       currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : chooseProduct(options);
     } else if (merchantId) {
-      currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
+      currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}/cashier-info`);
       const availableChannels = merchantChannels(currentMerchant, channels);
       $("cashierTitle").textContent = `${currentMerchant.name} 收银台`;
       $("cashierHint").textContent = "输入金额后发起支付，订单将按商户可用支付通道自动路由。";

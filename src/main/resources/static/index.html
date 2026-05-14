@@ -160,6 +160,19 @@
       font-size: 16px;
     }
 
+    .top-action-btn {
+      min-height: 34px;
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: #0f172a;
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
     .admin-dot {
       display: grid;
       place-items: center;
@@ -1099,7 +1112,10 @@
       <div class="top-actions">
         <span id="healthText">服务检测中</span>
         <span>2026/5/13</span>
+        <button class="top-action-btn" id="changePasswordBtn" type="button">修改密码</button>
+        <button class="top-action-btn" id="logoutBtn" type="button">退出</button>
         <span class="admin-dot">管</span>
+        <span id="adminUsername">admin</span>
       </div>
     </header>
 
@@ -1501,6 +1517,26 @@
   </section>
 </div>
 
+<div id="passwordModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="passwordModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="passwordModalTitle">修改登录密码</h3>
+      <button class="btn secondary small" id="closePasswordModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="passwordForm" class="add-channel-form">
+        <div class="channel-form-grid">
+          <label class="wide">原密码<input id="oldAdminPassword" type="password" autocomplete="current-password" required></label>
+          <label>新密码<input id="newAdminPassword" type="password" autocomplete="new-password" minlength="6" required></label>
+          <label>确认新密码<input id="confirmAdminPassword" type="password" autocomplete="new-password" minlength="6" required></label>
+        </div>
+        <div class="form-actions"><button class="btn" type="submit">保存新密码</button></div>
+        <pre id="passwordResult" class="operation-result hidden">密码修改结果</pre>
+      </form>
+    </div>
+  </section>
+</div>
+
 <div id="qrModal" class="qr-modal hidden">
   <section class="qr-dialog">
     <div class="qr-head">
@@ -1648,6 +1684,10 @@
       headers: { "Content-Type": "application/json; charset=utf-8" },
       ...options
     });
+    if (response.status === 401) {
+      window.location.href = "/login.html";
+      throw { code: "UNAUTHENTICATED", message: "请先登录后台" };
+    }
     const text = await response.text();
     let data = text;
     try {
@@ -1659,6 +1699,50 @@
       throw data;
     }
     return data;
+  }
+
+  async function checkAdminSession() {
+    const session = await request("/api/v1/admin-auth/session");
+    if (!session.authenticated) {
+      window.location.href = "/login.html";
+      return;
+    }
+    $("adminUsername").textContent = session.username || "admin";
+  }
+
+  async function logoutAdmin() {
+    await request("/api/v1/admin-auth/logout", { method: "POST", body: "{}" });
+    window.location.href = "/login.html";
+  }
+
+  function openPasswordModal() {
+    $("passwordForm").reset();
+    $("passwordResult").classList.add("hidden");
+    $("passwordResult").textContent = "密码修改结果";
+    $("passwordModal").classList.remove("hidden");
+    $("passwordModal").setAttribute("aria-hidden", "false");
+    $("oldAdminPassword").focus();
+  }
+
+  function closePasswordModal() {
+    $("passwordModal").classList.add("hidden");
+    $("passwordModal").setAttribute("aria-hidden", "true");
+  }
+
+  async function changeAdminPassword() {
+    const newPassword = $("newAdminPassword").value;
+    if (newPassword !== $("confirmAdminPassword").value) {
+      throw { code: "PASSWORD_MISMATCH", message: "两次输入的新密码不一致" };
+    }
+    const session = await request("/api/v1/admin-auth/password", {
+      method: "POST",
+      body: JSON.stringify({
+        oldPassword: $("oldAdminPassword").value,
+        newPassword
+      })
+    });
+    $("adminUsername").textContent = session.username || "admin";
+    return { message: "登录密码已修改，下次请使用新密码登录" };
   }
 
   function parseJson(id, fallback) {
@@ -2644,6 +2728,32 @@
     button.addEventListener("click", () => switchPage(button.dataset.jump));
   });
 
+  $("changePasswordBtn").addEventListener("click", openPasswordModal);
+
+  $("logoutBtn").addEventListener("click", async () => {
+    try {
+      await logoutAdmin();
+    } catch (error) {
+      setConsole(error);
+    }
+  });
+
+  $("closePasswordModalBtn").addEventListener("click", closePasswordModal);
+
+  $("passwordModal").addEventListener("click", (event) => {
+    if (event.target.id === "passwordModal") closePasswordModal();
+  });
+
+  $("passwordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("passwordResult").classList.remove("hidden");
+    try {
+      $("passwordResult").textContent = json(await changeAdminPassword());
+    } catch (error) {
+      $("passwordResult").textContent = json(error);
+    }
+  });
+
   $("recentOrders").addEventListener("click", async (event) => {
     const menuButton = event.target.closest("button[data-order-menu]");
     if (menuButton) {
@@ -2871,7 +2981,8 @@
   syncChannelCallbackUrls();
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
-  Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadComplaintAutoStatus()])
+  checkAdminSession()
+    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadComplaintAutoStatus()]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>

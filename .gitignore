@@ -6,3 +6,4 @@ imported/
 .vscode/
 *.iml
 *.class
+data/

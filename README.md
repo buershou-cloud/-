@@ -42,6 +42,13 @@ ALI_MAIN_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----..."
 
 Open `http://localhost:8080/` for the built-in demo console. If you use another port, replace `8080`.
 
+Default admin login:
+
+- Username: `admin`
+- Password: `admin123`
+
+After first startup the credential is stored in `data/admin-auth.properties`. Change it from the top-right `修改密码` button after logging in.
+
 ## MySQL Schema
 
 The MySQL database script is in `database/mysql/payment_gateway_schema.sql`.

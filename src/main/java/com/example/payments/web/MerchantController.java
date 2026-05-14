@@ -4,6 +4,7 @@ import com.example.payments.merchant.DemoMerchantCreateRequest;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.DemoMerchantUpdateRequest;
 import com.example.payments.merchant.DemoMerchantView;
+import com.example.payments.merchant.MerchantCashierInfo;
 import com.example.payments.merchant.MerchantSignModeRequest;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.WriterException;
@@ -49,6 +50,11 @@ public class MerchantController {
     @GetMapping("/{merchantId}")
     public DemoMerchantView detail(@PathVariable String merchantId) {
         return merchantService.detail(merchantId);
+    }
+
+    @GetMapping("/{merchantId}/cashier-info")
+    public MerchantCashierInfo cashierInfo(@PathVariable String merchantId) {
+        return MerchantCashierInfo.from(merchantService.detail(merchantId));
     }
 
     @GetMapping(value = "/{merchantId}/cashier-qr", produces = MediaType.IMAGE_PNG_VALUE)

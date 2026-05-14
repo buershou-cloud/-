@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>后台登录 - 支付平台管理</title>
+  <style>
+    :root {
+      --bg: #f3f6fb;
+      --panel: #ffffff;
+      --text: #071631;
+      --muted: #71819a;
+      --line: #d9e2ef;
+      --primary: #1677ff;
+      --danger: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+    }
+
+    .login-card {
+      width: min(420px, calc(100vw - 32px));
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(15, 23, 42, 0.14);
+      overflow: hidden;
+    }
+
+    .login-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .logo {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 22px;
+      font-weight: 900;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .login-sub {
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    form {
+      padding: 24px;
+    }
+
+    label {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 16px;
+      color: #29384f;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 700;
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 44px;
+      border: 0;
+      border-radius: 7px;
+      background: var(--primary);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .btn:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
+    .message {
+      min-height: 22px;
+      margin-bottom: 14px;
+      color: var(--danger);
+      font-size: 13px;
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+  <main class="login-card">
+    <div class="login-head">
+      <div class="logo">管</div>
+      <div>
+        <h1>支付平台管理</h1>
+        <div class="login-sub">请输入后台账号密码</div>
+      </div>
+    </div>
+    <form id="loginForm">
+      <div id="message" class="message"></div>
+      <label>账号
+        <input id="username" name="username" autocomplete="username" value="admin" required>
+      </label>
+      <label>密码
+        <input id="password" name="password" type="password" autocomplete="current-password" placeholder="默认 admin123" required>
+      </label>
+      <button id="loginButton" class="btn" type="submit">登录后台</button>
+    </form>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function request(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json; charset=utf-8" },
+        ...options
+      });
+      const text = await response.text();
+      let data = text;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (ignored) {
+        data = text;
+      }
+      if (!response.ok) {
+        throw data;
+      }
+      return data;
+    }
+
+    request("/api/v1/admin-auth/session")
+      .then((session) => {
+        if (session.authenticated) {
+          window.location.replace("/");
+        }
+      })
+      .catch(() => {});
+
+    $("loginForm").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("message").textContent = "";
+      $("loginButton").disabled = true;
+      try {
+        await request("/api/v1/admin-auth/login", {
+          method: "POST",
+          body: JSON.stringify({
+            username: $("username").value.trim(),
+            password: $("password").value
+          })
+        });
+        window.location.replace("/");
+      } catch (error) {
+        $("message").textContent = error.message || "登录失败，请检查账号密码";
+      } finally {
+        $("loginButton").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
