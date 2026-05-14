@@ -520,27 +520,6 @@
       gap: 10px;
     }
 
-    .advanced {
-      grid-column: 1 / -1;
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: #f8fbff;
-    }
-
-    .advanced summary {
-      cursor: pointer;
-      color: #334155;
-      font-size: 14px;
-      font-weight: 800;
-    }
-
-    .advanced-body {
-      display: grid;
-      gap: 12px;
-      margin-top: 12px;
-    }
-
     .check {
       display: inline-flex;
       align-items: center;
@@ -1169,14 +1148,9 @@
                   <label>接口方法<input id="onboardMethod" value="ant.merchant.expand.indirect.zft.simplecreate"></label>
                   <label>App Auth Token<input id="onboardAppAuthToken"></label>
                   <label class="wide">指定通道<span id="onboardChannelChecks" class="checks"></span></label>
-                  <label>二级商户支付宝账号<input id="onboardBindingAlipayLogonId" value="merchant@example.com" placeholder="手机号、邮箱或支付宝登录账号"></label>
                   <label>收银台显示名称<input id="onboardAliasName" value="演示门店"></label>
-                  <label>商户主体名称<input id="onboardMerchantName" value="演示商户有限公司"></label>
-                  <label>客服电话<input id="onboardServicePhone" value="0571-85022088"></label>
                   <label>联系人姓名<input id="onboardContactName" value="张三"></label>
                   <label>联系人手机号<input id="onboardContactMobile" value="13888888888"></label>
-                  <label>联系人邮箱<input id="onboardContactEmail" value="merchant@example.com"></label>
-                  <label>联系人证件号<input id="onboardContactIdCardNo" value="110000199001011234"></label>
                   <label>结算方式
                     <select id="onboardSettleType">
                       <option value="alipayAccount">支付宝账号</option>
@@ -1197,18 +1171,6 @@
                     </span>
                   </div>
                   <label>MCC 行业码<input id="onboardMcc" value="B0007" placeholder="例如 B0007"></label>
-                  <label>省编码<input id="onboardProvinceCode" value="330000"></label>
-                  <label>市编码<input id="onboardCityCode" value="330100"></label>
-                  <label>区编码<input id="onboardDistrictCode" value="330106"></label>
-                  <label class="wide">详细经营地址<input id="onboardBusinessAddress" value="西溪路演示地址"></label>
-                  <label>门头照 OSS Key<input id="onboardOutDoorImages" placeholder="图片上传接口返回的门头照文件 key"></label>
-                  <label>内景照 OSS Key<input id="onboardInDoorImages" placeholder="图片上传接口返回的内景照文件 key"></label>
-                  <details class="advanced">
-                    <summary>高级参数</summary>
-                    <div class="advanced-body">
-                      <label>其他进件参数 JSON<textarea id="onboardExtraPayload">{}</textarea></label>
-                    </div>
-                  </details>
                 </div>
                 <div class="form-actions"><button class="btn" type="submit">提交进件</button></div>
               </form>
@@ -2215,36 +2177,19 @@
   function onboardPayload() {
     const method = $("onboardMethod").value.trim();
     const externalId = $("onboardOutBizNo").value.trim();
-    const extraPayload = parseJson("onboardExtraPayload", {});
     const contactInfos = compact({
       name: $("onboardContactName").value.trim(),
-      mobile: $("onboardContactMobile").value.trim(),
-      phone: $("onboardServicePhone").value.trim(),
-      email: $("onboardContactEmail").value.trim(),
-      id_card_no: $("onboardContactIdCardNo").value.trim()
-    });
-    const businessAddress = compact({
-      province_code: $("onboardProvinceCode").value.trim(),
-      city_code: $("onboardCityCode").value.trim(),
-      district_code: $("onboardDistrictCode").value.trim(),
-      address: $("onboardBusinessAddress").value.trim()
+      mobile: $("onboardContactMobile").value.trim()
     });
     const payload = compact({
-      ...extraPayload,
-      binding_alipay_logon_id: $("onboardBindingAlipayLogonId").value.trim(),
       alias_name: $("onboardAliasName").value.trim(),
-      name: $("onboardMerchantName").value.trim(),
-      service_phone: $("onboardServicePhone").value.trim(),
       contact_infos: contactInfos,
       default_settle_rule: compact({
         default_settle_type: $("onboardSettleType").value,
         default_settle_target: $("onboardSettleTarget").value.trim()
       }),
       service: checkedValues("onboardService"),
-      mcc: $("onboardMcc").value.trim(),
-      business_address: businessAddress,
-      out_door_images: $("onboardOutDoorImages").value.trim(),
-      in_door_images: $("onboardInDoorImages").value.trim()
+      mcc: $("onboardMcc").value.trim()
     });
     if (method === "ant.merchant.expand.indirect.zft.simplecreate") {
       delete payload.out_biz_no;
