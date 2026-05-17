@@ -59,7 +59,9 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         if (path.startsWith("/actuator")) {
             return true;
         }
-        if (path.equals("/api/v1/admin-auth/login") || path.equals("/api/v1/admin-auth/session")) {
+        if (path.equals("/api/v1/admin-auth/login")
+                || path.equals("/api/v1/admin-auth/session")
+                || ("GET".equalsIgnoreCase(method) && path.equals("/api/v1/admin-auth/graphic-challenge"))) {
             return true;
         }
         if (path.equals("/api/v1/merchant-portal/login") || path.equals("/api/v1/merchant-portal/logout")) {

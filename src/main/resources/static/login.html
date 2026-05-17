@@ -30,7 +30,7 @@
     }
 
     .login-card {
-      width: min(420px, calc(100vw - 32px));
+      width: min(440px, calc(100vw - 32px));
       border: 1px solid var(--line);
       border-radius: 10px;
       background: var(--panel);
@@ -54,7 +54,7 @@
       border-radius: 8px;
       background: var(--primary);
       color: #fff;
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 900;
     }
 
@@ -98,6 +98,67 @@
     input:focus {
       border-color: var(--primary);
       box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    }
+
+    .verify-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      color: #29384f;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .verify-refresh {
+      border: 0;
+      background: transparent;
+      color: var(--primary);
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .verify-box {
+      margin-bottom: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fbff;
+    }
+
+    .verify-image {
+      width: 100%;
+      height: 120px;
+      display: block;
+      border-radius: 8px;
+      background: #eef6ff;
+      object-fit: cover;
+    }
+
+    .verify-row {
+      display: grid;
+      grid-template-columns: 1fr 54px;
+      gap: 10px;
+      align-items: center;
+      margin-top: 10px;
+    }
+
+    input[type="range"] {
+      min-height: 32px;
+      padding: 0;
+      accent-color: var(--primary);
+      box-shadow: none;
+    }
+
+    .verify-value {
+      min-height: 32px;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      background: #eaf3ff;
+      color: var(--primary);
+      font-size: 13px;
+      font-weight: 900;
     }
 
     .btn {
@@ -146,12 +207,24 @@
       <label>密码
         <input id="password" name="password" type="password" autocomplete="current-password" placeholder="默认 admin123" required>
       </label>
+      <div class="verify-box">
+        <div class="verify-head">
+          <span>图形验证</span>
+          <button id="refreshVerify" class="verify-refresh" type="button">换一张</button>
+        </div>
+        <img id="verifyImage" class="verify-image" alt="图形验证">
+        <div class="verify-row">
+          <input id="verifySlider" type="range" min="36" max="284" value="36">
+          <div id="verifyValue" class="verify-value">36</div>
+        </div>
+      </div>
       <button id="loginButton" class="btn" type="submit">登录后台</button>
     </form>
   </main>
 
   <script>
     const $ = (id) => document.getElementById(id);
+    let challenge = null;
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -171,29 +244,58 @@
       return data;
     }
 
+    async function loadChallenge() {
+      challenge = await request("/api/v1/admin-auth/graphic-challenge");
+      $("verifyImage").src = challenge.image;
+      $("verifySlider").min = challenge.minX;
+      $("verifySlider").max = challenge.maxX;
+      $("verifySlider").value = challenge.minX;
+      $("verifyValue").textContent = challenge.minX;
+    }
+
     request("/api/v1/admin-auth/session")
       .then((session) => {
         if (session.authenticated) {
           window.location.replace("/");
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => loadChallenge().catch(() => {
+        $("message").textContent = "图形验证加载失败，请刷新页面";
+      }));
+
+    $("refreshVerify").addEventListener("click", () => {
+      $("message").textContent = "";
+      loadChallenge().catch(() => {
+        $("message").textContent = "图形验证加载失败，请刷新页面";
+      });
+    });
+
+    $("verifySlider").addEventListener("input", () => {
+      $("verifyValue").textContent = $("verifySlider").value;
+    });
 
     $("loginForm").addEventListener("submit", async (event) => {
       event.preventDefault();
       $("message").textContent = "";
       $("loginButton").disabled = true;
       try {
+        if (!challenge) {
+          throw { message: "请先完成图形验证" };
+        }
         await request("/api/v1/admin-auth/login", {
           method: "POST",
           body: JSON.stringify({
             username: $("username").value.trim(),
-            password: $("password").value
+            password: $("password").value,
+            verificationId: challenge.challengeId,
+            verificationX: Number($("verifySlider").value)
           })
         });
         window.location.replace("/");
       } catch (error) {
         $("message").textContent = error.message || "登录失败，请检查账号密码";
+        await loadChallenge().catch(() => {});
       } finally {
         $("loginButton").disabled = false;
       }

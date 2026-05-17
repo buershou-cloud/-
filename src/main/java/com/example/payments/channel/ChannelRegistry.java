@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class ChannelRegistry {
 
     private static final String DEFAULT_GATEWAY = "https://openapi.alipay.com/gateway.do";
+    private static final String CREDENTIAL_PUBLIC_KEY = "PUBLIC_KEY";
 
     private final Map<String, PaymentGatewayProperties.Channel> channels;
     private final Map<String, Boolean> enabledOverrides = new ConcurrentHashMap<>();
@@ -136,8 +137,10 @@ public class ChannelRegistry {
         }
         List<PaymentGatewayProperties.Channel> loaded = jdbcTemplate.query("""
                 SELECT id, provider, enabled, daily_enabled, priority, weight, pay_min, pay_max,
-                       gateway_url, app_id, alipay_public_key, merchant_private_key, app_auth_token,
-                       sub_merchant_id, notify_url, return_url, charset_name, sign_type
+                       gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
+                       app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
+                       app_cert_content, alipay_cert_content, alipay_root_cert_content,
+                       app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
                 FROM pay_channel
                 """, (rs, rowNum) -> {
             PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
@@ -154,6 +157,13 @@ public class ChannelRegistry {
             alipay.setAppId(nullIfBlank(rs.getString("app_id")));
             alipay.setAlipayPublicKey(nullIfBlank(rs.getString("alipay_public_key")));
             alipay.setMerchantPrivateKey(nullIfBlank(rs.getString("merchant_private_key")));
+            alipay.setCredentialMode(normalizeCredentialMode(rs.getString("credential_mode")));
+            alipay.setAppCertSn(nullIfBlank(rs.getString("app_cert_sn")));
+            alipay.setAlipayCertSn(nullIfBlank(rs.getString("alipay_cert_sn")));
+            alipay.setAlipayRootCertSn(nullIfBlank(rs.getString("alipay_root_cert_sn")));
+            alipay.setAppCertContent(nullIfBlank(rs.getString("app_cert_content")));
+            alipay.setAlipayCertContent(nullIfBlank(rs.getString("alipay_cert_content")));
+            alipay.setAlipayRootCertContent(nullIfBlank(rs.getString("alipay_root_cert_content")));
             alipay.setAppAuthToken(nullIfBlank(rs.getString("app_auth_token")));
             alipay.setSubMerchantId(nullIfBlank(rs.getString("sub_merchant_id")));
             alipay.setNotifyUrl(nullIfBlank(rs.getString("notify_url")));
@@ -188,9 +198,11 @@ public class ChannelRegistry {
         jdbcTemplate.update("""
                 INSERT INTO pay_channel (
                   id, provider, enabled, daily_enabled, priority, weight, pay_min, pay_max,
-                  gateway_url, app_id, alipay_public_key, merchant_private_key, app_auth_token,
-                  sub_merchant_id, notify_url, return_url, charset_name, sign_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
+                  app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
+                  app_cert_content, alipay_cert_content, alipay_root_cert_content,
+                  app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 channel.getId(),
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -204,6 +216,13 @@ public class ChannelRegistry {
                 firstText(channel.getAlipay().getAppId(), ""),
                 nullIfBlank(channel.getAlipay().getAlipayPublicKey()),
                 nullIfBlank(channel.getAlipay().getMerchantPrivateKey()),
+                normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
+                nullIfBlank(channel.getAlipay().getAppCertSn()),
+                nullIfBlank(channel.getAlipay().getAlipayCertSn()),
+                nullIfBlank(channel.getAlipay().getAlipayRootCertSn()),
+                nullIfBlank(channel.getAlipay().getAppCertContent()),
+                nullIfBlank(channel.getAlipay().getAlipayCertContent()),
+                nullIfBlank(channel.getAlipay().getAlipayRootCertContent()),
                 nullIfBlank(channel.getAlipay().getAppAuthToken()),
                 nullIfBlank(channel.getAlipay().getSubMerchantId()),
                 nullIfBlank(channel.getAlipay().getNotifyUrl()),
@@ -219,8 +238,11 @@ public class ChannelRegistry {
                 UPDATE pay_channel
                 SET provider = ?, enabled = ?, daily_enabled = ?, priority = ?, weight = ?,
                     pay_min = ?, pay_max = ?, gateway_url = ?, app_id = ?,
-                    alipay_public_key = ?, merchant_private_key = ?, app_auth_token = ?,
-                    sub_merchant_id = ?, notify_url = ?, return_url = ?, charset_name = ?, sign_type = ?
+                    alipay_public_key = ?, merchant_private_key = ?, credential_mode = ?,
+                    app_cert_sn = ?, alipay_cert_sn = ?, alipay_root_cert_sn = ?,
+                    app_cert_content = ?, alipay_cert_content = ?, alipay_root_cert_content = ?,
+                    app_auth_token = ?, sub_merchant_id = ?, notify_url = ?, return_url = ?,
+                    charset_name = ?, sign_type = ?
                 WHERE id = ?
                 """,
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -234,6 +256,13 @@ public class ChannelRegistry {
                 firstText(channel.getAlipay().getAppId(), ""),
                 nullIfBlank(channel.getAlipay().getAlipayPublicKey()),
                 nullIfBlank(channel.getAlipay().getMerchantPrivateKey()),
+                normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
+                nullIfBlank(channel.getAlipay().getAppCertSn()),
+                nullIfBlank(channel.getAlipay().getAlipayCertSn()),
+                nullIfBlank(channel.getAlipay().getAlipayRootCertSn()),
+                nullIfBlank(channel.getAlipay().getAppCertContent()),
+                nullIfBlank(channel.getAlipay().getAlipayCertContent()),
+                nullIfBlank(channel.getAlipay().getAlipayRootCertContent()),
                 nullIfBlank(channel.getAlipay().getAppAuthToken()),
                 nullIfBlank(channel.getAlipay().getSubMerchantId()),
                 nullIfBlank(channel.getAlipay().getNotifyUrl()),
@@ -266,6 +295,12 @@ public class ChannelRegistry {
 
     private static String nullIfBlank(String value) {
         return hasText(value) ? value.trim() : null;
+    }
+
+    private static String normalizeCredentialMode(String value) {
+        return "CERTIFICATE".equalsIgnoreCase(firstText(value, CREDENTIAL_PUBLIC_KEY))
+                ? "CERTIFICATE"
+                : CREDENTIAL_PUBLIC_KEY;
     }
 
     private static boolean hasText(String value) {

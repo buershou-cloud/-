@@ -201,6 +201,13 @@ public class PaymentGatewayProperties {
         private String appId;
         private String merchantPrivateKey;
         private String alipayPublicKey;
+        private String credentialMode = "PUBLIC_KEY";
+        private String appCertSn;
+        private String alipayCertSn;
+        private String alipayRootCertSn;
+        private String appCertContent;
+        private String alipayCertContent;
+        private String alipayRootCertContent;
         private String appAuthToken;
         private String subMerchantId;
         private String signType = "RSA2";
@@ -238,6 +245,62 @@ public class PaymentGatewayProperties {
 
         public void setAlipayPublicKey(String alipayPublicKey) {
             this.alipayPublicKey = alipayPublicKey;
+        }
+
+        public String getCredentialMode() {
+            return credentialMode;
+        }
+
+        public void setCredentialMode(String credentialMode) {
+            this.credentialMode = credentialMode;
+        }
+
+        public String getAppCertSn() {
+            return appCertSn;
+        }
+
+        public void setAppCertSn(String appCertSn) {
+            this.appCertSn = appCertSn;
+        }
+
+        public String getAlipayCertSn() {
+            return alipayCertSn;
+        }
+
+        public void setAlipayCertSn(String alipayCertSn) {
+            this.alipayCertSn = alipayCertSn;
+        }
+
+        public String getAlipayRootCertSn() {
+            return alipayRootCertSn;
+        }
+
+        public void setAlipayRootCertSn(String alipayRootCertSn) {
+            this.alipayRootCertSn = alipayRootCertSn;
+        }
+
+        public String getAppCertContent() {
+            return appCertContent;
+        }
+
+        public void setAppCertContent(String appCertContent) {
+            this.appCertContent = appCertContent;
+        }
+
+        public String getAlipayCertContent() {
+            return alipayCertContent;
+        }
+
+        public void setAlipayCertContent(String alipayCertContent) {
+            this.alipayCertContent = alipayCertContent;
+        }
+
+        public String getAlipayRootCertContent() {
+            return alipayRootCertContent;
+        }
+
+        public void setAlipayRootCertContent(String alipayRootCertContent) {
+            this.alipayRootCertContent = alipayRootCertContent;
         }
 
         public String getAppAuthToken() {

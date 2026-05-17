@@ -28,6 +28,8 @@ public class ChannelController {
     private final ChannelRegistry channelRegistry;
     private static final String PROVIDER_ALIPAY = "ALIPAY";
     private static final String PROVIDER_ALIPAY_DIRECT = "ALIPAY_DIRECT";
+    private static final String CREDENTIAL_PUBLIC_KEY = "PUBLIC_KEY";
+    private static final String CREDENTIAL_CERTIFICATE = "CERTIFICATE";
 
     public ChannelController(ChannelRegistry channelRegistry) {
         this.channelRegistry = channelRegistry;
@@ -117,6 +119,13 @@ public class ChannelController {
                 channel.getAlipay().getAppId(),
                 hasText(channel.getAlipay().getMerchantPrivateKey()),
                 hasText(channel.getAlipay().getAlipayPublicKey()),
+                normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
+                channel.getAlipay().getAppCertSn(),
+                channel.getAlipay().getAlipayCertSn(),
+                channel.getAlipay().getAlipayRootCertSn(),
+                hasText(channel.getAlipay().getAppCertContent()),
+                hasText(channel.getAlipay().getAlipayCertContent()),
+                hasText(channel.getAlipay().getAlipayRootCertContent()),
                 hasText(channel.getAlipay().getAppAuthToken()),
                 channel.getAlipay().getSubMerchantId(),
                 hasText(channel.getAlipay().getSubMerchantId()),
@@ -130,6 +139,13 @@ public class ChannelController {
         setIfPresent(request.appId(), alipay::setAppId);
         setIfPresent(request.merchantPrivateKey(), alipay::setMerchantPrivateKey);
         setIfPresent(request.alipayPublicKey(), alipay::setAlipayPublicKey);
+        setIfPresent(request.credentialMode(), value -> alipay.setCredentialMode(normalizeCredentialMode(value)));
+        setIfPresent(request.appCertSn(), alipay::setAppCertSn);
+        setIfPresent(request.alipayCertSn(), alipay::setAlipayCertSn);
+        setIfPresent(request.alipayRootCertSn(), alipay::setAlipayRootCertSn);
+        setIfPresent(request.appCertContent(), alipay::setAppCertContent);
+        setIfPresent(request.alipayCertContent(), alipay::setAlipayCertContent);
+        setIfPresent(request.alipayRootCertContent(), alipay::setAlipayRootCertContent);
         setIfPresent(request.appAuthToken(), alipay::setAppAuthToken);
         setIfPresent(request.subMerchantId(), alipay::setSubMerchantId);
         setIfPresent(request.notifyUrl(), alipay::setNotifyUrl);
@@ -141,6 +157,13 @@ public class ChannelController {
         setIfPresent(request.appId(), alipay::setAppId);
         setIfPresent(request.merchantPrivateKey(), alipay::setMerchantPrivateKey);
         setIfPresent(request.alipayPublicKey(), alipay::setAlipayPublicKey);
+        setIfPresent(request.credentialMode(), value -> alipay.setCredentialMode(normalizeCredentialMode(value)));
+        setIfPresent(request.appCertSn(), alipay::setAppCertSn);
+        setIfPresent(request.alipayCertSn(), alipay::setAlipayCertSn);
+        setIfPresent(request.alipayRootCertSn(), alipay::setAlipayRootCertSn);
+        setIfPresent(request.appCertContent(), alipay::setAppCertContent);
+        setIfPresent(request.alipayCertContent(), alipay::setAlipayCertContent);
+        setIfPresent(request.alipayRootCertContent(), alipay::setAlipayRootCertContent);
         setIfPresent(request.appAuthToken(), alipay::setAppAuthToken);
         setIfPresent(request.subMerchantId(), alipay::setSubMerchantId);
         setIfPresent(request.notifyUrl(), alipay::setNotifyUrl);
@@ -171,6 +194,17 @@ public class ChannelController {
             throw new IllegalArgumentException("provider must be ALIPAY or ALIPAY_DIRECT");
         }
         return provider;
+    }
+
+    private static String normalizeCredentialMode(String value) {
+        if (!hasText(value)) {
+            return CREDENTIAL_PUBLIC_KEY;
+        }
+        String mode = value.trim().toUpperCase();
+        if (!CREDENTIAL_PUBLIC_KEY.equals(mode) && !CREDENTIAL_CERTIFICATE.equals(mode)) {
+            throw new IllegalArgumentException("credentialMode must be PUBLIC_KEY or CERTIFICATE");
+        }
+        return mode;
     }
 
     private static String cleanRequired(String value, String message) {
@@ -260,6 +294,13 @@ public class ChannelController {
             String appId,
             boolean hasMerchantPrivateKey,
             boolean hasAlipayPublicKey,
+            String credentialMode,
+            String appCertSn,
+            String alipayCertSn,
+            String alipayRootCertSn,
+            boolean hasAppCertContent,
+            boolean hasAlipayCertContent,
+            boolean hasAlipayRootCertContent,
             boolean hasAppAuthToken,
             String subMerchantId,
             boolean hasSubMerchantId,

@@ -101,7 +101,7 @@ public class AlipayOpenApiClient {
         Charset charset = charset(channel);
         return AlipaySignatureSupport.verify(
                 params,
-                channel.getAlipay().getAlipayPublicKey(),
+                AlipayCertificateSupport.alipayPublicKey(channel.getAlipay()),
                 Optional.ofNullable(params.get("sign_type")).orElse(channel.getAlipay().getSignType()),
                 charset
         );
@@ -128,6 +128,10 @@ public class AlipayOpenApiClient {
             putIfPresent(params, "notify_url", firstText(options == null ? null : options.notifyUrl(), alipay.getNotifyUrl()));
             putIfPresent(params, "return_url", firstText(options == null ? null : options.returnUrl(), alipay.getReturnUrl()));
             putIfPresent(params, "app_auth_token", firstText(options == null ? null : options.appAuthToken(), alipay.getAppAuthToken()));
+            if (AlipayCertificateSupport.certificateMode(alipay)) {
+                putIfPresent(params, "app_cert_sn", AlipayCertificateSupport.appCertSn(alipay));
+                putIfPresent(params, "alipay_root_cert_sn", AlipayCertificateSupport.alipayRootCertSn(alipay));
+            }
             params.put("sign", AlipaySignatureSupport.sign(params, alipay.getMerchantPrivateKey(), alipay.getSignType(), charset(channel)));
             return params;
         } catch (GatewayException ex) {
@@ -209,6 +213,14 @@ public class AlipayOpenApiClient {
             throw new GatewayException(
                     "ALIPAY_CONFIG_MISSING",
                     "Alipay channel " + channel.getId() + " requires gatewayUrl, appId and merchantPrivateKey"
+            );
+        }
+        if (AlipayCertificateSupport.certificateMode(alipay)
+                && (isBlank(AlipayCertificateSupport.appCertSn(alipay))
+                || isBlank(AlipayCertificateSupport.alipayRootCertSn(alipay)))) {
+            throw new GatewayException(
+                    "ALIPAY_CERTIFICATE_CONFIG_MISSING",
+                    "Alipay certificate mode requires appCertSn and alipayRootCertSn"
             );
         }
     }

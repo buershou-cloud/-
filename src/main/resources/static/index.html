@@ -1501,11 +1501,23 @@
             </select>
           </label>
           <label>支付宝 AppID<input id="newChannelAppId" required placeholder="支付宝开放平台 AppID"></label>
+          <label>密钥模式
+            <select id="newChannelCredentialMode">
+              <option value="PUBLIC_KEY">普通公钥模式</option>
+              <option value="CERTIFICATE">公钥证书模式</option>
+            </select>
+          </label>
           <label class="direct-channel-field hidden">二级商户 SMID<input id="newChannelSubMerchantId" placeholder="支付宝直付通二级商户 SMID"></label>
           <label>最小金额<input id="newChannelPayMin" type="number" min="0" step="0.01" value="0.01"></label>
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
-          <label class="wide">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥或证书公钥内容"></textarea></label>
+          <label class="wide public-key-field">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥"></textarea></label>
           <label class="wide">应用私钥<textarea id="newChannelMerchantPrivateKey" required placeholder="应用 RSA2 私钥"></textarea></label>
+          <label class="cert-mode-field hidden">应用公钥证书 SN<input id="newChannelAppCertSn" placeholder="可留空，粘贴证书内容时自动计算"></label>
+          <label class="cert-mode-field hidden">支付宝公钥证书 SN<input id="newChannelAlipayCertSn" placeholder="可留空，粘贴证书内容时自动计算"></label>
+          <label class="wide cert-mode-field hidden">应用公钥证书内容<textarea id="newChannelAppCertContent" placeholder="-----BEGIN CERTIFICATE----- ..."></textarea></label>
+          <label class="wide cert-mode-field hidden">支付宝公钥证书内容<textarea id="newChannelAlipayCertContent" placeholder="用于异步通知验签，可粘贴 alipayCertPublicKey_RSA2.crt 内容"></textarea></label>
+          <label class="wide cert-mode-field hidden">支付宝根证书 SN<input id="newChannelAlipayRootCertSn" placeholder="可留空，粘贴根证书内容时自动计算"></label>
+          <label class="wide cert-mode-field hidden">支付宝根证书内容<textarea id="newChannelAlipayRootCertContent" placeholder="alipayRootCert.crt 内容"></textarea></label>
           <label>App Auth Token<input id="newChannelAppAuthToken" placeholder="服务商/直付通授权 token，可留空"></label>
           <label>网关地址<input id="newChannelGatewayUrl" value="https://openapi.alipay.com/gateway.do"></label>
           <label>异步通知地址<input id="newChannelNotifyUrl" readonly placeholder="根据当前域名自动生成"></label>
@@ -2316,6 +2328,24 @@
     select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
   }
 
+  function channelSecretTags(channel) {
+    const tags = [
+      `<span class="mini">${channel.credentialMode === "CERTIFICATE" ? "证书模式" : "公钥模式"}</span>`,
+      `<span class="mini">${channel.hasMerchantPrivateKey ? "私钥已配" : "缺私钥"}</span>`
+    ];
+    if (channel.credentialMode === "CERTIFICATE") {
+      tags.push(`<span class="mini">${channel.appCertSn || channel.hasAppCertContent ? "应用证书已配" : "缺应用证书"}</span>`);
+      tags.push(`<span class="mini">${channel.alipayRootCertSn || channel.hasAlipayRootCertContent ? "根证书已配" : "缺根证书"}</span>`);
+      tags.push(`<span class="mini">${channel.hasAlipayCertContent ? "支付宝证书已配" : "缺支付宝证书"}</span>`);
+    } else {
+      tags.push(`<span class="mini">${channel.hasAlipayPublicKey ? "公钥已配" : "缺公钥"}</span>`);
+    }
+    if (channel.provider === "ALIPAY_DIRECT") {
+      tags.push(`<span class="mini">${channel.hasSubMerchantId ? "SMID已配" : "缺SMID"}</span>`);
+    }
+    return tags.join("");
+  }
+
   function renderChannels() {
     renderChannelSummary();
     const tableBody = $("channelTableBody");
@@ -2337,9 +2367,7 @@
         </td>
         <td>
           <div class="product-tags">
-            <span class="mini">${channel.hasAlipayPublicKey ? "公钥已配" : "缺公钥"}</span>
-            <span class="mini">${channel.hasMerchantPrivateKey ? "私钥已配" : "缺私钥"}</span>
-            ${channel.provider === "ALIPAY_DIRECT" ? `<span class="mini">${channel.hasSubMerchantId ? "SMID已配" : "缺SMID"}</span>` : ""}
+            ${channelSecretTags(channel)}
           </div>
         </td>
         <td>${channel.dailyEnabled ? '<span class="status success">可用</span>' : '<span class="status pending">熔断</span>'}</td>
@@ -2462,6 +2490,26 @@
     $("newChannelSubMerchantId").required = direct;
   }
 
+  function syncCredentialModeFields() {
+    const certificateMode = $("newChannelCredentialMode").value === "CERTIFICATE";
+    const editing = Boolean(state.editingChannelId);
+    document.querySelectorAll(".cert-mode-field").forEach((field) => {
+      field.classList.toggle("hidden", !certificateMode);
+    });
+    document.querySelectorAll(".public-key-field").forEach((field) => {
+      field.classList.toggle("hidden", certificateMode);
+    });
+    $("newChannelAlipayPublicKey").required = !certificateMode && !editing;
+    if ($("newChannelAlipayPublicKey").required) {
+      $("newChannelAlipayPublicKey").setAttribute("required", "");
+    } else {
+      $("newChannelAlipayPublicKey").removeAttribute("required");
+    }
+    $("newChannelAlipayPublicKey").placeholder = certificateMode
+      ? "证书模式不使用普通支付宝公钥，请填写支付宝公钥证书"
+      : (editing ? "留空则不修改已配置支付宝公钥" : "支付宝开放平台 RSA2 支付宝公钥");
+  }
+
   function amountField(id) {
     const value = $(id).value.trim();
     return value === "" ? null : Number(value);
@@ -2503,6 +2551,7 @@
     $("newChannelId").removeAttribute("readonly");
     $("newChannelProvider").disabled = false;
     $("newChannelProvider").removeAttribute("disabled");
+    $("newChannelCredentialMode").value = "PUBLIC_KEY";
     $("newChannelAlipayPublicKey").required = true;
     $("newChannelAlipayPublicKey").setAttribute("required", "");
     $("newChannelMerchantPrivateKey").required = true;
@@ -2515,6 +2564,7 @@
     $("newChannelGatewayUrl").value = "https://openapi.alipay.com/gateway.do";
     syncChannelCallbackUrls();
     syncDirectChannelField();
+    syncCredentialModeFields();
   }
 
   function openCreateChannelModal() {
@@ -2541,9 +2591,13 @@
     $("newChannelProvider").disabled = true;
     $("newChannelProvider").setAttribute("disabled", "");
     $("newChannelAppId").value = channel.appId || "";
+    $("newChannelCredentialMode").value = channel.credentialMode || "PUBLIC_KEY";
     $("newChannelSubMerchantId").value = channel.subMerchantId || "";
     $("newChannelPayMin").value = channel.payMin ?? "";
     $("newChannelPayMax").value = channel.payMax ?? "";
+    $("newChannelAppCertSn").value = channel.appCertSn || "";
+    $("newChannelAlipayCertSn").value = channel.alipayCertSn || "";
+    $("newChannelAlipayRootCertSn").value = channel.alipayRootCertSn || "";
     $("newChannelGatewayUrl").value = channel.gatewayUrl || "https://openapi.alipay.com/gateway.do";
     syncChannelCallbackUrls();
     $("newChannelAlipayPublicKey").required = false;
@@ -2553,7 +2607,11 @@
     $("newChannelAlipayPublicKey").placeholder = channel.hasAlipayPublicKey ? "留空则不修改已配置公钥" : "未配置，请填写支付宝公钥";
     $("newChannelMerchantPrivateKey").placeholder = channel.hasMerchantPrivateKey ? "留空则不修改已配置私钥" : "未配置，请填写应用 RSA2 私钥";
     $("newChannelAppAuthToken").placeholder = channel.hasAppAuthToken ? "留空则不修改已配置授权 token" : "服务商/直付通授权 token，可留空";
+    $("newChannelAppCertContent").placeholder = channel.hasAppCertContent ? "留空则不修改已配置应用公钥证书" : "粘贴 appCertPublicKey.crt 内容";
+    $("newChannelAlipayCertContent").placeholder = channel.hasAlipayCertContent ? "留空则不修改已配置支付宝公钥证书" : "粘贴 alipayCertPublicKey_RSA2.crt 内容";
+    $("newChannelAlipayRootCertContent").placeholder = channel.hasAlipayRootCertContent ? "留空则不修改已配置支付宝根证书" : "粘贴 alipayRootCert.crt 内容";
     syncDirectChannelField();
+    syncCredentialModeFields();
     showChannelModal();
     $("newChannelAppId").focus();
   }
@@ -2566,7 +2624,11 @@
       payMax: amountField("newChannelPayMax"),
       gatewayUrl: $("newChannelGatewayUrl").value,
       appId: $("newChannelAppId").value,
+      credentialMode: $("newChannelCredentialMode").value,
       subMerchantId: $("newChannelSubMerchantId").value,
+      appCertSn: $("newChannelAppCertSn").value.trim(),
+      alipayCertSn: $("newChannelAlipayCertSn").value.trim(),
+      alipayRootCertSn: $("newChannelAlipayRootCertSn").value.trim(),
       notifyUrl: $("newChannelNotifyUrl").value,
       returnUrl: $("newChannelReturnUrl").value
     });
@@ -2581,9 +2643,15 @@
     const merchantPrivateKey = $("newChannelMerchantPrivateKey").value.trim();
     const alipayPublicKey = $("newChannelAlipayPublicKey").value.trim();
     const appAuthToken = $("newChannelAppAuthToken").value.trim();
+    const appCertContent = $("newChannelAppCertContent").value.trim();
+    const alipayCertContent = $("newChannelAlipayCertContent").value.trim();
+    const alipayRootCertContent = $("newChannelAlipayRootCertContent").value.trim();
     if (!editing || merchantPrivateKey) payload.merchantPrivateKey = merchantPrivateKey;
     if (!editing || alipayPublicKey) payload.alipayPublicKey = alipayPublicKey;
     if (!editing || appAuthToken) payload.appAuthToken = appAuthToken;
+    if (!editing || appCertContent) payload.appCertContent = appCertContent;
+    if (!editing || alipayCertContent) payload.alipayCertContent = alipayCertContent;
+    if (!editing || alipayRootCertContent) payload.alipayRootCertContent = alipayRootCertContent;
 
     return compact(payload);
   }
@@ -2972,6 +3040,8 @@
 
   $("newChannelProvider").addEventListener("change", syncDirectChannelField);
 
+  $("newChannelCredentialMode").addEventListener("change", syncCredentialModeFields);
+
   $("toggleAddChannelBtn").addEventListener("click", openCreateChannelModal);
 
   $("closeAddChannelBtn").addEventListener("click", closeChannelModal);
@@ -2987,6 +3057,7 @@
   });
 
   syncDirectChannelField();
+  syncCredentialModeFields();
   syncChannelCallbackUrls();
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
