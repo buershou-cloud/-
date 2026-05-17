@@ -45,9 +45,7 @@ public class DemoMerchantService {
 
     private DemoMerchantService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        if (databaseBacked()) {
-            seedDatabaseIfEmpty();
-        } else {
+        if (!databaseBacked()) {
             seedMemory();
         }
     }

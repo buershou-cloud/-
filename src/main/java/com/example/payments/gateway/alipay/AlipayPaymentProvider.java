@@ -149,7 +149,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         bizContent.put("product_code", productCode);
         String redirectHtml = client.pageForm(channel, method, bizContent, options(request));
-        String redirectUrl = client.pageUrl(channel, method, bizContent, options(request));
         return new GatewayResponse(
                 channel.getId(),
                 PaymentStatus.CREATED,
@@ -159,7 +158,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 null,
                 null,
                 redirectHtml,
-                redirectUrl,
+                null,
                 Map.of("method", method),
                 List.of()
         );

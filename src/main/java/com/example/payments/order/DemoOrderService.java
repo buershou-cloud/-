@@ -36,9 +36,7 @@ public class DemoOrderService {
 
     private DemoOrderService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        if (databaseBacked()) {
-            seedDatabaseIfEmpty();
-        } else {
+        if (!databaseBacked()) {
             seedMemory();
         }
     }

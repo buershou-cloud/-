@@ -177,6 +177,36 @@
       overflow-wrap: anywhere;
     }
 
+    .message {
+      margin: 16px 0 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+      color: var(--muted);
+      padding: 12px 14px;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.55;
+    }
+
+    .message.ok {
+      border-color: rgba(56, 176, 0, 0.25);
+      background: #f3ffe9;
+      color: var(--green);
+    }
+
+    .message.bad {
+      border-color: rgba(255, 77, 79, 0.25);
+      background: #fff2f0;
+      color: var(--red);
+    }
+
+    .message.loading {
+      border-color: rgba(22, 119, 255, 0.25);
+      background: #eef6ff;
+      color: var(--primary);
+    }
+
     .pay-panel {
       display: none;
       margin-top: 16px;
@@ -186,6 +216,51 @@
       padding: 18px;
       text-align: center;
       box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .continue-panel {
+      display: none;
+      margin-top: 16px;
+      border: 1px solid rgba(22, 119, 255, 0.22);
+      border-radius: 10px;
+      background: #f8fbff;
+      padding: 16px;
+      text-align: center;
+      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    }
+
+    .continue-panel.active {
+      display: grid;
+      gap: 10px;
+      justify-items: center;
+    }
+
+    .continue-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.6;
+    }
+
+    .continue-button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .payment-form-holder {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      opacity: 0;
+      pointer-events: none;
     }
 
     .pay-panel.active {
@@ -247,13 +322,18 @@
       <div class="mini"><span>通道类型</span><strong id="providerText">-</strong></div>
     </div>
   </section>
+  <div id="message" class="message">请输入金额后确认支付。</div>
+  <section id="continuePanel" class="continue-panel" aria-live="polite">
+    <p>如果没有自动打开支付宝，请点击按钮继续付款。</p>
+    <button id="continuePayButton" class="continue-button" type="button">打开支付宝付款</button>
+  </section>
   <section id="payPanel" class="pay-panel" aria-live="polite">
     <h2 id="payPanelTitle">支付宝付款二维码</h2>
     <img id="payQrImage" class="pay-qr" alt="支付宝付款二维码">
     <p id="payPanelHint">请使用支付宝扫码付款，付款完成后返回商户页面查看订单状态。</p>
   </section>
   <pre id="result" class="result">等待输入金额...</pre>
-  <div id="paymentFormHolder" hidden></div>
+  <div id="paymentFormHolder" class="payment-form-holder"></div>
 </main>
 
 <script>
@@ -302,6 +382,7 @@
   let currentChannel;
   let currentMerchant;
   let currentProduct;
+  let alipaySubmitForm;
 
   const $ = (id) => document.getElementById(id);
 
@@ -309,13 +390,40 @@
     return /AlipayClient|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
   }
 
-  function writeResult(value) {
+  function messageText(value) {
+    if (typeof value === "string") return value;
+    if (!value || typeof value !== "object") return String(value || "");
+    return value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
+  }
+
+  function setMessage(value, tone = "") {
+    const message = $("message");
+    message.textContent = messageText(value);
+    message.className = `message${tone ? ` ${tone}` : ""}`;
+  }
+
+  function writeResult(value, tone = "") {
     $("result").textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    setMessage(value, tone);
   }
 
   function hidePaymentQr() {
     $("payPanel").classList.remove("active");
     $("payQrImage").removeAttribute("src");
+  }
+
+  function hideContinuePanel() {
+    $("continuePanel").classList.remove("active");
+    alipaySubmitForm = null;
+    $("paymentFormHolder").innerHTML = "";
+  }
+
+  function submitAlipayForm() {
+    if (!alipaySubmitForm) {
+      return false;
+    }
+    alipaySubmitForm.submit();
+    return true;
   }
 
   function showPaymentQr(text, title, hint) {
@@ -390,7 +498,7 @@
 
     if (!currentProduct) {
       $("payButton").disabled = true;
-      writeResult({ code: "NO_PRODUCT", message: "当前通道没有可用于收银台的支付产品" });
+      writeResult({ code: "NO_PRODUCT", message: "当前通道没有可用于收银台的支付产品" }, "bad");
     } else {
       $("payButton").disabled = false;
     }
@@ -403,9 +511,11 @@
   $("cashierForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     hidePaymentQr();
+    hideContinuePanel();
+    const payButton = $("payButton");
     const amount = Number($("amount").value);
     if (!amount || amount < 0.01) {
-      writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" });
+      writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" }, "bad");
       return;
     }
     const extra = {
@@ -424,16 +534,27 @@
       timeoutExpress: "10m",
       extra
     };
+    const backQuery = channelId
+      ? `channelId=${encodeURIComponent(channelId)}`
+      : `merchantId=${encodeURIComponent(merchantId)}`;
+    payload.returnUrl = `${location.origin}/cashier.html?${backQuery}`;
+    payload.quitUrl = payload.returnUrl;
     if (currentChannel) {
       payload.channelIds = [currentChannel.id];
+      payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
     }
-    writeResult("正在发起支付...");
+    payButton.disabled = true;
+    writeResult("正在发起支付，请稍候...", "loading");
     try {
       const data = await request("/api/v1/payments/pay", {
         method: "POST",
         body: JSON.stringify(payload)
       });
-      writeResult(data);
+      const failed = data.status === "FAILED";
+      writeResult(data.message || "支付请求已创建", failed ? "bad" : "ok");
+      if (failed && !data.qrCode && !data.redirectUrl && !data.redirectHtml) {
+        return;
+      }
       if (data.qrCode) {
         showPaymentQr(
           data.qrCode,
@@ -451,17 +572,40 @@
           "请使用手机支付宝扫码继续付款。"
         );
       } else if (data.redirectHtml) {
+        writeResult("正在打开支付宝收银台...", "loading");
         const holder = $("paymentFormHolder");
         holder.innerHTML = data.redirectHtml;
         const form = holder.querySelector("form");
-        if (form) form.submit();
+        if (form) {
+          form.setAttribute("target", "_self");
+          alipaySubmitForm = form;
+          $("continuePanel").classList.add("active");
+          setTimeout(() => submitAlipayForm(), 60);
+          return;
+        }
+        document.open();
+        document.write(data.redirectHtml);
+        document.close();
+        return;
       }
     } catch (error) {
-      writeResult(error);
+      writeResult(error, "bad");
+    } finally {
+      payButton.disabled = false;
     }
   });
 
-  loadChannel().catch(writeResult);
+  loadChannel().then(() => {
+    if (currentProduct) {
+      setMessage(`当前支付产品：${productLabels[currentProduct] || currentProduct}`, "ok");
+    }
+  }).catch((error) => writeResult(error, "bad"));
+
+  $("continuePayButton").addEventListener("click", () => {
+    if (!submitAlipayForm()) {
+      writeResult({ code: "PAY_FORM_EXPIRED", message: "支付表单已失效，请重新发起支付" }, "bad");
+    }
+  });
 </script>
 </body>
 </html>

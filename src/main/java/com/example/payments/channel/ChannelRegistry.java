@@ -45,10 +45,6 @@ public class ChannelRegistry {
                 )));
         if (databaseBacked()) {
             loadFromDatabase();
-            if (channels.isEmpty()) {
-                properties.getChannels().forEach(this::insertChannel);
-                loadFromDatabase();
-            }
         }
     }
 

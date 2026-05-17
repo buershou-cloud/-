@@ -2413,11 +2413,11 @@
     const channel = state.channels.find((item) => item.id === channelId);
     if (channel?.provider === "ALIPAY_DIRECT" && !payload.subMerchantId?.trim()) {
       setConsole({ error: "支付宝直付通通道必须填写二级商户 SMID", channelId });
-      return;
+      return false;
     }
     if (!payload.products.length) {
       setConsole({ error: "请至少勾选一个支付产品", channelId });
-      return;
+      return false;
     }
     const data = await request(`/api/v1/channels/${channelId}`, {
       method: "PATCH",
@@ -2425,6 +2425,7 @@
     });
     setConsole(data);
     await loadChannels();
+    return true;
   }
 
   async function deleteChannel(channelId) {
@@ -2924,6 +2925,14 @@
     }
     await loadChannels();
     setConsole({ message: "全部通道已启用", channels: state.channels });
+  });
+
+  $("channelTableBody").addEventListener("change", async (event) => {
+    const product = event.target.closest("input[data-channel-product]");
+    if (product) {
+      const saved = await saveChannel(product.dataset.channelProduct);
+      if (!saved) await loadChannels();
+    }
   });
 
   $("channelTableBody").addEventListener("click", async (event) => {
