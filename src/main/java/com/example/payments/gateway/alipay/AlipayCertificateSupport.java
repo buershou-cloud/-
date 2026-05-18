@@ -4,7 +4,11 @@ import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.gateway.GatewayException;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -12,8 +16,10 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.HexFormat;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -25,6 +31,9 @@ final class AlipayCertificateSupport {
             "-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----",
             Pattern.DOTALL
     );
+    private static final String APP_CERT_FILE = "appCertPublicKey.crt";
+    private static final String ALIPAY_CERT_FILE = "alipayCertPublicKey_RSA2.crt";
+    private static final String ALIPAY_ROOT_CERT_FILE = "alipayRootCert.crt";
 
     private AlipayCertificateSupport() {
     }
@@ -33,12 +42,26 @@ final class AlipayCertificateSupport {
         return CERTIFICATE_MODE.equalsIgnoreCase(firstText(alipay.getCredentialMode(), PUBLIC_KEY_MODE));
     }
 
+    static boolean certificateMode(PaymentGatewayProperties.Channel channel) {
+        return certificateMode(channel.getAlipay());
+    }
+
     static String appCertSn(PaymentGatewayProperties.Alipay alipay) {
         return firstText(alipay.getAppCertSn(), certificateSn(alipay.getAppCertContent()).orElse(null));
     }
 
+    static String appCertSn(PaymentGatewayProperties.Channel channel) {
+        PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
+        return firstText(alipay.getAppCertSn(), certificateSn(appCertContent(channel)).orElse(null));
+    }
+
     static String alipayRootCertSn(PaymentGatewayProperties.Alipay alipay) {
         return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipay.getAlipayRootCertContent()).orElse(null));
+    }
+
+    static String alipayRootCertSn(PaymentGatewayProperties.Channel channel) {
+        PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
+        return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipayRootCertContent(channel)).orElse(null));
     }
 
     static String alipayPublicKey(PaymentGatewayProperties.Alipay alipay) {
@@ -46,6 +69,14 @@ final class AlipayCertificateSupport {
             return alipay.getAlipayPublicKey();
         }
         return publicKeyFromCertificate(alipay.getAlipayCertContent()).orElse(alipay.getAlipayPublicKey());
+    }
+
+    static String alipayPublicKey(PaymentGatewayProperties.Channel channel) {
+        PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
+        if (!certificateMode(alipay)) {
+            return alipay.getAlipayPublicKey();
+        }
+        return publicKeyFromCertificate(alipayCertContent(channel)).orElse(alipay.getAlipayPublicKey());
     }
 
     static Optional<String> certificateSn(String certificateContent) {
@@ -71,6 +102,56 @@ final class AlipayCertificateSupport {
     private static Optional<X509Certificate> firstCertificate(String certificateContent) {
         List<X509Certificate> certificates = certificates(certificateContent);
         return certificates.isEmpty() ? Optional.empty() : Optional.of(certificates.get(0));
+    }
+
+    private static String appCertContent(PaymentGatewayProperties.Channel channel) {
+        return firstText(channel.getAlipay().getAppCertContent(), certFile(channel, APP_CERT_FILE));
+    }
+
+    private static String alipayCertContent(PaymentGatewayProperties.Channel channel) {
+        return firstText(channel.getAlipay().getAlipayCertContent(), certFile(channel, ALIPAY_CERT_FILE));
+    }
+
+    private static String alipayRootCertContent(PaymentGatewayProperties.Channel channel) {
+        return firstText(channel.getAlipay().getAlipayRootCertContent(), certFile(channel, ALIPAY_ROOT_CERT_FILE));
+    }
+
+    private static String certFile(PaymentGatewayProperties.Channel channel, String fileName) {
+        for (Path root : certRoots()) {
+            Path path = root.resolve(channel.getId()).resolve(fileName);
+            if (Files.isRegularFile(path)) {
+                return readString(path);
+            }
+        }
+        return null;
+    }
+
+    private static Set<Path> certRoots() {
+        Set<Path> roots = new LinkedHashSet<>();
+        addRoot(roots, System.getProperty("payment.cert.dir"));
+        addRoot(roots, System.getenv("PAYMENT_CERT_DIR"));
+        addRoot(roots, "certs");
+        addRoot(roots, Paths.get(System.getProperty("user.dir", ".")).resolve("certs").toString());
+        return roots;
+    }
+
+    private static void addRoot(Set<Path> roots, String value) {
+        if (isBlank(value)) {
+            return;
+        }
+        Path path = Paths.get(value.trim());
+        if (!path.isAbsolute()) {
+            path = Paths.get(System.getProperty("user.dir", ".")).resolve(path);
+        }
+        roots.add(path.normalize().toAbsolutePath());
+    }
+
+    private static String readString(Path path) {
+        try {
+            return Files.readString(path, StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new GatewayException("ALIPAY_CERTIFICATE_FILE_ERROR", "Failed to read Alipay certificate file: " + path, ex);
+        }
     }
 
     private static List<X509Certificate> certificates(String certificateContent) {

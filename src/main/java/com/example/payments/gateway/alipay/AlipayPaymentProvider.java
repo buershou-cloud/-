@@ -245,6 +245,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
             case ALIPAY_WAP,
                  ALIPAY_PAGE,
                  ALIPAY_JSAPI,
+                 ALIPAY_PREAUTH,
                  ALIPAY_DIRECT_WAP,
                  ALIPAY_DIRECT_PAGE,
                  ALIPAY_DIRECT_JSAPI -> true;
@@ -255,6 +256,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static void removeInternalExtras(Map<String, Object> bizContent) {
         bizContent.remove("cashier");
         bizContent.remove("cashierDesktopQr");
+        bizContent.remove("cashierMobileDirect");
+        bizContent.remove("cashierOriginalProduct");
         bizContent.remove("merchantId");
         bizContent.remove("merchantName");
     }

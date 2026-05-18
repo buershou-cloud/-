@@ -710,6 +710,36 @@
       font-weight: 650;
     }
 
+    .cert-file-note {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      min-height: auto;
+      padding: 12px 14px;
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      background: #f8fbff;
+      color: #475569;
+      font-size: 13px;
+      font-weight: 650;
+      line-height: 1.55;
+    }
+
+    .cert-file-note strong {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .cert-file-note code {
+      color: var(--primary);
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-weight: 800;
+    }
+
+    .cert-file-note.hidden {
+      display: none;
+    }
+
     .add-channel-form input[type="checkbox"] {
       width: 14px;
       min-height: 14px;
@@ -1512,12 +1542,20 @@
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
           <label class="wide public-key-field">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥"></textarea></label>
           <label class="wide">应用私钥<textarea id="newChannelMerchantPrivateKey" required placeholder="应用 RSA2 私钥"></textarea></label>
-          <label class="cert-mode-field hidden">应用公钥证书 SN<input id="newChannelAppCertSn" placeholder="可留空，粘贴证书内容时自动计算"></label>
-          <label class="cert-mode-field hidden">支付宝公钥证书 SN<input id="newChannelAlipayCertSn" placeholder="可留空，粘贴证书内容时自动计算"></label>
-          <label class="wide cert-mode-field hidden">应用公钥证书内容<textarea id="newChannelAppCertContent" placeholder="-----BEGIN CERTIFICATE----- ..."></textarea></label>
-          <label class="wide cert-mode-field hidden">支付宝公钥证书内容<textarea id="newChannelAlipayCertContent" placeholder="用于异步通知验签，可粘贴 alipayCertPublicKey_RSA2.crt 内容"></textarea></label>
-          <label class="wide cert-mode-field hidden">支付宝根证书 SN<input id="newChannelAlipayRootCertSn" placeholder="可留空，粘贴根证书内容时自动计算"></label>
-          <label class="wide cert-mode-field hidden">支付宝根证书内容<textarea id="newChannelAlipayRootCertContent" placeholder="alipayRootCert.crt 内容"></textarea></label>
+          <label class="cert-mode-field hidden">应用公钥证书 SN<input id="newChannelAppCertSn" placeholder="可留空，系统会从证书文件自动计算"></label>
+          <label class="cert-mode-field hidden">支付宝公钥证书 SN<input id="newChannelAlipayCertSn" placeholder="可留空，通知验签会读取证书文件"></label>
+          <label class="wide cert-mode-field hidden">支付宝根证书 SN<input id="newChannelAlipayRootCertSn" placeholder="可留空，系统会从根证书自动计算"></label>
+          <div class="wide cert-mode-field cert-file-note hidden">
+            <strong>证书文件放置方式</strong>
+            <span>把 3 个 crt 文件上传到服务器项目目录下的 <code>certs/通道编号/</code> 文件夹：</span>
+            <code>appCertPublicKey.crt</code>
+            <code>alipayCertPublicKey_RSA2.crt</code>
+            <code>alipayRootCert.crt</code>
+            <span>例如通道编号是 <code>ali-main</code>，目录就是 <code>certs/ali-main/</code>。</span>
+          </div>
+          <input id="newChannelAppCertContent" type="hidden">
+          <input id="newChannelAlipayCertContent" type="hidden">
+          <input id="newChannelAlipayRootCertContent" type="hidden">
           <label>App Auth Token<input id="newChannelAppAuthToken" placeholder="服务商/直付通授权 token，可留空"></label>
           <label>网关地址<input id="newChannelGatewayUrl" value="https://openapi.alipay.com/gateway.do"></label>
           <label>异步通知地址<input id="newChannelNotifyUrl" readonly placeholder="根据当前域名自动生成"></label>
@@ -2334,9 +2372,9 @@
       `<span class="mini">${channel.hasMerchantPrivateKey ? "私钥已配" : "缺私钥"}</span>`
     ];
     if (channel.credentialMode === "CERTIFICATE") {
-      tags.push(`<span class="mini">${channel.appCertSn || channel.hasAppCertContent ? "应用证书已配" : "缺应用证书"}</span>`);
-      tags.push(`<span class="mini">${channel.alipayRootCertSn || channel.hasAlipayRootCertContent ? "根证书已配" : "缺根证书"}</span>`);
-      tags.push(`<span class="mini">${channel.hasAlipayCertContent ? "支付宝证书已配" : "缺支付宝证书"}</span>`);
+      tags.push(`<span class="mini">证书文件模式</span>`);
+      tags.push(`<span class="mini">${channel.appCertSn ? "应用SN已填" : "应用SN自动读取"}</span>`);
+      tags.push(`<span class="mini">${channel.alipayRootCertSn ? "根证书SN已填" : "根证书SN自动读取"}</span>`);
     } else {
       tags.push(`<span class="mini">${channel.hasAlipayPublicKey ? "公钥已配" : "缺公钥"}</span>`);
     }
@@ -2473,7 +2511,7 @@
     const url = cashierUrl(channelId);
     $("qrTitle").textContent = `${channelId} 收银台二维码`;
     $("qrLink").textContent = url;
-    $("qrImage").src = `/api/v1/channels/${encodeURIComponent(channelId)}/cashier-qr?t=${Date.now()}`;
+    $("qrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(url)}&t=${Date.now()}`;
     $("qrModal").classList.remove("hidden");
   }
 
@@ -2506,7 +2544,7 @@
       $("newChannelAlipayPublicKey").removeAttribute("required");
     }
     $("newChannelAlipayPublicKey").placeholder = certificateMode
-      ? "证书模式不使用普通支付宝公钥，请填写支付宝公钥证书"
+      ? "证书模式会读取 certs/通道编号/ 下的 3 个 crt 文件"
       : (editing ? "留空则不修改已配置支付宝公钥" : "支付宝开放平台 RSA2 支付宝公钥");
   }
 
@@ -2556,7 +2594,7 @@
     $("newChannelAlipayPublicKey").setAttribute("required", "");
     $("newChannelMerchantPrivateKey").required = true;
     $("newChannelMerchantPrivateKey").setAttribute("required", "");
-    $("newChannelAlipayPublicKey").placeholder = "支付宝公钥或证书公钥内容";
+    $("newChannelAlipayPublicKey").placeholder = "支付宝开放平台 RSA2 支付宝公钥";
     $("newChannelMerchantPrivateKey").placeholder = "应用 RSA2 私钥";
     $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
     $("newChannelPayMin").value = "0.01";
@@ -2607,9 +2645,6 @@
     $("newChannelAlipayPublicKey").placeholder = channel.hasAlipayPublicKey ? "留空则不修改已配置公钥" : "未配置，请填写支付宝公钥";
     $("newChannelMerchantPrivateKey").placeholder = channel.hasMerchantPrivateKey ? "留空则不修改已配置私钥" : "未配置，请填写应用 RSA2 私钥";
     $("newChannelAppAuthToken").placeholder = channel.hasAppAuthToken ? "留空则不修改已配置授权 token" : "服务商/直付通授权 token，可留空";
-    $("newChannelAppCertContent").placeholder = channel.hasAppCertContent ? "留空则不修改已配置应用公钥证书" : "粘贴 appCertPublicKey.crt 内容";
-    $("newChannelAlipayCertContent").placeholder = channel.hasAlipayCertContent ? "留空则不修改已配置支付宝公钥证书" : "粘贴 alipayCertPublicKey_RSA2.crt 内容";
-    $("newChannelAlipayRootCertContent").placeholder = channel.hasAlipayRootCertContent ? "留空则不修改已配置支付宝根证书" : "粘贴 alipayRootCert.crt 内容";
     syncDirectChannelField();
     syncCredentialModeFields();
     showChannelModal();
@@ -2643,15 +2678,9 @@
     const merchantPrivateKey = $("newChannelMerchantPrivateKey").value.trim();
     const alipayPublicKey = $("newChannelAlipayPublicKey").value.trim();
     const appAuthToken = $("newChannelAppAuthToken").value.trim();
-    const appCertContent = $("newChannelAppCertContent").value.trim();
-    const alipayCertContent = $("newChannelAlipayCertContent").value.trim();
-    const alipayRootCertContent = $("newChannelAlipayRootCertContent").value.trim();
     if (!editing || merchantPrivateKey) payload.merchantPrivateKey = merchantPrivateKey;
     if (!editing || alipayPublicKey) payload.alipayPublicKey = alipayPublicKey;
     if (!editing || appAuthToken) payload.appAuthToken = appAuthToken;
-    if (!editing || appCertContent) payload.appCertContent = appCertContent;
-    if (!editing || alipayCertContent) payload.alipayCertContent = alipayCertContent;
-    if (!editing || alipayRootCertContent) payload.alipayRootCertContent = alipayRootCertContent;
 
     return compact(payload);
   }

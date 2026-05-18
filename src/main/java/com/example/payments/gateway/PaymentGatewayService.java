@@ -57,14 +57,15 @@ public class PaymentGatewayService {
 
     public GatewayResponse pay(PayCreateRequest request) {
         MerchantRouting merchantRouting = merchantRouting(request);
+        PayCreateRequest effectiveRequest = cashierMobileEffectiveRequest(request);
         GatewayResponse response = execute(
                 request.product(),
                 channelIds(request.channelIds(), merchantRouting),
                 request.totalAmount(),
                 routingMode(request.routingMode(), merchantRouting),
-                channel -> provider(channel).pay(channel, request)
+                channel -> provider(channel).pay(channel, effectiveRequest)
         );
-        recordOrder(request, response);
+        recordOrder(effectiveRequest, response);
         return response;
     }
 
@@ -261,6 +262,56 @@ public class PaymentGatewayService {
             throw new GatewayException("UNSUPPORTED_PROVIDER", "Unsupported provider: " + channel.getProvider());
         }
         return provider;
+    }
+
+    private static PayCreateRequest cashierMobileEffectiveRequest(PayCreateRequest request) {
+        if (!extraBoolean(request.extra(), "cashierMobileDirect")) {
+            return request;
+        }
+        PaymentProduct product = mobileDirectProduct(request.product());
+        if (product == request.product()) {
+            return request;
+        }
+        Map<String, Object> extra = new LinkedHashMap<>();
+        if (request.extra() != null) {
+            extra.putAll(request.extra());
+        }
+        extra.put("cashierOriginalProduct", request.product().name());
+        return new PayCreateRequest(
+                product,
+                request.outTradeNo(),
+                request.subject(),
+                request.totalAmount(),
+                request.authCode(),
+                request.buyerId(),
+                request.buyerOpenId(),
+                request.quitUrl(),
+                request.timeoutExpress(),
+                request.notifyUrl(),
+                request.returnUrl(),
+                request.appAuthToken(),
+                request.routingMode(),
+                request.channelIds(),
+                Map.copyOf(extra),
+                request.settleInfo(),
+                request.royaltyInfo()
+        );
+    }
+
+    private static PaymentProduct mobileDirectProduct(PaymentProduct product) {
+        return switch (product) {
+            case ALIPAY_PAGE, ALIPAY_JSAPI, ALIPAY_PREAUTH -> PaymentProduct.ALIPAY_WAP;
+            case ALIPAY_DIRECT_PAGE, ALIPAY_DIRECT_JSAPI -> PaymentProduct.ALIPAY_DIRECT_WAP;
+            default -> product;
+        };
+    }
+
+    private static boolean extraBoolean(Map<String, Object> extra, String key) {
+        Object value = extra == null ? null : extra.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+        return value != null && Boolean.parseBoolean(String.valueOf(value));
     }
 
     private void recordOrder(PayCreateRequest request, GatewayResponse response) {
