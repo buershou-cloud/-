@@ -30,7 +30,7 @@
     }
 
     .login-card {
-      width: min(440px, calc(100vw - 32px));
+      width: min(520px, calc(100vw - 32px));
       border: 1px solid var(--line);
       border-radius: 10px;
       background: var(--panel);
@@ -110,14 +110,6 @@
       font-weight: 800;
     }
 
-    .verify-refresh {
-      border: 0;
-      background: transparent;
-      color: var(--primary);
-      font-weight: 900;
-      cursor: pointer;
-    }
-
     .verify-box {
       margin-bottom: 16px;
       border: 1px solid var(--line);
@@ -126,39 +118,143 @@
       background: #f8fbff;
     }
 
+    .verify-actions {
+      display: inline-flex;
+      gap: 8px;
+    }
+
+    .verify-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 1px solid rgba(255, 255, 255, 0.34);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.16);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 900;
+      cursor: pointer;
+      text-shadow: 0 1px 2px rgba(15, 23, 42, 0.36);
+    }
+
+    .puzzle-stage {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 2 / 1;
+      min-height: 180px;
+      overflow: hidden;
+      border-radius: 4px;
+      background: #e7eef8;
+      user-select: none;
+    }
+
     .verify-image {
       width: 100%;
-      height: 120px;
+      height: 100%;
       display: block;
-      border-radius: 8px;
-      background: #eef6ff;
       object-fit: cover;
     }
 
-    .verify-row {
-      display: grid;
-      grid-template-columns: 1fr 54px;
-      gap: 10px;
+    .verify-piece {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 64px;
+      height: 64px;
+      filter: drop-shadow(0 8px 10px rgba(15, 23, 42, 0.24));
+      pointer-events: none;
+      will-change: left, top, width, height;
+    }
+
+    .stage-actions {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: inline-flex;
+      gap: 8px;
+      padding: 4px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.18);
+      backdrop-filter: blur(8px);
+    }
+
+    .verify-track {
+      position: relative;
+      height: 48px;
       align-items: center;
-      margin-top: 10px;
+      justify-content: center;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #f8fafc;
+      color: #172554;
+      font-size: 16px;
+      font-weight: 700;
+      overflow: hidden;
+      display: flex;
+      touch-action: none;
+      user-select: none;
     }
 
-    input[type="range"] {
-      min-height: 32px;
-      padding: 0;
-      accent-color: var(--primary);
-      box-shadow: none;
+    .verify-track::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: var(--verify-progress, 0px);
+      background: rgba(22, 119, 255, 0.12);
+      transition: background 0.2s ease;
     }
 
-    .verify-value {
-      min-height: 32px;
+    .verify-track.verified {
+      border-color: rgba(34, 197, 94, 0.5);
+      color: #15803d;
+    }
+
+    .verify-track.verified::before {
+      background: rgba(34, 197, 94, 0.13);
+    }
+
+    .verify-handle {
+      position: absolute;
+      left: 0;
+      top: -1px;
+      z-index: 2;
       display: grid;
       place-items: center;
-      border-radius: 7px;
-      background: #eaf3ff;
-      color: var(--primary);
-      font-size: 13px;
+      width: 62px;
+      height: 48px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fff;
+      color: #64748b;
+      font-size: 30px;
       font-weight: 900;
+      cursor: grab;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+      touch-action: none;
+      will-change: transform;
+    }
+
+    .verify-handle:active {
+      cursor: grabbing;
+    }
+
+    .verify-text {
+      position: relative;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    #verifySlider {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      min-height: 1px;
+      padding: 0;
+      border: 0;
+      opacity: 0;
+      pointer-events: none;
     }
 
     .btn {
@@ -210,12 +306,19 @@
       <div class="verify-box">
         <div class="verify-head">
           <span>图形验证</span>
-          <button id="refreshVerify" class="verify-refresh" type="button">换一张</button>
         </div>
-        <img id="verifyImage" class="verify-image" alt="图形验证">
-        <div class="verify-row">
-          <input id="verifySlider" type="range" min="36" max="284" value="36">
-          <div id="verifyValue" class="verify-value">36</div>
+        <div id="puzzleStage" class="puzzle-stage">
+          <img id="verifyImage" class="verify-image" alt="图形验证">
+          <img id="verifyPiece" class="verify-piece" alt="">
+          <div class="stage-actions">
+            <button class="verify-icon" type="button" title="拖动下方滑块，让拼图块对准缺口">?</button>
+            <button id="refreshVerify" class="verify-icon" type="button" title="换一张">↻</button>
+          </div>
+        </div>
+        <div id="verifyTrack" class="verify-track">
+          <button id="verifyHandle" class="verify-handle" type="button" aria-label="拖动滑块">→</button>
+          <span id="verifyText" class="verify-text">向右拖动滑块填充拼图</span>
+          <input id="verifySlider" type="range" min="16" max="400" value="16" aria-label="图形验证滑块">
         </div>
       </div>
       <button id="loginButton" class="btn" type="submit">登录后台</button>
@@ -225,6 +328,17 @@
   <script>
     const $ = (id) => document.getElementById(id);
     let challenge = null;
+    let sliderState = {
+      minX: 16,
+      maxX: 400,
+      imageWidth: 480,
+      pieceSize: 64,
+      pieceY: 82,
+      value: 16
+    };
+    let dragging = false;
+    let dragStartClientX = 0;
+    let dragStartValue = 0;
 
     async function request(path, options = {}) {
       const response = await fetch(path, {
@@ -244,13 +358,70 @@
       return data;
     }
 
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function setSliderValue(value, moved = false) {
+      const track = $("verifyTrack");
+      const handle = $("verifyHandle");
+      const stage = $("puzzleStage");
+      const slider = $("verifySlider");
+      const piece = $("verifyPiece");
+      const min = Number(sliderState.minX);
+      const max = Number(sliderState.maxX);
+      const next = clamp(Number(value), min, max);
+      const ratio = max === min ? 0 : (next - min) / (max - min);
+      const trackTravel = Math.max(0, track.clientWidth - handle.offsetWidth);
+      const handleX = ratio * trackTravel;
+      const stageScale = stage.clientWidth / Number(sliderState.imageWidth || 480);
+      const pieceSize = Number(sliderState.pieceSize || 64) * stageScale;
+      const pieceX = next * stageScale;
+      const pieceY = Number(sliderState.pieceY || 82) * stageScale;
+
+      sliderState.value = next;
+      slider.value = Math.round(next);
+      handle.style.transform = `translateX(${handleX}px)`;
+      track.style.setProperty("--verify-progress", `${handleX + handle.offsetWidth}px`);
+      piece.style.left = `${pieceX}px`;
+      piece.style.top = `${pieceY}px`;
+      piece.style.width = `${pieceSize}px`;
+      piece.style.height = `${pieceSize}px`;
+
+      if (moved && next > min + 2) {
+        track.classList.add("verified");
+        $("verifyText").textContent = "已拖动，点击登录完成验证";
+      } else {
+        track.classList.remove("verified");
+        $("verifyText").textContent = "向右拖动滑块填充拼图";
+      }
+    }
+
+    function sliderValueFromPointer(event) {
+      const track = $("verifyTrack");
+      const handle = $("verifyHandle");
+      const rect = track.getBoundingClientRect();
+      const trackTravel = Math.max(1, track.clientWidth - handle.offsetWidth);
+      const handleX = clamp(event.clientX - rect.left - handle.offsetWidth / 2, 0, trackTravel);
+      const ratio = handleX / trackTravel;
+      return sliderState.minX + ratio * (sliderState.maxX - sliderState.minX);
+    }
+
     async function loadChallenge() {
       challenge = await request("/api/v1/admin-auth/graphic-challenge");
       $("verifyImage").src = challenge.image;
+      $("verifyPiece").src = challenge.pieceImage || "";
       $("verifySlider").min = challenge.minX;
       $("verifySlider").max = challenge.maxX;
-      $("verifySlider").value = challenge.minX;
-      $("verifyValue").textContent = challenge.minX;
+      sliderState = {
+        minX: Number(challenge.minX),
+        maxX: Number(challenge.maxX),
+        imageWidth: Number(challenge.width || 480),
+        pieceSize: Number(challenge.pieceSize || 64),
+        pieceY: Number(challenge.pieceY || 82),
+        value: Number(challenge.minX)
+      };
+      requestAnimationFrame(() => setSliderValue(sliderState.minX));
     }
 
     request("/api/v1/admin-auth/session")
@@ -271,8 +442,45 @@
       });
     });
 
+    $("verifyHandle").addEventListener("pointerdown", (event) => {
+      dragging = true;
+      dragStartClientX = event.clientX;
+      dragStartValue = sliderState.value;
+      event.preventDefault();
+    });
+
+    $("verifyTrack").addEventListener("pointerdown", (event) => {
+      if (event.target === $("verifyHandle")) {
+        return;
+      }
+      setSliderValue(sliderValueFromPointer(event), true);
+      dragging = true;
+      dragStartClientX = event.clientX;
+      dragStartValue = sliderState.value;
+      event.preventDefault();
+    });
+
+    window.addEventListener("pointermove", (event) => {
+      if (!dragging) {
+        return;
+      }
+      const track = $("verifyTrack");
+      const handle = $("verifyHandle");
+      const trackTravel = Math.max(1, track.clientWidth - handle.offsetWidth);
+      const delta = (event.clientX - dragStartClientX) / trackTravel * (sliderState.maxX - sliderState.minX);
+      setSliderValue(dragStartValue + delta, true);
+    });
+
+    window.addEventListener("pointerup", () => {
+      dragging = false;
+    });
+
     $("verifySlider").addEventListener("input", () => {
-      $("verifyValue").textContent = $("verifySlider").value;
+      setSliderValue(Number($("verifySlider").value), true);
+    });
+
+    window.addEventListener("resize", () => {
+      setSliderValue(sliderState.value, sliderState.value > sliderState.minX + 2);
     });
 
     $("loginForm").addEventListener("submit", async (event) => {

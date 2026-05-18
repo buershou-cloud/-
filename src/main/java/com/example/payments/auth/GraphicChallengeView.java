@@ -6,6 +6,9 @@ public record GraphicChallengeView(
         int width,
         int height,
         int minX,
-        int maxX
+        int maxX,
+        String pieceImage,
+        int pieceY,
+        int pieceSize
 ) {
 }

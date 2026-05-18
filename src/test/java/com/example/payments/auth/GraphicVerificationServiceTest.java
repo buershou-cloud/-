@@ -2,34 +2,38 @@ package com.example.payments.auth;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpSession;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.lang.reflect.Method;
+import java.util.Enumeration;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class GraphicVerificationServiceTest {
 
     @Test
-    void verifiesSessionBoundGraphicChallengeOnce() {
+    void verifiesSessionBoundGraphicChallengeOnce() throws Exception {
         GraphicVerificationService service = new GraphicVerificationService();
         MockHttpServletRequest request = new MockHttpServletRequest();
 
         GraphicChallengeView challenge = service.createChallenge(request);
-        int targetX = targetX(challenge);
+        int targetX = targetX(request);
 
+        assertThat(challenge.image()).startsWith("data:image/png;base64,");
+        assertThat(challenge.pieceImage()).startsWith("data:image/png;base64,");
+        assertThat(challenge.pieceSize()).isGreaterThan(0);
         assertThat(service.verify(request, challenge.challengeId(), targetX)).isTrue();
         assertThat(service.verify(request, challenge.challengeId(), targetX)).isFalse();
     }
 
-    private static int targetX(GraphicChallengeView challenge) {
-        String prefix = "data:image/svg+xml;base64,";
-        assertThat(challenge.image()).startsWith(prefix);
-        String svg = new String(Base64.getDecoder().decode(challenge.image().substring(prefix.length())), StandardCharsets.UTF_8);
-        Matcher matcher = Pattern.compile("<circle cx=\"(\\d+)\"").matcher(svg);
-        assertThat(matcher.find()).isTrue();
-        return Integer.parseInt(matcher.group(1));
+    private static int targetX(MockHttpServletRequest request) throws Exception {
+        MockHttpSession session = (MockHttpSession) request.getSession(false);
+        assertThat(session).isNotNull();
+        Enumeration<String> names = session.getAttributeNames();
+        assertThat(names.hasMoreElements()).isTrue();
+        Object state = session.getAttribute(names.nextElement());
+        Method method = state.getClass().getDeclaredMethod("targetX");
+        method.setAccessible(true);
+        return (Integer) method.invoke(state);
     }
 }
