@@ -637,11 +637,7 @@
     }
   });
 
-  loadChannel().then(() => {
-    if (currentProduct) {
-      setMessage(`当前支付产品：${productLabels[currentProduct] || currentProduct}`, "ok");
-    }
-  }).catch((error) => writeResult(error, "bad"));
+  loadChannel().catch((error) => writeResult(error, "bad"));
 
   $("continuePayButton").addEventListener("click", () => {
     if (!submitAlipayForm()) {
