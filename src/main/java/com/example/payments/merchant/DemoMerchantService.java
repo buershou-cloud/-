@@ -199,19 +199,6 @@ public class DemoMerchantService {
     }
 
     private void seedMemory() {
-        seed(merchant("M10001", "绀轰緥鍟嗘埛A", new BigDecimal("0.60"), "姝ｅ父", new BigDecimal("6880.00")));
-        seed(merchant("M10002", "绀轰緥鍟嗘埛B", new BigDecimal("0.55"), "姝ｅ父", new BigDecimal("3210.00")));
-        seed(merchant("M10003", "绀轰緥鍟嗘埛C", new BigDecimal("0.65"), "寰呭鏍?", BigDecimal.ZERO));
-    }
-
-    private void seedDatabaseIfEmpty() {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchant", Integer.class);
-        if (count != null && count > 0) {
-            return;
-        }
-        insertMerchant(merchant("M10001", "示例商户A", new BigDecimal("0.60"), DEFAULT_STATUS, BigDecimal.ZERO));
-        insertMerchant(merchant("M10002", "示例商户B", new BigDecimal("0.55"), DEFAULT_STATUS, BigDecimal.ZERO));
-        insertMerchant(merchant("M10003", "示例商户C", new BigDecimal("0.65"), "待审核", BigDecimal.ZERO));
     }
 
     private List<DemoMerchant> loadMerchants() {

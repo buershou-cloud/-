@@ -20,6 +20,7 @@ import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.MerchantRouting;
+import com.example.payments.onboarding.OnboardingRecordService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -40,19 +41,22 @@ public class PaymentGatewayService {
     private final Map<String, PaymentProvider> providers;
     private final DemoOrderService orderService;
     private final DemoMerchantService merchantService;
+    private final OnboardingRecordService onboardingRecordService;
 
     public PaymentGatewayService(
             PaymentGatewayProperties properties,
             ChannelSelector channelSelector,
             List<PaymentProvider> providers,
             DemoOrderService orderService,
-            DemoMerchantService merchantService
+            DemoMerchantService merchantService,
+            OnboardingRecordService onboardingRecordService
     ) {
         this.properties = properties;
         this.channelSelector = channelSelector;
         this.providers = providers.stream().collect(Collectors.toMap(PaymentProvider::providerCode, Function.identity()));
         this.orderService = orderService;
         this.merchantService = merchantService;
+        this.onboardingRecordService = onboardingRecordService;
     }
 
     public GatewayResponse pay(PayCreateRequest request) {
@@ -191,7 +195,9 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse onboard(OnboardingRequest request) {
-        return execute(PaymentProduct.ALIPAY_DIRECT, request.channelIds(), null, null, channel -> provider(channel).onboard(channel, request));
+        GatewayResponse response = execute(PaymentProduct.ALIPAY_DIRECT, request.channelIds(), null, null, channel -> provider(channel).onboard(channel, request));
+        onboardingRecordService.record(request, response);
+        return response;
     }
 
     private GatewayResponse execute(

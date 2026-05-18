@@ -13,6 +13,7 @@ import com.example.payments.domain.ProfitSharingBatchResult;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
+import com.example.payments.onboarding.OnboardingRecordService;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
 @Validated
 @RestController
 @RequestMapping("/api/v1/payments")
@@ -29,13 +32,16 @@ public class PaymentController {
 
     private final PaymentGatewayService paymentGatewayService;
     private final ComplaintAutoQueryService complaintAutoQueryService;
+    private final OnboardingRecordService onboardingRecordService;
 
     public PaymentController(
             PaymentGatewayService paymentGatewayService,
-            ComplaintAutoQueryService complaintAutoQueryService
+            ComplaintAutoQueryService complaintAutoQueryService,
+            OnboardingRecordService onboardingRecordService
     ) {
         this.paymentGatewayService = paymentGatewayService;
         this.complaintAutoQueryService = complaintAutoQueryService;
+        this.onboardingRecordService = onboardingRecordService;
     }
 
     @PostMapping("/pay")
@@ -87,5 +93,10 @@ public class PaymentController {
     @PostMapping("/onboarding")
     public GatewayResponse onboard(@Valid @RequestBody OnboardingRequest request) {
         return paymentGatewayService.onboard(request);
+    }
+
+    @GetMapping("/onboarding")
+    public List<OnboardingRecordService.OnboardingRecordView> onboardingRecords() {
+        return onboardingRecordService.list();
     }
 }

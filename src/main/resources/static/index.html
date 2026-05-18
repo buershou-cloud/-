@@ -1289,23 +1289,23 @@
             <div class="panel-body">
               <form id="onboardForm">
                 <div class="form-grid">
-                  <label>外部商户编号 external_id<input id="onboardOutBizNo" value="105290059990194"></label>
+                  <label>外部商户编号 external_id<input id="onboardOutBizNo"></label>
                   <label>接口方法<input id="onboardMethod" value="ant.merchant.expand.indirect.zft.simplecreate"></label>
                   <label>App Auth Token<input id="onboardAppAuthToken"></label>
                   <label class="wide">指定通道<span id="onboardChannelChecks" class="checks"></span></label>
-                  <label>收银台显示名称<input id="onboardAliasName" value="演示门店"></label>
-                  <label>联系人姓名<input id="onboardContactName" value="张三"></label>
-                  <label>联系人手机号<input id="onboardContactMobile" value="13888888888"></label>
+                  <label>收银台显示名称<input id="onboardAliasName"></label>
+                  <label>联系人姓名<input id="onboardContactName"></label>
+                  <label>联系人手机号<input id="onboardContactMobile"></label>
                   <label>结算方式
                     <select id="onboardSettleType">
                       <option value="alipayAccount">支付宝账号</option>
                       <option value="bankCard">银行卡</option>
                     </select>
                   </label>
-                  <label>默认结算账号<input id="onboardSettleTarget" value="merchant@example.com" placeholder="支付宝账号或银行卡结算目标"></label>
+                  <label>默认结算账号<input id="onboardSettleTarget" placeholder="支付宝账号或银行卡结算目标"></label>
                   <div class="field-label wide">申请开通服务
                     <span class="checks">
-                      <label class="check"><input name="onboardService" type="checkbox" value="当面付" checked>当面付</label>
+                      <label class="check"><input name="onboardService" type="checkbox" value="当面付">当面付</label>
                       <label class="check"><input name="onboardService" type="checkbox" value="jsapi支付">JSAPI支付</label>
                       <label class="check"><input name="onboardService" type="checkbox" value="app支付">APP支付</label>
                       <label class="check"><input name="onboardService" type="checkbox" value="wap支付">WAP支付</label>
@@ -1315,13 +1315,13 @@
                       <label class="check"><input name="onboardService" type="checkbox" value="订单码支付">订单码支付</label>
                     </span>
                   </div>
-                  <label>MCC 行业码<input id="onboardMcc" value="B0007" placeholder="例如 B0007"></label>
+                  <label>MCC 行业码<input id="onboardMcc" placeholder="例如 B0007"></label>
                 </div>
                 <div class="form-actions"><button class="btn" type="submit">提交进件</button></div>
               </form>
             </div>
           </section>
-          <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>时间</th></tr></thead><tbody><tr><td>ONBOARD202605120001</td><td>示例商户A</td><td><span class="status success">已通过</span></td><td>2026-05-12</td></tr><tr><td>ONBOARD202605130001</td><td>示例商户B</td><td><span class="status pending">审核中</span></td><td>2026-05-13</td></tr></tbody></table></div></div></section>
+          <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>时间</th></tr></thead><tbody id="onboardingRecordTableBody"></tbody></table></div></div></section>
         </div>
       </section>
 
@@ -1607,6 +1607,7 @@
     orderPage: 1,
     orderPageSize: 10,
     merchants: [],
+    onboardingRecords: [],
     complaintAuto: null,
     editingChannelId: null,
     editingMerchantId: null
@@ -1999,6 +2000,41 @@
     state.merchants = Array.isArray(data) ? data : data.value || [];
     renderMerchants();
     refreshSummaryViews();
+  }
+
+  async function loadOnboardingRecords() {
+    const data = await request("/api/v1/payments/onboarding");
+    state.onboardingRecords = Array.isArray(data) ? data : [];
+    renderOnboardingRecords();
+  }
+
+  function onboardingStatus(record) {
+    const status = record.status || "PENDING";
+    if (status === "SUCCESS") return { className: "success", label: "已通过" };
+    if (status === "FAILED") return { className: "refunded", label: "失败" };
+    if (status === "AUDITING") return { className: "pending", label: "审核中" };
+    return { className: "pending", label: "待提交" };
+  }
+
+  function renderOnboardingRecords() {
+    const tableBody = $("onboardingRecordTableBody");
+    if (!tableBody) return;
+    if (!state.onboardingRecords.length) {
+      tableBody.innerHTML = `<tr><td colspan="4" class="muted">暂无进件记录</td></tr>`;
+      return;
+    }
+    tableBody.innerHTML = state.onboardingRecords.map((record) => {
+      const status = onboardingStatus(record);
+      const createdAt = record.createdAt ? String(record.createdAt).slice(0, 10) : "-";
+      return `
+        <tr>
+          <td>${html(record.outBizNo || "-")}</td>
+          <td>${html(record.merchantName || "-")}</td>
+          <td><span class="status ${status.className}">${status.label}</span></td>
+          <td>${html(createdAt)}</td>
+        </tr>
+      `;
+    }).join("");
   }
 
   function renderMerchants() {
@@ -3082,6 +3118,7 @@
   $("onboardForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     await postAndShow("提交进件", "/api/v1/payments/onboarding", onboardPayload());
+    await loadOnboardingRecords();
   });
 
   $("complaintForm").addEventListener("submit", async (event) => {
@@ -3203,7 +3240,7 @@
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
   checkAdminSession()
-    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadComplaintAutoStatus()]))
+    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>

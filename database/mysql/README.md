@@ -8,15 +8,9 @@ This folder contains the MySQL schema for the payment gateway.
 mysql -uroot -p < database/mysql/payment_gateway_schema.sql
 ```
 
-The script creates database `payment_gateway`, all core tables, a merchant order summary view, and demo records for:
+The script creates database `payment_gateway`, all core tables, a merchant order summary view, and the complaint auto query config row. It does not insert demo channels, merchants, or orders.
 
-- channels: `ali-main`, `ali-backup`, `ali-direct`
-- merchants: `M10001`, `M10002`, `M10003`
-- channel product mappings
-- merchant channel mappings
-- complaint auto query config
-
-Demo keys in the SQL file are placeholders. Replace them in production.
+After import, add real channels and merchants from the admin pages.
 
 ## Spring Boot Startup
 
