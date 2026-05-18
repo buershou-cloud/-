@@ -1156,32 +1156,32 @@
             <div class="metric-icon blue">$</div>
             <div>
               <div class="metric-title">今日交易额</div>
-              <div class="metric-value">¥12,680.00</div>
-              <div class="metric-sub">48 笔</div>
+              <div class="metric-value" id="todayTradeAmount">¥0.00</div>
+              <div class="metric-sub" id="todayTradeCount">0 笔</div>
             </div>
           </article>
           <article class="metric-card">
             <div class="metric-icon green">✓</div>
             <div>
               <div class="metric-title">本月交易额</div>
-              <div class="metric-value">¥386,240.00</div>
-              <div class="metric-sub">1284 笔</div>
+              <div class="metric-value" id="monthTradeAmount">¥0.00</div>
+              <div class="metric-sub" id="monthTradeCount">0 笔</div>
             </div>
           </article>
           <article class="metric-card">
             <div class="metric-icon red">↺</div>
             <div>
               <div class="metric-title">今日退款额</div>
-              <div class="metric-value">¥320.00</div>
-              <div class="metric-sub">3 笔</div>
+              <div class="metric-value" id="todayRefundAmount">¥0.00</div>
+              <div class="metric-sub" id="todayRefundCount">0 笔</div>
             </div>
           </article>
           <article class="metric-card">
             <div class="metric-icon yellow">♙</div>
             <div>
               <div class="metric-title">商户总数</div>
-              <div class="metric-value">12</div>
-              <div class="metric-sub">10 个活跃</div>
+              <div class="metric-value" id="merchantTotal">0</div>
+              <div class="metric-sub" id="merchantActive">0 个活跃</div>
             </div>
           </article>
         </div>
@@ -1434,11 +1434,11 @@
           <div class="panel-head"><h2 class="panel-title">对账报表</h2><button class="btn secondary">导出 CSV</button></div>
           <div class="panel-body">
             <div class="stat-row">
-              <div class="small-stat"><span>应结算</span><strong>¥88,420.00</strong></div>
-              <div class="small-stat"><span>手续费</span><strong>¥530.52</strong></div>
-              <div class="small-stat"><span>差错单</span><strong>0</strong></div>
+              <div class="small-stat"><span>应结算</span><strong id="reportReceivable">¥0.00</strong></div>
+              <div class="small-stat"><span>手续费</span><strong id="reportFee">¥0.00</strong></div>
+              <div class="small-stat"><span>差错单</span><strong id="reportMismatch">0</strong></div>
             </div>
-            <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>日期</th><th>支付笔数</th><th>支付金额</th><th>退款金额</th><th>结算状态</th></tr></thead><tbody><tr><td>2026-05-13</td><td>48</td><td>¥12,680.00</td><td>¥320.00</td><td><span class="status pending">待结算</span></td></tr><tr><td>2026-05-12</td><td>61</td><td>¥18,906.50</td><td>¥0.00</td><td><span class="status success">已结算</span></td></tr></tbody></table></div>
+            <div class="table-wrap" style="margin-top:18px"><table><thead><tr><th>日期</th><th>支付笔数</th><th>支付金额</th><th>退款金额</th><th>结算状态</th></tr></thead><tbody id="reportRows"></tbody></table></div>
           </div>
         </section>
       </section>
@@ -1648,6 +1648,13 @@
   ];
   const $ = (id) => document.getElementById(id);
 
+  function setText(id, value) {
+    const element = $(id);
+    if (element) {
+      element.textContent = value;
+    }
+  }
+
   function json(value) {
     return JSON.stringify(value, null, 2);
   }
@@ -1825,6 +1832,108 @@
       .reduce((total, order) => total + Number(order.amount || 0), 0);
   }
 
+  function localDateText(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function localMonthText(date = new Date()) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}`;
+  }
+
+  function orderDate(order) {
+    return String(order.createdAt || "").slice(0, 10);
+  }
+
+  function merchantFeeRate(merchantId) {
+    const merchant = state.merchants.find((item) => item.merchantId === merchantId);
+    return Number(merchant?.feeRate || 0);
+  }
+
+  function orderFee(order) {
+    return Number(order.amount || 0) * merchantFeeRate(order.merchantId) / 100;
+  }
+
+  function refreshSummaryViews() {
+    renderDashboardMetrics();
+    renderReports();
+  }
+
+  function renderDashboardMetrics() {
+    const today = localDateText();
+    const month = localMonthText();
+    const todayCompleted = state.orders.filter((order) => order.status === "COMPLETED" && orderDate(order) === today);
+    const monthCompleted = state.orders.filter((order) => order.status === "COMPLETED" && orderDate(order).startsWith(month));
+    const todayRefunded = state.orders.filter((order) => order.status === "REFUNDED" && orderDate(order) === today);
+    const activeMerchants = state.merchants.filter((merchant) => merchant.status !== "停用");
+
+    setText("todayTradeAmount", money(sumAmounts(todayCompleted, () => true)));
+    setText("todayTradeCount", `${todayCompleted.length} 笔`);
+    setText("monthTradeAmount", money(sumAmounts(monthCompleted, () => true)));
+    setText("monthTradeCount", `${monthCompleted.length} 笔`);
+    setText("todayRefundAmount", money(sumAmounts(todayRefunded, () => true)));
+    setText("todayRefundCount", `${todayRefunded.length} 笔`);
+    setText("merchantTotal", String(state.merchants.length));
+    setText("merchantActive", `${activeMerchants.length} 个活跃`);
+  }
+
+  function renderReports() {
+    const completedOrders = state.orders.filter((order) => order.status === "COMPLETED");
+    const refundedOrders = state.orders.filter((order) => order.status === "REFUNDED");
+    const completedAmount = sumAmounts(completedOrders, () => true);
+    const refundedAmount = sumAmounts(refundedOrders, () => true);
+    const feeAmount = completedOrders.reduce((total, order) => total + orderFee(order), 0);
+    const rowsByDate = new Map();
+
+    state.orders.forEach((order) => {
+      const date = orderDate(order);
+      if (!date) return;
+      if (!rowsByDate.has(date)) {
+        rowsByDate.set(date, { date, count: 0, payAmount: 0, refundAmount: 0 });
+      }
+      const row = rowsByDate.get(date);
+      if (order.status === "COMPLETED") {
+        row.count += 1;
+        row.payAmount += Number(order.amount || 0);
+      }
+      if (order.status === "REFUNDED") {
+        row.refundAmount += Number(order.amount || 0);
+      }
+    });
+
+    setText("reportReceivable", money(Math.max(completedAmount - refundedAmount - feeAmount, 0)));
+    setText("reportFee", money(feeAmount));
+    setText("reportMismatch", "0");
+
+    const reportRows = $("reportRows");
+    if (!reportRows) return;
+    const rows = Array.from(rowsByDate.values())
+      .filter((row) => row.count > 0 || row.refundAmount > 0)
+      .sort((left, right) => right.date.localeCompare(left.date));
+
+    if (!rows.length) {
+      reportRows.innerHTML = '<tr><td colspan="5" class="muted">暂无对账数据</td></tr>';
+      return;
+    }
+
+    reportRows.innerHTML = rows.map((row, index) => {
+      const settled = index > 0;
+      return `
+        <tr>
+          <td>${html(row.date)}</td>
+          <td>${row.count}</td>
+          <td>${money(row.payAmount)}</td>
+          <td>${money(row.refundAmount)}</td>
+          <td><span class="status ${settled ? "success" : "pending"}">${settled ? "已结算" : "待结算"}</span></td>
+        </tr>
+      `;
+    }).join("");
+  }
+
   function checkedChannels(target) {
     return Array.from(document.querySelectorAll(`#${target} input:checked`)).map((input) => input.value);
   }
@@ -1882,12 +1991,14 @@
     }
     renderOrders();
     renderProfitShareOrders();
+    refreshSummaryViews();
   }
 
   async function loadMerchants() {
     const data = await request("/api/v1/merchants");
     state.merchants = Array.isArray(data) ? data : data.value || [];
     renderMerchants();
+    refreshSummaryViews();
   }
 
   function renderMerchants() {

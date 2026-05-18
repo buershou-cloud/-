@@ -36,9 +36,6 @@ public class DemoOrderService {
 
     private DemoOrderService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
-        if (!databaseBacked()) {
-            seedMemory();
-        }
     }
 
     public synchronized List<DemoOrderView> recent() {
@@ -308,49 +305,6 @@ public class DemoOrderService {
         return jdbcTemplate != null;
     }
 
-    private void seedMemory() {
-        seed("P20260513171209", "2026051322001419760501299821", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "PC缃戦〉", "1280.00", DemoOrderStatus.COMPLETED, "2026-05-13 17:12:09", false);
-        seed("P20260513165422", "2026051322001419760501298750", "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "WAP鎵嬫満", "99.90", DemoOrderStatus.COMPLETED, "2026-05-13 16:54:22", false);
-        seed("P20260513163018", "2026051322001419760501297618", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "璁㈠崟鐮?", "860.00", DemoOrderStatus.COMPLETED, "2026-05-13 16:30:18", false);
-        seed("P20260513161504", null, "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "JSAPI", "46.00", DemoOrderStatus.UNPAID, "2026-05-13 16:15:04", false);
-        seed("P20260513155237", "2026051322001419760501295537", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "鐩翠粯閫歅C缃戦〉", "3200.00", DemoOrderStatus.COMPLETED, "2026-05-13 15:52:37", false);
-        seed("P20260513152012", "2026051322001419760501294212", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "鐩翠粯閫歐AP鎵嬫満", "618.00", DemoOrderStatus.COMPLETED, "2026-05-13 15:20:12", false);
-        seed("P20260513144833", "2026051322001419760501292833", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "褰撻潰浠?", "75.50", DemoOrderStatus.REFUNDED, "2026-05-13 14:48:33", false);
-        seed("AUTH20260513143001", "AUTH20260513143001", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "棰勬巿鏉?", "1200.00", DemoOrderStatus.FROZEN, "2026-05-13 14:30:01", true);
-        seed("P20260513135821", "2026051322001419760501290821", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "JSAPI", "38.80", DemoOrderStatus.COMPLETED, "2026-05-13 13:58:21", false);
-        seed("P20260513132210", null, "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "PC缃戦〉", "216.00", DemoOrderStatus.UNPAID, "2026-05-13 13:22:10", false);
-        seed("P20260513114607", "2026051322001419760501287607", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "鐩翠粯閫氳鍗曠爜", "188.00", DemoOrderStatus.COMPLETED, "2026-05-13 11:46:07", false);
-        seed("P20260513102056", "2026051322001419760501286056", "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "褰撻潰浠?", "430.00", DemoOrderStatus.COMPLETED, "2026-05-13 10:20:56", false);
-        seed("P20260512172045", "2026051222001419760501267045", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "WAP鎵嬫満", "536.00", DemoOrderStatus.COMPLETED, "2026-05-12 17:20:45", false);
-        seed("P20260512163820", "2026051222001419760501263820", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "鐩翠粯閫欽SAPI", "266.00", DemoOrderStatus.REFUNDED, "2026-05-12 16:38:20", false);
-        seed("P20260512160212", "2026051222001419760501260212", "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "璁㈠崟鐮?", "720.00", DemoOrderStatus.COMPLETED, "2026-05-12 16:02:12", false);
-        seed("P20260512153040", "2026051222001419760501253040", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "APP鏀粯", "158.00", DemoOrderStatus.COMPLETED, "2026-05-12 15:30:40", false);
-        seed("P20260512143001", "2026051222001419760501234567", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "PC缃戦〉", "299.00", DemoOrderStatus.COMPLETED, "2026-05-12 14:30:01", false);
-        seed("P20260512142830", null, "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "WAP鎵嬫満", "88.00", DemoOrderStatus.UNPAID, "2026-05-12 14:28:30", false);
-        seed("P20260512141205", "2026051222001419760501234501", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "褰撻潰浠?", "156.50", DemoOrderStatus.REFUNDED, "2026-05-12 14:12:05", false);
-        seed("AUTH20260512140530", null, "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "棰勬巿鏉?", "980.00", DemoOrderStatus.FROZEN, "2026-05-12 14:05:30", true);
-        seed("P20260511190511", "2026051122001419760501190511", "ali-main", "M10001", "绀轰緥鍟嗘埛A", "璁㈠崟鐮?", "458.00", DemoOrderStatus.COMPLETED, "2026-05-11 19:05:11", false);
-        seed("P20260511183008", "2026051122001419760501183008", "ali-backup", "M10002", "绀轰緥鍟嗘埛B", "PC缃戦〉", "1024.00", DemoOrderStatus.COMPLETED, "2026-05-11 18:30:08", false);
-        seed("P20260511170633", "2026051122001419760501170633", "ali-direct", "M10003", "绀轰緥鍟嗘埛C", "鐩翠粯閫氬綋闈粯", "89.90", DemoOrderStatus.COMPLETED, "2026-05-11 17:06:33", false);
-    }
-
-    private void seedDatabaseIfEmpty() {
-        Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pay_order", Integer.class);
-        if (count != null && count > 0) {
-            return;
-        }
-        Integer merchants = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM merchant", Integer.class);
-        Integer channels = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM pay_channel", Integer.class);
-        if (merchants == null || merchants == 0 || channels == null || channels == 0) {
-            return;
-        }
-        seedMemory();
-        for (DemoOrder order : orders.values()) {
-            insertOrder(order);
-        }
-        orders.clear();
-    }
-
     private DemoOrder mapOrder(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
         DemoOrder order = new DemoOrder(
                 rs.getString("out_trade_no"),
@@ -500,32 +454,6 @@ public class DemoOrderService {
 
     private void seed(DemoOrder order) {
         orders.put(order.getOutTradeNo(), order);
-    }
-
-    private void seed(
-            String outTradeNo,
-            String tradeNo,
-            String channelId,
-            String merchantId,
-            String merchantName,
-            String productName,
-            String amount,
-            DemoOrderStatus status,
-            String createdAt,
-            boolean preAuthorization
-    ) {
-        seed(new DemoOrder(
-                outTradeNo,
-                tradeNo,
-                channelId,
-                merchantId,
-                merchantName,
-                productName,
-                new BigDecimal(amount),
-                status,
-                createdAt,
-                preAuthorization
-        ));
     }
 
     private static void ensureTradeNo(DemoOrder order, String prefix) {

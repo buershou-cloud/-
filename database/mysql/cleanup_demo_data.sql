@@ -15,6 +15,10 @@ WHERE out_trade_no LIKE 'P202605%' OR out_trade_no LIKE 'AUTH202605%';
 DELETE FROM pay_order
 WHERE out_trade_no LIKE 'P202605%' OR out_trade_no LIKE 'AUTH202605%';
 
+DELETE FROM settlement_record
+WHERE merchant_id IN ('M10001', 'M10002', 'M10003')
+   OR batch_no LIKE 'SETTLE-M1000%';
+
 DELETE FROM merchant_channel
 WHERE merchant_id IN ('M10001', 'M10002', 'M10003')
    OR channel_id IN ('ali-main', 'ali-backup', 'ali-direct');
