@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 public record ChannelUpdateRequest(
+        String id,
         Boolean enabled,
         Boolean dailyEnabled,
         Integer priority,

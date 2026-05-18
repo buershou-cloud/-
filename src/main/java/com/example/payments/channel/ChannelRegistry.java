@@ -96,6 +96,45 @@ public class ChannelRegistry {
         return channel;
     }
 
+    public synchronized PaymentGatewayProperties.Channel rename(
+            String currentId,
+            String newId,
+            PaymentGatewayProperties.Channel channel
+    ) {
+        if (currentId == null || currentId.isBlank()) {
+            throw new IllegalArgumentException("current channel id is required");
+        }
+        if (newId == null || newId.isBlank()) {
+            throw new IllegalArgumentException("channel id is required");
+        }
+        if (channel == null) {
+            throw new IllegalArgumentException("channel is required");
+        }
+        loadFromDatabase();
+        if (!channels.containsKey(currentId)) {
+            throw new IllegalArgumentException("Unknown channel: " + currentId);
+        }
+        if (!currentId.equals(newId) && channels.containsKey(newId)) {
+            throw new IllegalArgumentException("Channel already exists: " + newId);
+        }
+        channel.setId(newId);
+        if (currentId.equals(newId)) {
+            return save(channel);
+        }
+        if (databaseBacked()) {
+            insertChannel(channel);
+            moveChannelReferences(currentId, newId);
+            jdbcTemplate.update("DELETE FROM pay_channel WHERE id = ?", currentId);
+            loadFromDatabase();
+            moveEnabledOverride(currentId, newId);
+            return channels.get(newId);
+        }
+        channels.remove(currentId);
+        channels.put(newId, channel);
+        moveEnabledOverride(currentId, newId);
+        return channel;
+    }
+
     public synchronized PaymentGatewayProperties.Channel remove(String channelId) {
         PaymentGatewayProperties.Channel removed = channels.get(channelId);
         if (removed == null) {
@@ -282,6 +321,23 @@ public class ChannelRegistry {
                     channel.getId(),
                     product.name()
             );
+        }
+    }
+
+    private void moveChannelReferences(String currentId, String newId) {
+        jdbcTemplate.update("UPDATE merchant_channel SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE pay_order SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE payment_attempt SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE refund_order SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE profit_sharing_order SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE onboarding_record SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE complaint_record SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+    }
+
+    private void moveEnabledOverride(String currentId, String newId) {
+        Boolean enabled = enabledOverrides.remove(currentId);
+        if (enabled != null) {
+            enabledOverrides.put(newId, enabled);
         }
     }
 

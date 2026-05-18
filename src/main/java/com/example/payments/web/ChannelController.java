@@ -70,9 +70,14 @@ public class ChannelController {
     ) {
         PaymentGatewayProperties.Channel channel = channelRegistry.find(channelId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown channel: " + channelId));
+        String requestedId = hasText(request.id())
+                ? cleanRequired(request.id(), "channel id is required")
+                : channelId;
+        boolean renamed = !requestedId.equals(channelId);
 
         if (request.enabled() != null) {
             channelRegistry.setEnabled(channelId, request.enabled());
+            channel.setEnabled(request.enabled());
         }
         if (request.dailyEnabled() != null) {
             channel.setDailyEnabled(request.dailyEnabled());
@@ -93,10 +98,13 @@ public class ChannelController {
             channel.setProducts(normalizedProducts(channel, request.products()));
         }
         applyAlipayConfig(channel.getAlipay(), request);
+        channel.setId(requestedId);
         applyDefaultCallbackUrls(channel, servletRequest);
         validateDirectSubMerchant(channel, channelRegistry.isEnabled(channel));
         validateAmountRange(channel);
-        return view(channelRegistry.save(channel));
+        return view(renamed
+                ? channelRegistry.rename(channelId, requestedId, channel)
+                : channelRegistry.save(channel));
     }
 
     @DeleteMapping("/{channelId}")
@@ -117,6 +125,8 @@ public class ChannelController {
                 channel.getProducts(),
                 channel.getAlipay().getGatewayUrl(),
                 channel.getAlipay().getAppId(),
+                channel.getAlipay().getMerchantPrivateKey(),
+                channel.getAlipay().getAlipayPublicKey(),
                 hasText(channel.getAlipay().getMerchantPrivateKey()),
                 hasText(channel.getAlipay().getAlipayPublicKey()),
                 normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
@@ -126,6 +136,7 @@ public class ChannelController {
                 hasText(channel.getAlipay().getAppCertContent()),
                 hasText(channel.getAlipay().getAlipayCertContent()),
                 hasText(channel.getAlipay().getAlipayRootCertContent()),
+                channel.getAlipay().getAppAuthToken(),
                 hasText(channel.getAlipay().getAppAuthToken()),
                 channel.getAlipay().getSubMerchantId(),
                 hasText(channel.getAlipay().getSubMerchantId()),
@@ -292,6 +303,8 @@ public class ChannelController {
             Set<PaymentProduct> products,
             String gatewayUrl,
             String appId,
+            String merchantPrivateKey,
+            String alipayPublicKey,
             boolean hasMerchantPrivateKey,
             boolean hasAlipayPublicKey,
             String credentialMode,
@@ -301,6 +314,7 @@ public class ChannelController {
             boolean hasAppCertContent,
             boolean hasAlipayCertContent,
             boolean hasAlipayRootCertContent,
+            String appAuthToken,
             boolean hasAppAuthToken,
             String subMerchantId,
             boolean hasSubMerchantId,
