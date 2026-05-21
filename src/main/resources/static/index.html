@@ -1141,7 +1141,7 @@
       <div id="pageTitle" class="top-title">订单管理</div>
       <div class="top-actions">
         <span id="healthText">服务检测中</span>
-        <span>2026/5/13</span>
+        <span id="serverDateText"></span>
         <button class="top-action-btn" id="changePasswordBtn" type="button">修改密码</button>
         <button class="top-action-btn" id="logoutBtn" type="button">退出</button>
         <span class="admin-dot">管</span>
@@ -1334,8 +1334,8 @@
                 <div class="form-grid">
                   <label>投诉单号<input id="complaintId"></label>
                   <label>接口方法<input id="complaintMethod" placeholder="留空使用默认"></label>
-                  <label>开始时间<input id="complaintBeginTime" value="2026-05-01 00:00:00"></label>
-                  <label>结束时间<input id="complaintEndTime" value="2026-05-13 23:59:59"></label>
+                  <label>开始时间<input id="complaintBeginTime"></label>
+                  <label>结束时间<input id="complaintEndTime"></label>
                   <label>页码<input id="complaintPageNum" type="number" value="1"></label>
                   <label>每页数量<input id="complaintPageSize" type="number" value="10"></label>
                   <label>自动查询范围(分钟)<input id="complaintAutoLookbackMinutes" type="number" min="1" value="1440"></label>
@@ -1838,6 +1838,10 @@
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function topbarDateText(date = new Date()) {
+    return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
   }
 
   function localMonthText(date = new Date()) {
@@ -2475,6 +2479,15 @@
     } catch (error) {
       $("healthText").textContent = "服务异常";
     }
+  }
+
+  function renderTopbarDate() {
+    setText("serverDateText", topbarDateText());
+  }
+
+  function renderDefaultComplaintTimes() {
+    $("complaintBeginTime").value = `${localMonthText()}-01 00:00:00`;
+    $("complaintEndTime").value = `${localDateText()} 23:59:59`;
   }
 
   async function loadChannels() {
@@ -3237,6 +3250,8 @@
   syncDirectChannelField();
   syncCredentialModeFields();
   syncChannelCallbackUrls();
+  renderTopbarDate();
+  renderDefaultComplaintTimes();
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
   checkAdminSession()
