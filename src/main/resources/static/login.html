@@ -335,8 +335,7 @@
       font-weight: 700;
     }
 
-    .modal-close,
-    .ghost-btn {
+    .modal-close {
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #fff;
@@ -357,22 +356,6 @@
       padding: 16px 20px 12px;
       background: #fff;
       box-sizing: border-box;
-    }
-
-    .verify-dialog-actions {
-      display: flex;
-      gap: 10px;
-      padding: 0 20px 20px;
-    }
-
-    .ghost-btn {
-      min-height: 44px;
-      padding: 0 18px;
-      font-size: 15px;
-    }
-
-    .verify-submit {
-      flex: 1;
     }
 
     .verify-message {
@@ -406,7 +389,7 @@
       <div class="verify-dialog-head">
         <div>
           <div id="verifyTitle" class="verify-dialog-title">图形验证</div>
-          <div class="verify-dialog-sub">拖动滑块完成拼图后登录</div>
+          <div class="verify-dialog-sub">拖动滑块完成拼图后自动登录</div>
         </div>
         <button id="closeVerifyModal" class="modal-close" type="button">关闭</button>
       </div>
@@ -429,10 +412,6 @@
         </div>
       </div>
       <div id="verifyMessage" class="message verify-message"></div>
-      <div class="verify-dialog-actions">
-        <button id="cancelVerify" class="ghost-btn" type="button">取消</button>
-        <button id="confirmVerifyLogin" class="btn verify-submit" type="button">验证并登录</button>
-      </div>
     </section>
   </div>
 
@@ -449,6 +428,7 @@
       value: 16
     };
     let dragging = false;
+    let loginSubmitting = false;
     let dragStartClientX = 0;
     let dragStartValue = 0;
 
@@ -502,11 +482,21 @@
 
       if (moved && next > min + 2) {
         track.classList.add("verified");
-        $("verifyText").textContent = "已拖动，点击验证并登录";
+        $("verifyText").textContent = "已完成，正在自动登录";
       } else {
         track.classList.remove("verified");
         $("verifyText").textContent = "向右拖动滑块填充拼图";
       }
+    }
+
+    function sliderReadyForSubmit() {
+      return challenge && Number($("verifySlider").value) > Number(sliderState.minX) + 2;
+    }
+
+    function setVerifyBusy(isBusy) {
+      loginSubmitting = Boolean(isBusy);
+      $("refreshVerify").disabled = Boolean(isBusy);
+      $("closeVerifyModal").disabled = Boolean(isBusy);
     }
 
     function sliderValueFromPointer(event) {
@@ -542,7 +532,7 @@
       $("verifyModal").setAttribute("aria-hidden", "false");
       document.body.classList.add("modal-open");
       $("verifyMessage").textContent = "";
-      $("confirmVerifyLogin").disabled = true;
+      $("refreshVerify").disabled = true;
       challengeLoading = true;
       try {
         await loadChallenge();
@@ -550,11 +540,14 @@
         $("verifyMessage").textContent = error.message || "图形验证加载失败，请稍后再试";
       } finally {
         challengeLoading = false;
-        $("confirmVerifyLogin").disabled = false;
+        $("refreshVerify").disabled = false;
       }
     }
 
     function closeVerifyModal() {
+      if (loginSubmitting) {
+        return;
+      }
       dragging = false;
       $("verifyModal").classList.remove("open");
       $("verifyModal").setAttribute("aria-hidden", "true");
@@ -562,18 +555,19 @@
     }
 
     async function submitLoginAfterVerification() {
-      if (challengeLoading) {
+      if (challengeLoading || loginSubmitting) {
         return;
       }
       $("verifyMessage").textContent = "";
-      $("confirmVerifyLogin").disabled = true;
+      setVerifyBusy(true);
       try {
         if (!challenge) {
           throw { message: "请先完成图形验证" };
         }
-        if (Number($("verifySlider").value) <= Number(sliderState.minX) + 2) {
+        if (!sliderReadyForSubmit()) {
           throw { message: "请拖动滑块完成图形验证" };
         }
+        $("verifyMessage").textContent = "正在验证并登录，请稍候...";
         await request("/api/v1/admin-auth/login", {
           method: "POST",
           body: JSON.stringify({
@@ -588,7 +582,7 @@
         $("verifyMessage").textContent = error.message || "登录失败，请检查账号密码";
         await loadChallenge().catch(() => {});
       } finally {
-        $("confirmVerifyLogin").disabled = false;
+        setVerifyBusy(false);
       }
     }
 
@@ -602,13 +596,13 @@
 
     $("refreshVerify").addEventListener("click", () => {
       $("verifyMessage").textContent = "";
-      $("confirmVerifyLogin").disabled = true;
+      $("refreshVerify").disabled = true;
       loadChallenge()
         .catch((error) => {
           $("verifyMessage").textContent = error.message || "图形验证加载失败，请稍后再试";
         })
         .finally(() => {
-          $("confirmVerifyLogin").disabled = false;
+          $("refreshVerify").disabled = false;
         });
     });
 
@@ -642,11 +636,21 @@
     });
 
     window.addEventListener("pointerup", () => {
+      const shouldSubmit = dragging && sliderReadyForSubmit();
       dragging = false;
+      if (shouldSubmit) {
+        submitLoginAfterVerification();
+      }
     });
 
     $("verifySlider").addEventListener("input", () => {
       setSliderValue(Number($("verifySlider").value), true);
+    });
+
+    $("verifySlider").addEventListener("change", () => {
+      if (sliderReadyForSubmit()) {
+        submitLoginAfterVerification();
+      }
     });
 
     window.addEventListener("resize", () => {
@@ -654,8 +658,6 @@
     });
 
     $("closeVerifyModal").addEventListener("click", closeVerifyModal);
-    $("cancelVerify").addEventListener("click", closeVerifyModal);
-    $("confirmVerifyLogin").addEventListener("click", submitLoginAfterVerification);
     $("verifyModal").addEventListener("click", (event) => {
       if (event.target === $("verifyModal")) {
         closeVerifyModal();
