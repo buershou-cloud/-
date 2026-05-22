@@ -2663,13 +2663,27 @@
     await loadChannels();
   }
 
-  function cashierUrl(channelId) {
-    return `${location.origin}/cashier.html?channelId=${encodeURIComponent(channelId)}`;
+  function selectedProductForChannel(channelId) {
+    const channel = state.channels.find((item) => item.id === channelId);
+    const checked = new Set(Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
+      .map((input) => input.value));
+    const orderedProducts = channel ? channelProductIds(channel) : [];
+    const selected = orderedProducts.find((product) => checked.has(product));
+    if (selected) return selected;
+    return (channel?.products || []).find((product) => orderedProducts.includes(product)) || "";
+  }
+
+  function cashierUrl(channelId, product = selectedProductForChannel(channelId)) {
+    const params = new URLSearchParams({ channelId });
+    if (product) params.set("product", product);
+    return `${location.origin}/cashier.html?${params.toString()}`;
   }
 
   function showCashierQr(channelId) {
-    const url = cashierUrl(channelId);
-    $("qrTitle").textContent = `${channelId} 收银台二维码`;
+    const product = selectedProductForChannel(channelId);
+    const url = cashierUrl(channelId, product);
+    const productName = product ? (productLabels[product] || product) : "";
+    $("qrTitle").textContent = `${channelId}${productName ? ` ${productName}` : ""} 收银台二维码`;
     $("qrLink").textContent = url;
     $("qrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(url)}&t=${Date.now()}`;
     $("qrModal").classList.remove("hidden");

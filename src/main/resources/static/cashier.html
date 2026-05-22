@@ -476,8 +476,11 @@
 
   function merchantProduct(merchant, channels) {
     const products = new Set(merchantChannels(merchant, channels).flatMap(productOptions));
-    if (preferredProduct && products.has(preferredProduct)) {
-      return preferredProduct;
+    if (preferredProduct) {
+      if (products.has(preferredProduct)) {
+        return preferredProduct;
+      }
+      throw { code: "PRODUCT_NOT_ENABLED", message: "二维码指定的支付产品未在当前商户可用通道中启用，请重新生成二维码。" };
     }
     return chooseProduct([...products]);
   }
@@ -514,7 +517,10 @@
       $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
       const options = productOptions(currentChannel);
       currentProductOptions = options;
-      currentProduct = preferredProduct && options.includes(preferredProduct) ? preferredProduct : chooseProduct(options);
+      if (preferredProduct && !options.includes(preferredProduct)) {
+        throw { code: "PRODUCT_NOT_ENABLED", message: "二维码指定的支付产品未在该通道启用，请在支付通道中重新保存并生成二维码。" };
+      }
+      currentProduct = preferredProduct || chooseProduct(options);
     } else if (normalizedMerchantId) {
       currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(normalizedMerchantId)}/cashier-info`);
       const availableChannels = merchantChannels(currentMerchant, channels);
