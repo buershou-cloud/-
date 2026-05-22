@@ -55,9 +55,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     @Override
     public GatewayResponse pay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
-        if (cashierDesktopQr(request) && shouldUsePrecreateForDesktop(request.product())) {
-            return precreate(channel, request);
-        }
         return switch (request.product()) {
             case ALIPAY_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
             case ALIPAY_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
@@ -230,27 +227,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
         merge(bizContent, request.extra());
         removeInternalExtras(bizContent);
         return bizContent;
-    }
-
-    private static boolean cashierDesktopQr(PayCreateRequest request) {
-        Object value = valueFromExtra(request.extra(), "cashierDesktopQr", false);
-        if (value instanceof Boolean bool) {
-            return bool;
-        }
-        return Boolean.parseBoolean(asString(value));
-    }
-
-    private static boolean shouldUsePrecreateForDesktop(PaymentProduct product) {
-        return switch (product) {
-            case ALIPAY_WAP,
-                 ALIPAY_PAGE,
-                 ALIPAY_JSAPI,
-                 ALIPAY_PREAUTH,
-                 ALIPAY_DIRECT_WAP,
-                 ALIPAY_DIRECT_PAGE,
-                 ALIPAY_DIRECT_JSAPI -> true;
-            default -> false;
-        };
     }
 
     private static void removeInternalExtras(Map<String, Object> bizContent) {

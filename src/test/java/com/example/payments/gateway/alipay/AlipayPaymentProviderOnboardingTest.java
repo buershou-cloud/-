@@ -54,7 +54,7 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
-    void desktopCashierMapsRedirectProductsToPrecreateQr() {
+    void desktopCashierKeepsSelectedRedirectProduct() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
 
@@ -81,12 +81,13 @@ class AlipayPaymentProviderOnboardingTest {
                 )
         );
 
-        assertThat(client.method).isEqualTo("alipay.trade.precreate");
+        assertThat(client.method).isEqualTo("alipay.trade.wap.pay");
         assertThat(client.bizContent)
-                .containsEntry("product_code", "FACE_TO_FACE_PAYMENT")
+                .containsEntry("product_code", "QUICK_WAP_WAY")
                 .doesNotContainKeys("cashier", "cashierDesktopQr", "merchantName");
-        assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/CASHIER-001");
+        assertThat(response.qrCode()).isNull();
         assertThat(response.redirectUrl()).isNull();
+        assertThat(response.redirectHtml()).contains("alipay.trade.wap.pay");
     }
 
     private static PaymentGatewayProperties.Channel channel() {
@@ -109,6 +110,20 @@ class AlipayPaymentProviderOnboardingTest {
 
         private CapturingAlipayClient() {
             super(new ObjectMapper());
+        }
+
+        @Override
+        public String pageForm(
+                PaymentGatewayProperties.Channel channel,
+                String method,
+                Map<String, Object> bizContent,
+                AlipayRequestOptions options
+        ) {
+            this.method = method;
+            this.bizContent = new LinkedHashMap<>(bizContent);
+            return "<form action=\"https://openapi.alipay.com/gateway.do\" method=\"post\">"
+                    + "<input name=\"method\" value=\"" + method + "\">"
+                    + "</form>";
         }
 
         @Override

@@ -433,6 +433,21 @@
     return true;
   }
 
+  function alipayFormToUrl(form) {
+    if (!form) {
+      return "";
+    }
+    const action = form.getAttribute("action");
+    if (!action) {
+      return "";
+    }
+    const url = new URL(action, window.location.href);
+    form.querySelectorAll("input[name]").forEach((input) => {
+      url.searchParams.set(input.name, input.value || "");
+    });
+    return url.toString();
+  }
+
   function showPaymentQr(text, title, hint) {
     $("payPanelTitle").textContent = title;
     $("payPanelHint").textContent = hint;
@@ -625,6 +640,16 @@
           alipaySubmitForm = form;
           if (isMobilePayClient()) {
             setTimeout(() => submitAlipayForm(), 60);
+            return;
+          }
+          const payUrl = alipayFormToUrl(form);
+          if (payUrl) {
+            showPaymentQr(
+              payUrl,
+              "支付宝付款二维码",
+              "请使用手机支付宝扫码继续付款。"
+            );
+            writeResult("请使用手机支付宝扫码付款。", "ok");
             return;
           }
           $("continuePanel").classList.add("active");
