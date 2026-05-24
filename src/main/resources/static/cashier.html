@@ -397,6 +397,24 @@
     return decoded;
   }
 
+  function tokenVariants(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return [];
+    const decoded = safeDecode(raw);
+    const values = [raw, decoded, encodeURIComponent(raw), encodeURIComponent(decoded)];
+    return [...new Set(values.map((item) => item.toLowerCase()))];
+  }
+
+  function tokenMatches(left, right) {
+    const leftSet = new Set(tokenVariants(left));
+    return tokenVariants(right).some((item) => leftSet.has(item));
+  }
+
+  function channelMatches(channel, value) {
+    if (!channel || !value) return false;
+    return [channel.id, channel.name, channel.appId, channel.provider].some((token) => tokenMatches(token, value));
+  }
+
   function messageText(value) {
     if (typeof value === "string") return value;
     if (!value || typeof value !== "object") return String(value || "");
@@ -405,12 +423,17 @@
 
   function setMessage(value, tone = "") {
     const message = $("message");
+    message.hidden = false;
     message.textContent = messageText(value);
     message.className = `message${tone ? ` ${tone}` : ""}`;
   }
 
   function writeResult(value, tone = "") {
     $("result").textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+    if (tone === "ok") {
+      $("message").hidden = true;
+      return;
+    }
     setMessage(value, tone);
   }
 
@@ -483,10 +506,11 @@
   }
 
   function merchantChannels(merchant, channels) {
-    const allowed = merchant.channelIds && merchant.channelIds.length
-      ? new Set(merchant.channelIds)
-      : new Set(channels.map((channel) => channel.id));
-    return channels.filter((channel) => channel.enabled !== false && allowed.has(channel.id));
+    const allowed = Array.isArray(merchant.channelIds) ? merchant.channelIds : [];
+    return channels.filter((channel) => (
+      channel.enabled !== false &&
+      (!allowed.length || allowed.some((id) => channelMatches(channel, id)))
+    ));
   }
 
   function merchantProduct(merchant, channels) {
@@ -507,13 +531,7 @@
   }
 
   function findChannel(channels, id) {
-    const decoded = safeDecode(id);
-    return channels.find((channel) => (
-      channel.id === id ||
-      channel.id === decoded ||
-      encodeURIComponent(channel.id) === id ||
-      encodeURIComponent(channel.id) === decoded
-    ));
+    return channels.find((channel) => channelMatches(channel, id));
   }
 
   function noProductMessage() {
@@ -572,11 +590,7 @@
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" }, "bad");
       return;
     }
-    const extra = {
-      cashier: true,
-      cashierDesktopQr: !isMobilePayClient(),
-      cashierMobileDirect: isMobilePayClient()
-    };
+    const extra = { cashier: true };
     if (currentMerchant) {
       extra.merchantId = currentMerchant.merchantId;
       extra.merchantName = currentMerchant.name;
@@ -622,7 +636,7 @@
         );
       } else if (data.redirectUrl) {
         if (isMobilePayClient()) {
-          location.href = data.redirectUrl;
+          openAlipayQr(data.redirectUrl);
           return;
         }
         showPaymentQr(
