@@ -163,7 +163,10 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private GatewayResponse faceToFacePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         if (!hasText(request.authCode())) {
-            return precreate(channel, request);
+            throw new GatewayException(
+                    "ALIPAY_AUTH_CODE_REQUIRED",
+                    "当面付条码支付必须传入买家付款码 auth_code，系统不会自动改调订单码接口"
+            );
         }
         Map<String, Object> bizContent = tradeBiz(channel, request);
         bizContent.put("scene", "bar_code");

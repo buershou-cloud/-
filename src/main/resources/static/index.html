@@ -821,6 +821,29 @@
       align-items: center;
     }
 
+    .cashier-product-picker {
+      display: grid;
+      gap: 4px;
+      min-width: 132px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--muted);
+    }
+
+    .cashier-product-picker select {
+      height: 32px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0 8px;
+      color: var(--text);
+      background: #fff;
+      font-weight: 800;
+    }
+
+    .cashier-product-picker.empty {
+      color: #ef4444;
+    }
+
     .channel-modal {
       position: fixed;
       inset: 0;
@@ -2583,6 +2606,7 @@
         <td><input data-channel-input="${html(channel.id)}" data-field="payMax" type="number" min="0" step="0.01" value="${html(channel.payMax ?? "")}"></td>
         <td>
           <div class="channel-actions">
+            ${cashierProductPickerHtml(channel)}
             <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
             <button class="btn secondary small" type="button" data-channel-save="${html(channel.id)}">保存</button>
             <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">二维码</button>
@@ -2615,6 +2639,16 @@
 
   function channelProductIds(channel) {
     return channel.provider === "ALIPAY_DIRECT" ? directProductIds : standardProductIds;
+  }
+
+  function cashierEligibleProducts(channel) {
+    if (!channel) return [];
+    const enabled = new Set(channel.products || []);
+    return channelProductIds(channel).filter((product) => enabled.has(product));
+  }
+
+  function cashierProductSelectId(channelId) {
+    return `cashier-product-${String(channelId).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   }
 
   function channelPatchPayload(channelId) {
@@ -2663,14 +2697,67 @@
     await loadChannels();
   }
 
+  const cashierProductStorageKey = "paymentGateway.cashierProductByChannel";
+  const cashierProductByChannel = new Map(readCashierProductSelection());
+
+  function readCashierProductSelection() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(cashierProductStorageKey) || "[]");
+      if (!Array.isArray(raw)) return [];
+      return raw.filter((item) => Array.isArray(item)
+        && item.length === 2
+        && typeof item[0] === "string"
+        && typeof item[1] === "string");
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function rememberCashierProduct(channelId, product) {
+    if (!channelId) return;
+    if (product) {
+      cashierProductByChannel.set(channelId, product);
+    } else {
+      cashierProductByChannel.delete(channelId);
+    }
+    localStorage.setItem(cashierProductStorageKey, JSON.stringify([...cashierProductByChannel.entries()]));
+  }
+
   function selectedProductForChannel(channelId) {
     const channel = state.channels.find((item) => item.id === channelId);
-    const checked = new Set(Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
-      .map((input) => input.value));
-    const orderedProducts = channel ? channelProductIds(channel) : [];
-    const selected = orderedProducts.find((product) => checked.has(product));
-    if (selected) return selected;
-    return (channel?.products || []).find((product) => orderedProducts.includes(product)) || "";
+    const products = cashierEligibleProducts(channel);
+    const remembered = cashierProductByChannel.get(channelId);
+    if (remembered && products.includes(remembered)) {
+      return remembered;
+    }
+    const selected = products[0] || "";
+    rememberCashierProduct(channelId, selected);
+    return selected;
+  }
+
+  function selectedProductFromRow(channelId) {
+    const picker = document.querySelector(`[data-channel-cashier-product="${CSS.escape(channelId)}"]`);
+    if (picker && picker.value) {
+      rememberCashierProduct(channelId, picker.value);
+      return picker.value;
+    }
+    return selectedProductForChannel(channelId);
+  }
+
+  function cashierProductPickerHtml(channel) {
+    const products = cashierEligibleProducts(channel);
+    const selected = selectedProductForChannel(channel.id);
+    if (!products.length) {
+      return `<div class="cashier-product-picker empty">收银台产品：未选择</div>`;
+    }
+    return `
+      <label class="cashier-product-picker" for="${html(cashierProductSelectId(channel.id))}">
+        <span>收银台使用</span>
+        <select id="${html(cashierProductSelectId(channel.id))}" data-channel-cashier-product="${html(channel.id)}">
+          ${products.map((product) => `<option value="${html(product)}" ${product === selected ? "selected" : ""}>${html(productLabels[product] || product)}</option>`).join("")}
+        </select>
+      </label>
+    `;
   }
 
   function cashierUrl(channelId, product = selectedProductForChannel(channelId)) {
@@ -2680,7 +2767,12 @@
   }
 
   function showCashierQr(channelId) {
-    const product = selectedProductForChannel(channelId);
+    const product = selectedProductFromRow(channelId);
+    if (!product) {
+      alert("请先在支持产品中勾选一个收银台支付产品");
+      return;
+    }
+    rememberCashierProduct(channelId, product);
     const url = cashierUrl(channelId, product);
     const productName = product ? (productLabels[product] || product) : "";
     $("qrTitle").textContent = `${channelId}${productName ? ` ${productName}` : ""} 收银台二维码`;
@@ -3201,9 +3293,22 @@
   });
 
   $("channelTableBody").addEventListener("change", async (event) => {
+    const cashierPicker = event.target.closest("select[data-channel-cashier-product]");
+    if (cashierPicker) {
+      rememberCashierProduct(cashierPicker.dataset.channelCashierProduct, cashierPicker.value);
+      return;
+    }
     const product = event.target.closest("input[data-channel-product]");
     if (product) {
-      const saved = await saveChannel(product.dataset.channelProduct);
+      const channelId = product.dataset.channelProduct;
+      const checkedProducts = Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
+        .map((input) => input.value);
+      if (product.checked) {
+        rememberCashierProduct(channelId, product.value);
+      } else if (cashierProductByChannel.get(channelId) === product.value) {
+        rememberCashierProduct(channelId, checkedProducts[0] || "");
+      }
+      const saved = await saveChannel(channelId);
       if (!saved) await loadChannels();
     }
   });
