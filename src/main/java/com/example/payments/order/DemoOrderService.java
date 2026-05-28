@@ -249,8 +249,10 @@ public class DemoOrderService {
             String merchantName,
             String productName,
             BigDecimal amount,
-            boolean preAuthorization
+            boolean preAuthorization,
+            PaymentStatus paymentStatus
     ) {
+        DemoOrderStatus initialStatus = statusFromGateway(paymentStatus, preAuthorization, DemoOrderStatus.UNPAID);
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
         if (order == null) {
             order = new DemoOrder(
@@ -261,7 +263,7 @@ public class DemoOrderService {
                     merchantName,
                     productName,
                     amount,
-                    preAuthorization ? DemoOrderStatus.FROZEN : DemoOrderStatus.UNPAID,
+                    initialStatus,
                     LocalDateTime.now().format(DISPLAY_TIME),
                     preAuthorization
             );
@@ -270,9 +272,7 @@ public class DemoOrderService {
             if (hasText(tradeNo)) {
                 order.setTradeNo(tradeNo.trim());
             }
-            if (preAuthorization) {
-                order.setStatus(DemoOrderStatus.FROZEN);
-            }
+            order.setStatus(initialStatus);
         }
         persist(order);
         return DemoOrderView.from(order);

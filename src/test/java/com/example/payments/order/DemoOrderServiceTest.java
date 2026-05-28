@@ -1,5 +1,6 @@
 package com.example.payments.order;
 
+import com.example.payments.domain.PaymentStatus;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -19,7 +20,8 @@ class DemoOrderServiceTest {
                 "测试商户",
                 "当面付",
                 new BigDecimal("10.00"),
-                false
+                false,
+                PaymentStatus.CREATED
         );
         service.complete("ORDER-SHARE-001");
         service.recordPaymentCreated(
@@ -30,7 +32,8 @@ class DemoOrderServiceTest {
                 "测试商户",
                 "当面付",
                 new BigDecimal("20.00"),
-                false
+                false,
+                PaymentStatus.CREATED
         );
         service.complete("ORDER-REFUND-001");
         service.refund("ORDER-REFUND-001");

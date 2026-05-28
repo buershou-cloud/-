@@ -410,7 +410,8 @@ public class PaymentGatewayService {
                 extraText(request.extra(), "merchantName", "默认商户"),
                 request.product().label(),
                 request.totalAmount(),
-                request.product() == PaymentProduct.ALIPAY_PREAUTH
+                request.product() == PaymentProduct.ALIPAY_PREAUTH,
+                response.status()
         );
     }
 

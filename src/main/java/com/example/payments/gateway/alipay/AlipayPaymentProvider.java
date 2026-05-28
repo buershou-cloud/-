@@ -35,6 +35,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_PAY = "alipay.trade.pay";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
+    private static final String METHOD_PREAUTH_VOUCHER_CREATE = "alipay.fund.auth.order.voucher.create";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
     private static final String METHOD_COMPLAINT_BATCH_QUERY = "alipay.security.risk.complaint.info.batchquery";
     private static final String METHOD_COMPLAINT_INFO_QUERY = "alipay.security.risk.complaint.info.query";
@@ -221,18 +222,23 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private GatewayResponse preauth(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         Map<String, Object> bizContent = new LinkedHashMap<>();
         bizContent.put("out_order_no", request.outTradeNo());
-        bizContent.put("out_request_no", valueFromExtra(request.extra(), "out_request_no", request.outTradeNo() + "_freeze"));
+        bizContent.put("out_request_no", valueFromExtra(request.extra(), "out_request_no", request.outTradeNo() + "_voucher"));
         bizContent.put("order_title", request.subject());
         bizContent.put("amount", amount(request.totalAmount()));
-        String productCode = asString(valueFromExtra(request.extra(), "product_code", "PRE_AUTH_ONLINE"));
+        String productCode = asString(valueFromExtra(request.extra(), "product_code", "PRE_AUTH"));
         bizContent.put("product_code", productCode);
-        putIfText(bizContent, preauthTimeoutField(productCode), request.timeoutExpress());
+        putIfText(bizContent, "timeout_express", request.timeoutExpress());
         putIfText(bizContent, "payee_user_id", asString(valueFromExtra(request.extra(), "payee_user_id", null)));
         putIfText(bizContent, "payee_logon_id", asString(valueFromExtra(request.extra(), "payee_logon_id", null)));
+        putIfText(bizContent, "trans_currency", asString(valueFromExtra(request.extra(), "trans_currency", null)));
+        putIfPresent(bizContent, "extra_param", valueFromExtra(request.extra(), "extra_param", null));
         merge(bizContent, request.extra());
         removeInternalExtras(bizContent);
-        AlipayGatewayResponse response = client.execute(channel, METHOD_PREAUTH_FREEZE, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+        String method = asString(valueFromExtra(request.extra(), "preauth_method", METHOD_PREAUTH_VOUCHER_CREATE));
+        bizContent.remove("preauth_method");
+        AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
+        String qrCode = firstText(asString(response.response().get("code_value")), asString(response.response().get("code_url")));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), qrCode, bizContent);
     }
 
     private GatewayResponse directPay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
@@ -243,10 +249,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.remove("alipay_method");
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
-    }
-
-    private static String preauthTimeoutField(String productCode) {
-        return "PREAUTH_PAY".equals(productCode) ? "timeout_express" : "pay_timeout";
     }
 
     private Map<String, Object> tradeBiz(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
@@ -356,6 +358,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private static PaymentStatus status(AlipayGatewayResponse response) {
         String tradeStatus = asString(response.response().get("trade_status"));
+        String authStatus = asString(response.response().get("status"));
         if ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)) {
             return PaymentStatus.SUCCESS;
         }
@@ -365,13 +368,23 @@ public class AlipayPaymentProvider implements PaymentProvider {
         if ("TRADE_CLOSED".equals(tradeStatus)) {
             return PaymentStatus.CLOSED;
         }
+        if ("SUCCESS".equals(authStatus)) {
+            return PaymentStatus.SUCCESS;
+        }
+        if ("INIT".equals(authStatus) || "DOING".equals(authStatus)) {
+            return PaymentStatus.PAYING;
+        }
+        if ("CLOSED".equals(authStatus)) {
+            return PaymentStatus.CLOSED;
+        }
         if ("10000".equals(response.code())) {
             if (METHOD_TRADE_CANCEL.equals(response.method())) {
                 return PaymentStatus.CLOSED;
             }
             if (METHOD_PRECREATE.equals(response.method())
                     || METHOD_TRADE_CREATE.equals(response.method())
-                    || METHOD_PREAUTH_FREEZE.equals(response.method())) {
+                    || METHOD_PREAUTH_FREEZE.equals(response.method())
+                    || METHOD_PREAUTH_VOUCHER_CREATE.equals(response.method())) {
                 return PaymentStatus.CREATED;
             }
             return PaymentStatus.SUCCESS;

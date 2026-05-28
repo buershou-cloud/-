@@ -288,11 +288,11 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
-    void preauthProductUsesOnlineAuthDefaultAndPayTimeout() {
+    void preauthProductUsesVoucherCreateQrByDefault() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
 
-        provider.pay(
+        GatewayResponse response = provider.pay(
                 standardChannel(),
                 new PayCreateRequest(
                         PaymentProduct.ALIPAY_PREAUTH,
@@ -315,17 +315,18 @@ class AlipayPaymentProviderOnboardingTest {
                 )
         );
 
-        assertThat(client.method).isEqualTo("alipay.fund.auth.order.app.freeze");
+        assertThat(client.method).isEqualTo("alipay.fund.auth.order.voucher.create");
         assertThat(client.bizContent)
                 .containsEntry("out_order_no", "PREAUTH-001")
-                .containsEntry("out_request_no", "PREAUTH-001_freeze")
-                .containsEntry("product_code", "PRE_AUTH_ONLINE")
-                .containsEntry("pay_timeout", "10m")
-                .doesNotContainKey("timeout_express");
+                .containsEntry("out_request_no", "PREAUTH-001_voucher")
+                .containsEntry("product_code", "PRE_AUTH")
+                .containsEntry("timeout_express", "10m")
+                .doesNotContainKey("pay_timeout");
+        assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/PREAUTH-001");
     }
 
     @Test
-    void preauthProductCanUsePreauthPayContractVariant() {
+    void preauthProductCanOverrideOfficialMethodAndProduct() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
 
@@ -346,7 +347,10 @@ class AlipayPaymentProviderOnboardingTest {
                         null,
                         null,
                         List.of("ali-main"),
-                        Map.of("product_code", "PREAUTH_PAY"),
+                        Map.of(
+                                "preauth_method", "alipay.fund.auth.order.app.freeze",
+                                "product_code", "PRE_AUTH_ONLINE"
+                        ),
                         null,
                         null
                 )
@@ -354,9 +358,9 @@ class AlipayPaymentProviderOnboardingTest {
 
         assertThat(client.method).isEqualTo("alipay.fund.auth.order.app.freeze");
         assertThat(client.bizContent)
-                .containsEntry("product_code", "PREAUTH_PAY")
+                .containsEntry("product_code", "PRE_AUTH_ONLINE")
                 .containsEntry("timeout_express", "30m")
-                .doesNotContainKey("pay_timeout");
+                .doesNotContainKeys("pay_timeout", "preauth_method");
     }
 
     @Test
@@ -530,6 +534,10 @@ class AlipayPaymentProviderOnboardingTest {
             if ("alipay.trade.precreate".equals(method)) {
                 response.put("out_trade_no", asString(bizContent.get("out_trade_no")));
                 response.put("qr_code", "https://qr.alipay.test/" + bizContent.get("out_trade_no"));
+            }
+            if ("alipay.fund.auth.order.voucher.create".equals(method)) {
+                response.put("out_order_no", asString(bizContent.get("out_order_no")));
+                response.put("code_value", "https://qr.alipay.test/" + bizContent.get("out_order_no"));
             }
             return new AlipayGatewayResponse(
                     method,
