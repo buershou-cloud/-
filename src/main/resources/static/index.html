@@ -1742,7 +1742,7 @@
     const element = $("dashboardResult");
     if (!element) return;
     if (value && typeof value === "object" && value.message) {
-      element.textContent = value.message;
+      element.textContent = value.message + (value.response ? `\n${json(value.response)}` : "");
       return;
     }
     element.textContent = typeof value === "string" ? value : json(value);
@@ -1783,10 +1783,21 @@
     const element = $("profitShareResult");
     if (!element) return;
     if (value && typeof value === "object" && value.message) {
-      element.textContent = value.message + (value.items ? `\n${json(value.items)}` : "");
+      const detail = value.response ? value.response : value.items;
+      element.textContent = value.message + (detail ? `\n${json(detail)}` : "");
       return;
     }
     element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function gatewayFailed(value) {
+    return value && typeof value === "object" && value.status === "FAILED";
+  }
+
+  function gatewayFailure(action, value) {
+    const code = value?.code ? `（${value.code}）` : "";
+    const message = value?.message || "支付宝接口返回失败";
+    return { message: `${action}失败${code}: ${message}`, response: value };
   }
 
   function html(value) {
@@ -2358,10 +2369,47 @@
     return query ? `?${query}` : "";
   }
 
+  async function refundPaidOrder(outTradeNo) {
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    if (!order) {
+      throw { message: `订单不存在: ${outTradeNo}` };
+    }
+    if (order.status !== "COMPLETED") {
+      throw { message: "只有已完成订单可以发起支付宝退款" };
+    }
+    if (!window.confirm(`确定向支付宝发起退款 ${order.amountText || order.amount} 吗？`)) {
+      return;
+    }
+    const data = await request("/api/v1/payments/refund", {
+      method: "POST",
+      body: JSON.stringify(compact({
+        outTradeNo: order.outTradeNo,
+        tradeNo: order.tradeNo,
+        refundAmount: order.amount,
+        outRequestNo: `RF_${order.outTradeNo}_${Date.now()}`,
+        refundReason: "后台订单退款",
+        channelIds: order.channelId ? [order.channelId] : []
+      }))
+    });
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("支付宝退款", data);
+    }
+    setDashboardResult({ message: `支付宝退款已提交: ${order.outTradeNo}`, response: data });
+    await loadOrders();
+  }
+
   async function handleOrderAction(outTradeNo, action) {
     if (action === "profit-share") {
       fillProfitShareOrder(outTradeNo);
       switchPage("sharing");
+      return;
+    }
+    if (action === "refund") {
+      try {
+        await refundPaidOrder(outTradeNo);
+      } catch (error) {
+        setDashboardResult(error);
+      }
       return;
     }
     const encoded = encodeURIComponent(outTradeNo);
@@ -2517,7 +2565,10 @@
       method: "POST",
       body: JSON.stringify(profitShareSinglePayload())
     });
-    setProfitShareResult(data);
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("支付宝分账", data);
+    }
+    setProfitShareResult({ message: "支付宝分账已提交", response: data });
     await loadOrders();
   }
 
@@ -2529,7 +2580,10 @@
       method: "POST",
       body: JSON.stringify(profitShareBatchPayload())
     });
-    setProfitShareResult(data);
+    setProfitShareResult({
+      message: data.failed ? `批量分账完成，失败 ${data.failed} 笔` : "批量分账已提交",
+      response: data
+    });
     await loadOrders();
   }
 
