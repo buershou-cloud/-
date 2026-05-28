@@ -5,6 +5,7 @@ import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentProduct;
+import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class AlipayPaymentProviderOnboardingTest {
 
@@ -91,6 +93,39 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void pageProductUsesOfficialDesktopCashierProductCode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PAGE,
+                        "PAGE-001",
+                        "page pay",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.page.pay");
+        assertThat(client.bizContent).containsEntry("product_code", "FAST_INSTANT_TRADE_PAY");
+        assertThat(response.redirectHtml()).contains("alipay.trade.page.pay");
+    }
+
+    @Test
     void faceToFaceProductCreatesQrWithoutBuyerAuthCode() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
@@ -160,6 +195,143 @@ class AlipayPaymentProviderOnboardingTest {
                 .doesNotContainKeys("qr_pay_mode", "qrcode_width");
         assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/ORDER-CODE-001");
         assertThat(response.redirectHtml()).isNull();
+    }
+
+    @Test
+    void jsapiProductUsesTradeCreateAndPinsOfficialProductCode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_JSAPI,
+                        "JSAPI-001",
+                        "jsapi pay",
+                        new BigDecimal("1.00"),
+                        null,
+                        "2088102146225135",
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("product_code", "WRONG_PRODUCT"),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.create");
+        assertThat(client.bizContent)
+                .containsEntry("buyer_id", "2088102146225135")
+                .containsEntry("product_code", "JSAPI_PAY");
+    }
+
+    @Test
+    void jsapiProductRejectsMissingBuyerIdentifier() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        assertThatThrownBy(() -> provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_JSAPI,
+                        "JSAPI-002",
+                        "jsapi pay",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        ))
+                .isInstanceOf(GatewayException.class)
+                .hasMessageContaining("requires buyerId or buyerOpenId");
+    }
+
+    @Test
+    void preauthProductUsesOnlineAuthDefaultAndPayTimeout() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PREAUTH,
+                        "PREAUTH-001",
+                        "preauth",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.fund.auth.order.app.freeze");
+        assertThat(client.bizContent)
+                .containsEntry("out_order_no", "PREAUTH-001")
+                .containsEntry("out_request_no", "PREAUTH-001_freeze")
+                .containsEntry("product_code", "PRE_AUTH_ONLINE")
+                .containsEntry("pay_timeout", "10m")
+                .doesNotContainKey("timeout_express");
+    }
+
+    @Test
+    void preauthProductCanUsePreauthPayContractVariant() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PREAUTH,
+                        "PREAUTH-002",
+                        "preauth",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "30m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("product_code", "PREAUTH_PAY"),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.fund.auth.order.app.freeze");
+        assertThat(client.bizContent)
+                .containsEntry("product_code", "PREAUTH_PAY")
+                .containsEntry("timeout_express", "30m")
+                .doesNotContainKey("pay_timeout");
     }
 
     private static PaymentGatewayProperties.Channel channel() {

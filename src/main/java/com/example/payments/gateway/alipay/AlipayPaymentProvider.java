@@ -178,7 +178,13 @@ public class AlipayPaymentProvider implements PaymentProvider {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         putIfText(bizContent, "buyer_id", request.buyerId());
         putIfText(bizContent, "buyer_open_id", request.buyerOpenId());
-        bizContent.putIfAbsent("product_code", "JSAPI_PAY");
+        if (!hasText(asString(bizContent.get("buyer_id"))) && !hasText(asString(bizContent.get("buyer_open_id")))) {
+            throw new GatewayException(
+                    "ALIPAY_JSAPI_BUYER_MISSING",
+                    "Alipay JSAPI payment requires buyerId or buyerOpenId"
+            );
+        }
+        bizContent.put("product_code", "JSAPI_PAY");
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CREATE, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null);
     }
@@ -189,7 +195,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.put("out_request_no", valueFromExtra(request.extra(), "out_request_no", request.outTradeNo() + "_freeze"));
         bizContent.put("order_title", request.subject());
         bizContent.put("amount", amount(request.totalAmount()));
-        bizContent.put("product_code", valueFromExtra(request.extra(), "product_code", "PRE_AUTH_ONLINE"));
+        String productCode = asString(valueFromExtra(request.extra(), "product_code", "PRE_AUTH_ONLINE"));
+        bizContent.put("product_code", productCode);
+        putIfText(bizContent, preauthTimeoutField(productCode), request.timeoutExpress());
         putIfText(bizContent, "payee_user_id", asString(valueFromExtra(request.extra(), "payee_user_id", null)));
         putIfText(bizContent, "payee_logon_id", asString(valueFromExtra(request.extra(), "payee_logon_id", null)));
         merge(bizContent, request.extra());
@@ -206,6 +214,10 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.remove("alipay_method");
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+    }
+
+    private static String preauthTimeoutField(String productCode) {
+        return "PREAUTH_PAY".equals(productCode) ? "timeout_express" : "pay_timeout";
     }
 
     private Map<String, Object> tradeBiz(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
