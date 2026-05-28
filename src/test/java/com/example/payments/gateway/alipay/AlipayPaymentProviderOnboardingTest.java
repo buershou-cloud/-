@@ -156,7 +156,8 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.method).isEqualTo("alipay.trade.page.pay");
         assertThat(client.bizContent)
                 .containsEntry("product_code", "FAST_INSTANT_TRADE_PAY")
-                .containsEntry("qr_pay_mode", "2")
+                .containsEntry("qr_pay_mode", "4")
+                .containsEntry("qrcode_width", "180")
                 .doesNotContainEntry("product_code", "FACE_TO_FACE_PAYMENT");
         assertThat(response.redirectHtml()).contains("alipay.trade.page.pay");
         assertThat(response.qrCode()).isNull();

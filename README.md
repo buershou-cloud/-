@@ -6,7 +6,7 @@ Spring Boot payment gateway skeleton for these Alipay flows:
 - 当面付: `alipay.trade.precreate` QR-code payment, no buyer `auth_code` required
 - 预授权: default `alipay.fund.auth.order.app.freeze`
 - 电脑网站支付: `alipay.trade.page.pay`
-- 订单码: `alipay.trade.page.pay` with `FAST_INSTANT_TRADE_PAY` and `qr_pay_mode`
+- 订单码: `alipay.trade.page.pay` with `FAST_INSTANT_TRADE_PAY` and embedded `qr_pay_mode=4`
 - JSAPI 支付: `alipay.trade.create`
 - 直付通支付: standard trade API plus `app_auth_token`, `settle_info`, `sub_merchant`, or extra contract fields
 - 直付通进件: `ant.merchant.expand.indirect.zft.simplecreate`

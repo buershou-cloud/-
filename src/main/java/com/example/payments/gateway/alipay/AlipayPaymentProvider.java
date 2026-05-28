@@ -170,7 +170,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private GatewayResponse orderCodePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         bizContent.putIfAbsent("product_code", "FAST_INSTANT_TRADE_PAY");
-        bizContent.putIfAbsent("qr_pay_mode", "2");
+        bizContent.putIfAbsent("qr_pay_mode", "4");
+        bizContent.putIfAbsent("qrcode_width", "180");
         String redirectHtml = client.pageForm(channel, METHOD_PAGE_PAY, bizContent, options(request));
         return new GatewayResponse(
                 channel.getId(),
@@ -182,7 +183,11 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 null,
                 redirectHtml,
                 null,
-                Map.of("method", METHOD_PAGE_PAY, "product", request.product().name()),
+                Map.of(
+                        "method", METHOD_PAGE_PAY,
+                        "product", request.product().name(),
+                        "qrPayMode", bizContent.get("qr_pay_mode")
+                ),
                 List.of()
         );
     }
