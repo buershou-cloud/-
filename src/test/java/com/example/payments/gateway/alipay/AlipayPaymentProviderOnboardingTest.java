@@ -8,6 +8,7 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -356,6 +357,42 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("product_code", "PREAUTH_PAY")
                 .containsEntry("timeout_express", "30m")
                 .doesNotContainKey("pay_timeout");
+    }
+
+    @Test
+    void preauthCaptureUsesOfficialTradePayFields() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.preauthCapture(
+                standardChannel(),
+                new PreauthCaptureRequest(
+                        "PREAUTH-001",
+                        "PREAUTH-001-PAY",
+                        "2026052900000000000000000001",
+                        "preauth capture",
+                        new BigDecimal("1.00"),
+                        "2088102146225135",
+                        "2088102146225136",
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of()
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.pay");
+        assertThat(client.bizContent)
+                .containsEntry("out_trade_no", "PREAUTH-001-PAY")
+                .containsEntry("product_code", "PRE_AUTH")
+                .containsEntry("auth_no", "2026052900000000000000000001")
+                .containsEntry("scene", "bar_code")
+                .containsEntry("subject", "preauth capture")
+                .containsEntry("total_amount", "1.00")
+                .containsEntry("buyer_id", "2088102146225135")
+                .containsEntry("seller_id", "2088102146225136")
+                .containsEntry("auth_confirm_mode", "COMPLETE")
+                .doesNotContainKey("auth_code");
     }
 
     @Test

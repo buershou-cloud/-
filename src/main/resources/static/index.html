@@ -2414,6 +2414,43 @@
     await loadOrders();
   }
 
+  async function capturePreauthOrder(outTradeNo) {
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    if (!order) {
+      throw { message: `Order not found: ${outTradeNo}` };
+    }
+    if (!order.preAuthorization || order.status !== "FROZEN") {
+      throw { message: "Only frozen pre-authorization orders can be captured." };
+    }
+    const authNo = window.prompt("auth_no", order.tradeNo || "");
+    if (!authNo) return;
+    const buyerId = window.prompt("buyer_id / payer_user_id", "");
+    if (!buyerId) return;
+    const sellerId = window.prompt("seller_id / payee_user_id", "");
+    if (!sellerId) return;
+    const captureOutTradeNo = window.prompt("capture out_trade_no", `${order.outTradeNo}_PAY_${Date.now()}`);
+    if (!captureOutTradeNo) return;
+    const data = await request(`/api/v1/orders/${encodeURIComponent(outTradeNo)}/convert-to-pay`, {
+      method: "POST",
+      body: JSON.stringify(compact({
+        preauthOutTradeNo: order.outTradeNo,
+        outTradeNo: captureOutTradeNo,
+        authNo,
+        subject: `${order.productName || "Preauth"} capture`,
+        totalAmount: order.amount,
+        buyerId,
+        sellerId,
+        authConfirmMode: "COMPLETE",
+        channelIds: order.channelId ? [order.channelId] : []
+      }))
+    });
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("Alipay preauth capture", data);
+    }
+    setDashboardResult({ message: `Preauth capture submitted: ${order.outTradeNo}`, response: data });
+    await loadOrders();
+  }
+
   async function handleOrderAction(outTradeNo, action) {
     if (action === "profit-share") {
       fillProfitShareOrder(outTradeNo);
@@ -2423,6 +2460,14 @@
     if (action === "refund") {
       try {
         await refundPaidOrder(outTradeNo);
+      } catch (error) {
+        setDashboardResult(error);
+      }
+      return;
+    }
+    if (action === "convert-to-pay") {
+      try {
+        await capturePreauthOrder(outTradeNo);
       } catch (error) {
         setDashboardResult(error);
       }

@@ -8,6 +8,7 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 
@@ -24,6 +25,8 @@ public interface PaymentProvider {
     GatewayResponse cancel(PaymentGatewayProperties.Channel channel, PaymentCancelRequest request);
 
     GatewayResponse refund(PaymentGatewayProperties.Channel channel, RefundCreateRequest request);
+
+    GatewayResponse preauthCapture(PaymentGatewayProperties.Channel channel, PreauthCaptureRequest request);
 
     GatewayResponse profitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingRequest request);
 

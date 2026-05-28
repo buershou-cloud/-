@@ -1,11 +1,16 @@
 package com.example.payments.web;
 
+import com.example.payments.domain.GatewayResponse;
+import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -17,9 +22,11 @@ import java.util.List;
 public class OrderController {
 
     private final DemoOrderService orderService;
+    private final PaymentGatewayService paymentGatewayService;
 
-    public OrderController(DemoOrderService orderService) {
+    public OrderController(DemoOrderService orderService, PaymentGatewayService paymentGatewayService) {
         this.orderService = orderService;
+        this.paymentGatewayService = paymentGatewayService;
     }
 
     @GetMapping("/recent")
@@ -54,8 +61,11 @@ public class OrderController {
     }
 
     @PostMapping("/{outTradeNo}/convert-to-pay")
-    public DemoOrderView convertPreauthToPay(@PathVariable String outTradeNo) {
-        return orderService.convertPreauthToPay(outTradeNo);
+    public GatewayResponse convertPreauthToPay(
+            @PathVariable String outTradeNo,
+            @Valid @RequestBody PreauthCaptureRequest request
+    ) {
+        return paymentGatewayService.preauthCapture(request.withPreauthOutTradeNo(outTradeNo));
     }
 
     @DeleteMapping("/{outTradeNo}")

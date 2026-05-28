@@ -48,16 +48,16 @@ public class AlipayNotifyController {
             return ResponseEntity.badRequest().body("failure");
         }
 
-        String outTradeNo = params.get("out_trade_no");
+        String outTradeNo = firstText(params.get("out_trade_no"), params.get("out_order_no"));
         if (outTradeNo == null || outTradeNo.isBlank()) {
             return ResponseEntity.badRequest().body("failure");
         }
         orderService.recordAlipayNotify(
                 outTradeNo,
-                params.get("trade_no"),
+                firstText(params.get("trade_no"), params.get("auth_no")),
                 channelId,
                 amount(params),
-                params.get("trade_status")
+                firstText(params.get("trade_status"), preauthTradeStatus(params.get("status")))
         );
         return ResponseEntity.ok("success");
     }
@@ -119,6 +119,9 @@ public class AlipayNotifyController {
             value = params.get("receipt_amount");
         }
         if (value == null || value.isBlank()) {
+            value = params.get("amount");
+        }
+        if (value == null || value.isBlank()) {
             return BigDecimal.ZERO;
         }
         return new BigDecimal(value);
@@ -127,6 +130,20 @@ public class AlipayNotifyController {
     private static String value(Map<String, String> params, String key) {
         String value = params.get(key);
         return value == null || value.isBlank() ? "-" : value;
+    }
+
+    private static String preauthTradeStatus(String status) {
+        if ("SUCCESS".equals(status)) {
+            return "TRADE_SUCCESS";
+        }
+        if ("CLOSED".equals(status)) {
+            return "TRADE_CLOSED";
+        }
+        return status;
+    }
+
+    private static String firstText(String preferred, String fallback) {
+        return preferred == null || preferred.isBlank() ? fallback : preferred;
     }
 
     private static String escape(String value) {

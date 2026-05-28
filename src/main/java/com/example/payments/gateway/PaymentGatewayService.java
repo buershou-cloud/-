@@ -12,6 +12,7 @@ import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingBatchItem;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
@@ -93,6 +94,20 @@ public class PaymentGatewayService {
         GatewayResponse response = execute(null, request.channelIds(), request.refundAmount(), null, channel -> provider(channel).refund(channel, request));
         if (response.status() != PaymentStatus.FAILED && hasText(request.outTradeNo())) {
             markLocalRefunded(request.outTradeNo());
+        }
+        return response;
+    }
+
+    public GatewayResponse preauthCapture(PreauthCaptureRequest request) {
+        GatewayResponse response = execute(
+                null,
+                request.channelIds(),
+                request.totalAmount(),
+                null,
+                channel -> provider(channel).preauthCapture(channel, request)
+        );
+        if (response.status() != PaymentStatus.FAILED && hasText(request.preauthOutTradeNo())) {
+            orderService.convertPreauthToPay(request.preauthOutTradeNo(), firstText(response.tradeNo(), request.outTradeNo()));
         }
         return response;
     }

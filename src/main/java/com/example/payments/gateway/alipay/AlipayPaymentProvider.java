@@ -9,6 +9,7 @@ import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.GatewayException;
@@ -31,6 +32,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_QUERY = "alipay.trade.query";
     private static final String METHOD_TRADE_CANCEL = "alipay.trade.cancel";
     private static final String METHOD_TRADE_REFUND = "alipay.trade.refund";
+    private static final String METHOD_TRADE_PAY = "alipay.trade.pay";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
@@ -104,6 +106,23 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "refund_reason", request.refundReason());
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_REFUND, bizContent, options(request.appAuthToken(), null, null));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse preauthCapture(PaymentGatewayProperties.Channel channel, PreauthCaptureRequest request) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        bizContent.put("out_trade_no", request.outTradeNo());
+        bizContent.put("scene", "bar_code");
+        bizContent.put("product_code", "PRE_AUTH");
+        bizContent.put("auth_no", request.authNo());
+        bizContent.put("subject", request.subject());
+        bizContent.put("total_amount", amount(request.totalAmount()));
+        bizContent.put("buyer_id", request.buyerId());
+        bizContent.put("seller_id", request.sellerId());
+        bizContent.put("auth_confirm_mode", firstText(request.authConfirmMode(), "COMPLETE"));
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_PAY, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 

@@ -10,6 +10,7 @@ import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentQueryRequest;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
 import com.example.payments.domain.ProfitSharingRequest;
@@ -68,6 +69,11 @@ public class PaymentController {
     @PostMapping("/refund")
     public GatewayResponse refund(@Valid @RequestBody RefundCreateRequest request) {
         return paymentGatewayService.refund(request);
+    }
+
+    @PostMapping("/preauth-capture")
+    public GatewayResponse preauthCapture(@Valid @RequestBody PreauthCaptureRequest request) {
+        return paymentGatewayService.preauthCapture(request);
     }
 
     @PostMapping("/profit-sharing")

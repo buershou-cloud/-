@@ -205,6 +205,10 @@ public class DemoOrderService {
     }
 
     public synchronized DemoOrderView convertPreauthToPay(String outTradeNo) {
+        return convertPreauthToPay(outTradeNo, null);
+    }
+
+    public synchronized DemoOrderView convertPreauthToPay(String outTradeNo, String captureTradeNo) {
         DemoOrder order = order(outTradeNo);
         if (!order.isPreAuthorization()) {
             throw new IllegalStateException("鍙湁棰勬巿鏉冭鍗曞彲浠ヨ浆鏀粯");
@@ -215,7 +219,11 @@ public class DemoOrderService {
         order.setStatus(DemoOrderStatus.COMPLETED);
         order.setPreAuthorization(false);
         order.setProductName("棰勬巿鏉冭浆鏀粯");
-        ensureTradeNo(order, "CAPTURE");
+        if (hasText(captureTradeNo)) {
+            order.setTradeNo(captureTradeNo.trim());
+        } else {
+            ensureTradeNo(order, "CAPTURE");
+        }
         persist(order);
         return DemoOrderView.from(order);
     }
