@@ -50,9 +50,10 @@ public class AlipayOpenApiClient {
             Charset charset = charset(channel);
             String body = formEncode(params, charset);
             log.info(
-                    "Sending Alipay request method={} channel={} outTradeNo={} tradeNo={} outRequestNo={} refundAmount={}",
+                    "Sending Alipay request method={} channel={} productCode={} outTradeNo={} tradeNo={} outRequestNo={} refundAmount={}",
                     method,
                     channel.getId(),
+                    bizValue(bizContent, "product_code"),
                     bizValue(bizContent, "out_trade_no"),
                     bizValue(bizContent, "trade_no"),
                     bizValue(bizContent, "out_request_no"),

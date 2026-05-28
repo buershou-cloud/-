@@ -375,6 +375,8 @@
   let currentProduct;
   let currentProductOptions = [];
   let alipaySubmitForm;
+  let paymentPollTimer;
+  let paymentPollAttempts = 0;
 
   const $ = (id) => document.getElementById(id);
 
@@ -448,27 +450,20 @@
     $("paymentFormHolder").innerHTML = "";
   }
 
+  function clearPaymentPolling() {
+    if (paymentPollTimer) {
+      clearTimeout(paymentPollTimer);
+      paymentPollTimer = null;
+    }
+    paymentPollAttempts = 0;
+  }
+
   function submitAlipayForm() {
     if (!alipaySubmitForm) {
       return false;
     }
     alipaySubmitForm.submit();
     return true;
-  }
-
-  function alipayFormToUrl(form) {
-    if (!form) {
-      return "";
-    }
-    const action = form.getAttribute("action");
-    if (!action) {
-      return "";
-    }
-    const url = new URL(action, window.location.href);
-    form.querySelectorAll("input[name]").forEach((input) => {
-      url.searchParams.set(input.name, input.value || "");
-    });
-    return url.toString();
   }
 
   function showPaymentQr(text, title, hint) {
@@ -486,6 +481,98 @@
     }
     const target = `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(text)}`;
     window.location.href = target;
+  }
+
+  function isOrderCodeProduct(product) {
+    return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
+  }
+
+  function responseBody(data) {
+    const raw = data && data.raw;
+    if (!raw || typeof raw !== "object") {
+      return {};
+    }
+    const key = Object.keys(raw).find((item) => item.endsWith("_response"));
+    return key && raw[key] && typeof raw[key] === "object" ? raw[key] : {};
+  }
+
+  function responseTradeStatus(data) {
+    return responseBody(data).trade_status || "";
+  }
+
+  function paymentChannelId(data) {
+    return data.channelId || (currentChannel && currentChannel.id) || "";
+  }
+
+  function isPaymentComplete(data) {
+    return data.status === "SUCCESS" || responseTradeStatus(data) === "TRADE_SUCCESS" || responseTradeStatus(data) === "TRADE_FINISHED";
+  }
+
+  function isPaymentClosed(data) {
+    return data.status === "CLOSED" || responseTradeStatus(data) === "TRADE_CLOSED";
+  }
+
+  async function queryPaymentStatus(outTradeNo, channelId) {
+    return request("/api/v1/payments/query", {
+      method: "POST",
+      body: JSON.stringify({
+        outTradeNo,
+        channelIds: channelId ? [channelId] : []
+      })
+    });
+  }
+
+  async function cancelPayment(outTradeNo, channelId) {
+    return request("/api/v1/payments/cancel", {
+      method: "POST",
+      body: JSON.stringify({
+        outTradeNo,
+        channelIds: channelId ? [channelId] : []
+      })
+    });
+  }
+
+  function startOrderCodePolling(paymentResponse, payload) {
+    clearPaymentPolling();
+    if (!isOrderCodeProduct(currentProduct) || !payload.outTradeNo) {
+      return;
+    }
+    const channelId = paymentChannelId(paymentResponse);
+    const maxAttempts = 120;
+    const poll = async () => {
+      paymentPollAttempts += 1;
+      try {
+        const data = await queryPaymentStatus(payload.outTradeNo, channelId);
+        if (isPaymentComplete(data)) {
+          clearPaymentPolling();
+          hidePaymentQr();
+          writeResult("支付成功，订单状态已同步。", "ok");
+          return;
+        }
+        if (isPaymentClosed(data)) {
+          clearPaymentPolling();
+          hidePaymentQr();
+          writeResult("订单已关闭，未完成付款。", "bad");
+          return;
+        }
+        if (paymentPollAttempts >= maxAttempts) {
+          const cancelResult = await cancelPayment(payload.outTradeNo, channelId);
+          clearPaymentPolling();
+          hidePaymentQr();
+          writeResult(cancelResult.status === "CLOSED" ? "订单码超时未支付，已撤销订单。" : cancelResult, cancelResult.status === "CLOSED" ? "bad" : "loading");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 5000);
+      } catch (error) {
+        if (paymentPollAttempts >= maxAttempts) {
+          clearPaymentPolling();
+          writeResult(error, "bad");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 5000);
+      }
+    };
+    paymentPollTimer = setTimeout(poll, 5000);
   }
 
   async function request(url, options = {}) {
@@ -584,6 +671,7 @@
     event.preventDefault();
     hidePaymentQr();
     hideContinuePanel();
+    clearPaymentPolling();
     const payButton = $("payButton");
     const amount = Number($("amount").value);
     if (!amount || amount < 0.01) {
@@ -625,6 +713,7 @@
         return;
       }
       if (data.qrCode) {
+        startOrderCodePolling(data, payload);
         if (isMobilePayClient()) {
           openAlipayQr(data.qrCode);
           return;
@@ -654,16 +743,6 @@
           alipaySubmitForm = form;
           if (isMobilePayClient()) {
             setTimeout(() => submitAlipayForm(), 60);
-            return;
-          }
-          const payUrl = alipayFormToUrl(form);
-          if (payUrl) {
-            showPaymentQr(
-              payUrl,
-              "支付宝付款二维码",
-              "请使用手机支付宝扫码继续付款。"
-            );
-            writeResult("请使用手机支付宝扫码付款。", "ok");
             return;
           }
           $("continuePanel").classList.add("active");

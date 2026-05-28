@@ -6,7 +6,7 @@ Spring Boot payment gateway skeleton for these Alipay flows:
 - 当面付: `alipay.trade.precreate` with `FACE_TO_FACE_PAYMENT`, no buyer `auth_code` required
 - 预授权: `alipay.fund.auth.order.app.freeze` with default `PRE_AUTH_ONLINE`; `extra.product_code=PREAUTH_PAY` is supported for contract-specific variants
 - 电脑网站支付: `alipay.trade.page.pay` with `FAST_INSTANT_TRADE_PAY`
-- 订单码: `alipay.trade.precreate` with `QR_CODE_OFFLINE`
+- 订单码: `alipay.trade.precreate` with `QR_CODE_OFFLINE`, then poll `alipay.trade.query`; unpaid timeout can call `alipay.trade.cancel`
 - JSAPI 支付: `alipay.trade.create` with `JSAPI_PAY`, requires `buyerId` or `buyerOpenId`
 - 直付通支付: standard trade API plus `app_auth_token`, `settle_info`, `sub_merchant`, or extra contract fields
 - 直付通进件: `ant.merchant.expand.indirect.zft.simplecreate`
@@ -76,6 +76,7 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 
 - `POST /api/v1/payments/pay`
 - `POST /api/v1/payments/query`
+- `POST /api/v1/payments/cancel`
 - `POST /api/v1/payments/refund`
 - `POST /api/v1/payments/profit-sharing`
 - `POST /api/v1/payments/profit-sharing/channel`

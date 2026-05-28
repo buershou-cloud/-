@@ -5,6 +5,7 @@ import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
@@ -19,6 +20,8 @@ public interface PaymentProvider {
     GatewayResponse pay(PaymentGatewayProperties.Channel channel, PayCreateRequest request);
 
     GatewayResponse query(PaymentGatewayProperties.Channel channel, PaymentQueryRequest request);
+
+    GatewayResponse cancel(PaymentGatewayProperties.Channel channel, PaymentCancelRequest request);
 
     GatewayResponse refund(PaymentGatewayProperties.Channel channel, RefundCreateRequest request);
 

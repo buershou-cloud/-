@@ -5,6 +5,7 @@ import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
@@ -28,6 +29,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_PRECREATE = "alipay.trade.precreate";
     private static final String METHOD_TRADE_CREATE = "alipay.trade.create";
     private static final String METHOD_TRADE_QUERY = "alipay.trade.query";
+    private static final String METHOD_TRADE_CANCEL = "alipay.trade.cancel";
     private static final String METHOD_TRADE_REFUND = "alipay.trade.refund";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
@@ -79,7 +81,17 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "trade_no", request.tradeNo());
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_QUERY, bizContent, options(request.appAuthToken(), null, null));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse cancel(PaymentGatewayProperties.Channel channel, PaymentCancelRequest request) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        putIfText(bizContent, "out_trade_no", request.outTradeNo());
+        putIfText(bizContent, "trade_no", request.tradeNo());
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CANCEL, bizContent, options(request.appAuthToken(), null, null));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     @Override
@@ -92,7 +104,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "refund_reason", request.refundReason());
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_REFUND, bizContent, options(request.appAuthToken(), null, null));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     @Override
@@ -105,7 +117,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "operator_id", request.operatorId());
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_ORDER_SETTLE, bizContent, options(request.appAuthToken(), null, null));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     @Override
@@ -122,7 +134,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putComplaintQueryFields(method, bizContent, request);
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request.appAuthToken(), null, null));
-        return apiResponse(channel.getId(), response, null, null);
+        return apiResponse(channel.getId(), response, null, null, bizContent);
     }
 
     @Override
@@ -131,7 +143,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         String method = hasText(request.method()) ? request.method() : properties.getOperations().getOnboardingMethod();
         putOnboardingExternalId(method, bizContent, request.outBizNo());
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request.appAuthToken(), null, null));
-        return apiResponse(channel.getId(), response, null, null);
+        return apiResponse(channel.getId(), response, null, null, bizContent);
     }
 
     private GatewayResponse pagePay(
@@ -153,7 +165,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 null,
                 redirectHtml,
                 null,
-                Map.of("method", method),
+                requestRaw(method, productCode),
                 List.of()
         );
     }
@@ -162,14 +174,14 @@ public class AlipayPaymentProvider implements PaymentProvider {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         bizContent.put("product_code", "FACE_TO_FACE_PAYMENT");
         AlipayGatewayResponse response = client.execute(channel, METHOD_PRECREATE, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")), bizContent);
     }
 
     private GatewayResponse orderCodePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         bizContent.put("product_code", "QR_CODE_OFFLINE");
         AlipayGatewayResponse response = client.execute(channel, METHOD_PRECREATE, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")), bizContent);
     }
 
     private GatewayResponse jsapi(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
@@ -184,7 +196,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         }
         bizContent.put("product_code", "JSAPI_PAY");
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CREATE, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     private GatewayResponse preauth(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
@@ -201,7 +213,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         merge(bizContent, request.extra());
         removeInternalExtras(bizContent);
         AlipayGatewayResponse response = client.execute(channel, METHOD_PREAUTH_FREEZE, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     private GatewayResponse directPay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
@@ -211,7 +223,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         String method = asString(valueFromExtra(request.extra(), "alipay_method", METHOD_TRADE_CREATE));
         bizContent.remove("alipay_method");
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), null);
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     private static String preauthTimeoutField(String productCode) {
@@ -294,6 +306,16 @@ public class AlipayPaymentProvider implements PaymentProvider {
     }
 
     private GatewayResponse apiResponse(String channelId, AlipayGatewayResponse response, String fallbackOutTradeNo, String qrCode) {
+        return apiResponse(channelId, response, fallbackOutTradeNo, qrCode, Map.of());
+    }
+
+    private GatewayResponse apiResponse(
+            String channelId,
+            AlipayGatewayResponse response,
+            String fallbackOutTradeNo,
+            String qrCode,
+            Map<String, Object> requestBizContent
+    ) {
         Map<String, Object> data = response.response();
         String outTradeNo = firstText(asString(data.get("out_trade_no")), fallbackOutTradeNo);
         String tradeNo = firstText(asString(data.get("trade_no")), asString(data.get("auth_no")));
@@ -308,7 +330,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 tradeNo,
                 qrCode,
                 null,
-                response.raw(),
+                responseRaw(response, requestBizContent),
                 List.of()
         );
     }
@@ -322,9 +344,12 @@ public class AlipayPaymentProvider implements PaymentProvider {
             return PaymentStatus.PAYING;
         }
         if ("TRADE_CLOSED".equals(tradeStatus)) {
-            return PaymentStatus.FAILED;
+            return PaymentStatus.CLOSED;
         }
         if ("10000".equals(response.code())) {
+            if (METHOD_TRADE_CANCEL.equals(response.method())) {
+                return PaymentStatus.CLOSED;
+            }
             if (METHOD_PRECREATE.equals(response.method())
                     || METHOD_TRADE_CREATE.equals(response.method())
                     || METHOD_PREAUTH_FREEZE.equals(response.method())) {
@@ -336,6 +361,23 @@ public class AlipayPaymentProvider implements PaymentProvider {
             return PaymentStatus.PENDING;
         }
         return PaymentStatus.FAILED;
+    }
+
+    private static Map<String, Object> requestRaw(String method, String productCode) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("request_method", method);
+        raw.put("request_product_code", productCode);
+        return raw;
+    }
+
+    private static Map<String, Object> responseRaw(AlipayGatewayResponse response, Map<String, Object> requestBizContent) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        if (response.raw() != null) {
+            raw.putAll(response.raw());
+        }
+        raw.put("request_method", response.method());
+        putIfPresent(raw, "request_product_code", requestBizContent.get("product_code"));
+        return raw;
     }
 
     private static AlipayRequestOptions options(PayCreateRequest request) {

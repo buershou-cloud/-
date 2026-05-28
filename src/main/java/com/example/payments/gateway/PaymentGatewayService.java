@@ -8,6 +8,7 @@ import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
@@ -77,7 +78,15 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse query(PaymentQueryRequest request) {
-        return execute(null, request.channelIds(), null, null, channel -> provider(channel).query(channel, request));
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).query(channel, request));
+        syncLocalPaymentStatus(request.outTradeNo(), response);
+        return response;
+    }
+
+    public GatewayResponse cancel(PaymentCancelRequest request) {
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).cancel(channel, request));
+        syncLocalPaymentStatus(request.outTradeNo(), response);
+        return response;
     }
 
     public GatewayResponse refund(RefundCreateRequest request) {
@@ -388,6 +397,17 @@ public class PaymentGatewayService {
                 request.totalAmount(),
                 request.product() == PaymentProduct.ALIPAY_PREAUTH
         );
+    }
+
+    private void syncLocalPaymentStatus(String outTradeNo, GatewayResponse response) {
+        if (!hasText(outTradeNo) || response == null || response.status() == PaymentStatus.FAILED) {
+            return;
+        }
+        try {
+            orderService.recordPaymentResult(outTradeNo, response.tradeNo(), response.channelId(), response.status());
+        } catch (RuntimeException ignored) {
+            // Alipay is authoritative; a local demo order sync error must not hide the gateway response.
+        }
     }
 
     private static String extraText(Map<String, Object> extra, String key, String fallback) {

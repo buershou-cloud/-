@@ -1,5 +1,6 @@
 package com.example.payments.order;
 
+import com.example.payments.domain.PaymentStatus;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -269,6 +270,24 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized DemoOrderView recordPaymentResult(
+            String outTradeNo,
+            String tradeNo,
+            String channelId,
+            PaymentStatus paymentStatus
+    ) {
+        DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
+        if (order == null) {
+            throw new IllegalArgumentException("Order does not exist: " + outTradeNo);
+        }
+        if (hasText(tradeNo)) {
+            order.setTradeNo(tradeNo.trim());
+        }
+        order.setStatus(statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus()));
+        persist(order);
+        return DemoOrderView.from(order);
+    }
+
     public synchronized DemoOrderView recordAlipayNotify(
             String outTradeNo,
             String tradeNo,
@@ -397,7 +416,8 @@ public class DemoOrderService {
                     amount = ?, status = ?, pre_authorization = ?, supplemented = ?, profit_shared = ?,
                     paid_at = CASE WHEN ? = 'COMPLETED' THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE paid_at END,
                     frozen_at = CASE WHEN ? = 'FROZEN' THEN COALESCE(frozen_at, CURRENT_TIMESTAMP) ELSE frozen_at END,
-                    refunded_at = CASE WHEN ? = 'REFUNDED' THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END
+                    refunded_at = CASE WHEN ? = 'REFUNDED' THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
+                    closed_at = CASE WHEN ? = 'CLOSED' THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE closed_at END
                 WHERE out_trade_no = ?
                 """,
                 nullIfBlank(order.getTradeNo()),
@@ -410,6 +430,7 @@ public class DemoOrderService {
                 order.isPreAuthorization() ? 1 : 0,
                 order.isSupplemented() ? 1 : 0,
                 order.isProfitShared() ? 1 : 0,
+                order.getStatus().name(),
                 order.getStatus().name(),
                 order.getStatus().name(),
                 order.getStatus().name(),
@@ -467,9 +488,28 @@ public class DemoOrderService {
             return preAuthorization ? DemoOrderStatus.FROZEN : DemoOrderStatus.COMPLETED;
         }
         if ("TRADE_CLOSED".equals(tradeStatus)) {
-            return DemoOrderStatus.REFUNDED;
+            return DemoOrderStatus.CLOSED;
         }
         return DemoOrderStatus.UNPAID;
+    }
+
+    private static DemoOrderStatus statusFromGateway(
+            PaymentStatus paymentStatus,
+            boolean preAuthorization,
+            DemoOrderStatus currentStatus
+    ) {
+        if (paymentStatus == null) {
+            return firstStatus(currentStatus);
+        }
+        return switch (paymentStatus) {
+            case SUCCESS -> preAuthorization ? DemoOrderStatus.FROZEN : DemoOrderStatus.COMPLETED;
+            case CLOSED -> DemoOrderStatus.CLOSED;
+            case CREATED, PAYING, PENDING, UNKNOWN, FAILED -> firstStatus(currentStatus);
+        };
+    }
+
+    private static DemoOrderStatus firstStatus(DemoOrderStatus status) {
+        return status == null ? DemoOrderStatus.UNPAID : status;
     }
 
     private static DemoOrderStatus status(String value) {

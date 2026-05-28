@@ -8,6 +8,7 @@ import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
@@ -57,6 +58,11 @@ public class PaymentController {
     @PostMapping("/query")
     public GatewayResponse query(@Valid @RequestBody PaymentQueryRequest request) {
         return paymentGatewayService.query(request);
+    }
+
+    @PostMapping("/cancel")
+    public GatewayResponse cancel(@Valid @RequestBody PaymentCancelRequest request) {
+        return paymentGatewayService.cancel(request);
     }
 
     @PostMapping("/refund")

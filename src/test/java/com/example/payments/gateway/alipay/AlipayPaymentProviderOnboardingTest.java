@@ -5,7 +5,9 @@ import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
+import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
+import com.example.payments.domain.PaymentStatus;
 import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -196,6 +198,27 @@ class AlipayPaymentProviderOnboardingTest {
                 .doesNotContainKeys("qr_pay_mode", "qrcode_width");
         assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/ORDER-CODE-001");
         assertThat(response.redirectHtml()).isNull();
+    }
+
+    @Test
+    void cancelUsesOfficialTradeCancelApi() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.cancel(
+                standardChannel(),
+                new PaymentCancelRequest(
+                        "ORDER-CODE-001",
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of()
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.cancel");
+        assertThat(client.bizContent).containsEntry("out_trade_no", "ORDER-CODE-001");
+        assertThat(response.status()).isEqualTo(PaymentStatus.CLOSED);
     }
 
     @Test
