@@ -1,6 +1,7 @@
 package com.example.payments.gateway;
 
 import com.example.payments.channel.ChannelSelector;
+import com.example.payments.complaint.ComplaintRecordService;
 import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.domain.ChannelAttempt;
 import com.example.payments.domain.ComplaintQueryRequest;
@@ -42,6 +43,7 @@ public class PaymentGatewayService {
     private final DemoOrderService orderService;
     private final DemoMerchantService merchantService;
     private final OnboardingRecordService onboardingRecordService;
+    private final ComplaintRecordService complaintRecordService;
 
     public PaymentGatewayService(
             PaymentGatewayProperties properties,
@@ -49,7 +51,8 @@ public class PaymentGatewayService {
             List<PaymentProvider> providers,
             DemoOrderService orderService,
             DemoMerchantService merchantService,
-            OnboardingRecordService onboardingRecordService
+            OnboardingRecordService onboardingRecordService,
+            ComplaintRecordService complaintRecordService
     ) {
         this.properties = properties;
         this.channelSelector = channelSelector;
@@ -57,6 +60,7 @@ public class PaymentGatewayService {
         this.orderService = orderService;
         this.merchantService = merchantService;
         this.onboardingRecordService = onboardingRecordService;
+        this.complaintRecordService = complaintRecordService;
     }
 
     public GatewayResponse pay(PayCreateRequest request) {
@@ -145,40 +149,53 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse queryComplaints(ComplaintQueryRequest request) {
-        return execute(null, request.channelIds(), null, null, channel -> provider(channel).queryComplaints(channel, request));
+        ComplaintQueryRequest safeRequest = safeComplaintRequest(request);
+        GatewayResponse response = execute(null, safeRequest.channelIds(), null, null,
+                channel -> provider(channel).queryComplaints(channel, safeRequest));
+        List<ComplaintRecordService.ComplaintRecordView> records = complaintRecordService.record(response);
+        return withComplaintRecords(response, records);
     }
 
     public GatewayResponse queryComplaintsAllChannels(ComplaintQueryRequest request) {
+        ComplaintQueryRequest safeRequest = safeComplaintRequest(request);
         List<PaymentGatewayProperties.Channel> channels = channelSelector.select(
                 null,
-                request.channelIds(),
+                safeRequest.channelIds(),
                 Integer.MAX_VALUE,
                 null,
                 RoutingMode.PRIORITY
         );
         List<ChannelAttempt> attempts = new ArrayList<>();
         List<GatewayResponse> responses = new ArrayList<>();
+        List<ComplaintRecordService.ComplaintRecordView> records = new ArrayList<>();
 
         for (PaymentGatewayProperties.Channel channel : channels) {
             try {
-                GatewayResponse response = provider(channel).queryComplaints(channel, request);
+                GatewayResponse response = provider(channel).queryComplaints(channel, safeRequest);
                 boolean success = response.status() != PaymentStatus.FAILED;
                 attempts.add(new ChannelAttempt(channel.getId(), success, response.code(), response.message()));
                 responses.add(response);
+                records.addAll(complaintRecordService.record(response));
             } catch (GatewayException ex) {
                 attempts.add(new ChannelAttempt(channel.getId(), false, ex.code(), ex.getMessage()));
+                GatewayResponse failure = complaintFailure(channel.getId(), ex.code(), ex.getMessage());
+                responses.add(failure);
+                records.addAll(complaintRecordService.record(failure));
             } catch (RuntimeException ex) {
                 attempts.add(new ChannelAttempt(channel.getId(), false, "COMPLAINT_QUERY_EXCEPTION", ex.getMessage()));
+                GatewayResponse failure = complaintFailure(channel.getId(), "COMPLAINT_QUERY_EXCEPTION", ex.getMessage());
+                responses.add(failure);
+                records.addAll(complaintRecordService.record(failure));
             }
         }
 
         long successCount = attempts.stream().filter(ChannelAttempt::success).count();
-        Map<String, Object> raw = Map.of(
-                "beginTime", request.beginTime(),
-                "endTime", request.endTime(),
-                "channels", channels.stream().map(PaymentGatewayProperties.Channel::getId).toList(),
-                "responses", responses
-        );
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("beginTime", safeRequest.beginTime());
+        raw.put("endTime", safeRequest.endTime());
+        raw.put("channels", channels.stream().map(PaymentGatewayProperties.Channel::getId).toList());
+        raw.put("responses", responses);
+        raw.put("complaintRecords", records);
         return new GatewayResponse(
                 null,
                 successCount > 0 ? PaymentStatus.SUCCESS : PaymentStatus.FAILED,
@@ -190,6 +207,60 @@ public class PaymentGatewayService {
                 null,
                 raw,
                 List.copyOf(attempts)
+        );
+    }
+
+    private static ComplaintQueryRequest safeComplaintRequest(ComplaintQueryRequest request) {
+        if (request != null) {
+            return request;
+        }
+        return new ComplaintQueryRequest(null, null, null, 1, 10, null, null, List.of(), Map.of());
+    }
+
+    private GatewayResponse complaintFailure(String channelId, String code, String message) {
+        return new GatewayResponse(
+                channelId,
+                PaymentStatus.FAILED,
+                code,
+                message,
+                null,
+                null,
+                null,
+                null,
+                complaintFailureRaw(channelId, code, message),
+                List.of(new ChannelAttempt(channelId, false, code, message))
+        );
+    }
+
+    private Map<String, Object> complaintFailureRaw(String channelId, String code, String message) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("channelId", channelId);
+        raw.put("code", code);
+        raw.put("message", message == null ? "" : message);
+        return raw;
+    }
+
+    private GatewayResponse withComplaintRecords(
+            GatewayResponse response,
+            List<ComplaintRecordService.ComplaintRecordView> records
+    ) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        if (response.raw() != null) {
+            raw.putAll(response.raw());
+        }
+        raw.put("complaintRecords", records);
+        return new GatewayResponse(
+                response.channelId(),
+                response.status(),
+                response.code(),
+                response.message(),
+                response.outTradeNo(),
+                response.tradeNo(),
+                response.qrCode(),
+                response.redirectHtml(),
+                response.redirectUrl(),
+                raw,
+                response.attempts()
         );
     }
 

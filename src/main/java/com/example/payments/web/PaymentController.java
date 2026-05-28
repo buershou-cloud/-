@@ -3,6 +3,7 @@ package com.example.payments.web;
 import com.example.payments.complaint.ComplaintAutoQueryRequest;
 import com.example.payments.complaint.ComplaintAutoQueryService;
 import com.example.payments.complaint.ComplaintAutoQueryStatus;
+import com.example.payments.complaint.ComplaintRecordService;
 import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,15 +35,18 @@ public class PaymentController {
     private final PaymentGatewayService paymentGatewayService;
     private final ComplaintAutoQueryService complaintAutoQueryService;
     private final OnboardingRecordService onboardingRecordService;
+    private final ComplaintRecordService complaintRecordService;
 
     public PaymentController(
             PaymentGatewayService paymentGatewayService,
             ComplaintAutoQueryService complaintAutoQueryService,
-            OnboardingRecordService onboardingRecordService
+            OnboardingRecordService onboardingRecordService,
+            ComplaintRecordService complaintRecordService
     ) {
         this.paymentGatewayService = paymentGatewayService;
         this.complaintAutoQueryService = complaintAutoQueryService;
         this.onboardingRecordService = onboardingRecordService;
+        this.complaintRecordService = complaintRecordService;
     }
 
     @PostMapping("/pay")
@@ -77,6 +82,11 @@ public class PaymentController {
     @GetMapping("/complaints/auto")
     public ComplaintAutoQueryStatus complaintAutoStatus() {
         return complaintAutoQueryService.status();
+    }
+
+    @GetMapping("/complaints/records")
+    public List<ComplaintRecordService.ComplaintRecordView> complaintRecords(@RequestParam(defaultValue = "100") int limit) {
+        return complaintRecordService.list(limit);
     }
 
     @PatchMapping("/complaints/auto")

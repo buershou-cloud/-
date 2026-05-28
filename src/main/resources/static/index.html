@@ -523,6 +523,10 @@
       align-items: start;
     }
 
+    .work-grid .wide-panel {
+      grid-column: 1 / -1;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1383,6 +1387,30 @@
               <pre id="complaintAutoResult" class="operation-result">自动查询未开启</pre>
             </div>
           </section>
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">投诉记录</h2>
+              <button class="btn secondary" id="refreshComplaintRecordsBtn" type="button">刷新记录</button>
+            </div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>投诉单号</th>
+                      <th>商户订单号</th>
+                      <th>支付宝交易号</th>
+                      <th>通道</th>
+                      <th>状态</th>
+                      <th>投诉内容</th>
+                      <th>查询时间</th>
+                    </tr>
+                  </thead>
+                  <tbody id="complaintRecordTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -1632,6 +1660,7 @@
     merchants: [],
     onboardingRecords: [],
     complaintAuto: null,
+    complaintRecords: [],
     editingChannelId: null,
     editingMerchantId: null
   };
@@ -1681,6 +1710,15 @@
 
   function json(value) {
     return JSON.stringify(value, null, 2);
+  }
+
+  function html(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;")
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
   }
 
   function setConsole(value) {
@@ -3045,6 +3083,43 @@
     renderComplaintAutoStatus();
   }
 
+  function complaintStatusBadge(status) {
+    const text = status || "-";
+    const normalized = String(text).toUpperCase();
+    const className = ["SUCCESS", "PROCESSED", "FINISHED", "UP"].includes(normalized)
+      ? "success"
+      : ["FAILED", "ERROR", "COMPLAINT_QUERY_EXCEPTION"].includes(normalized)
+        ? "refunded"
+        : "pending";
+    return `<span class="status ${className}">${html(text)}</span>`;
+  }
+
+  function renderComplaintRecords() {
+    const tableBody = $("complaintRecordTableBody");
+    if (!tableBody) return;
+    const records = state.complaintRecords || [];
+    if (!records.length) {
+      tableBody.innerHTML = '<tr><td colspan="7" class="muted">暂无投诉记录，点击查询后会显示支付宝返回内容或失败原因</td></tr>';
+      return;
+    }
+    tableBody.innerHTML = records.map((record) => `
+      <tr>
+        <td>${html(record.complaintId || "-")}</td>
+        <td>${html(record.outTradeNo || "-")}</td>
+        <td>${html(record.tradeNo || "-")}</td>
+        <td>${html(record.channelId || "-")}</td>
+        <td>${complaintStatusBadge(record.status)}</td>
+        <td>${html(record.content || record.title || "-")}</td>
+        <td>${html(record.queriedAt || "-")}</td>
+      </tr>
+    `).join("");
+  }
+
+  async function loadComplaintRecords() {
+    state.complaintRecords = await request("/api/v1/payments/complaints/records?limit=100");
+    renderComplaintRecords();
+  }
+
   async function configureComplaintAuto(enabled) {
     const data = await request("/api/v1/payments/complaints/auto", {
       method: "PATCH",
@@ -3061,6 +3136,7 @@
     });
     state.complaintAuto = data;
     renderComplaintAutoStatus();
+    await loadComplaintRecords();
   }
 
   async function postAndShow(title, path, payload) {
@@ -3248,6 +3324,7 @@
         body: JSON.stringify(complaintPayload())
       });
       setComplaintResult(data);
+      await loadComplaintRecords();
     } catch (error) {
       setComplaintResult(error);
     }
@@ -3274,6 +3351,14 @@
       await runComplaintAutoNow();
     } catch (error) {
       setComplaintAutoResult(error);
+    }
+  });
+
+  $("refreshComplaintRecordsBtn").addEventListener("click", async () => {
+    try {
+      await loadComplaintRecords();
+    } catch (error) {
+      setComplaintResult(error);
     }
   });
 
@@ -3372,9 +3457,10 @@
   renderTopbarDate();
   renderDefaultComplaintTimes();
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
+  setInterval(() => loadComplaintRecords().catch(() => {}), 60000);
 
   checkAdminSession()
-    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
+    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus(), loadComplaintRecords()]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>
