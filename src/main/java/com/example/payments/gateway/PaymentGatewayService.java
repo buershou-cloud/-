@@ -283,14 +283,30 @@ public class PaymentGatewayService {
     ) {
         int maxAttempts = Math.max(1, properties.getRouting().getMaxAttempts());
         RoutingMode mode = routingMode == null ? properties.getRouting().getMode() : routingMode;
-        List<PaymentGatewayProperties.Channel> channels = channelSelector.select(
-                product,
-                requestedChannelIds,
-                maxAttempts,
-                amount,
-                mode
-        );
         List<ChannelAttempt> attempts = new ArrayList<>();
+        List<PaymentGatewayProperties.Channel> channels;
+        try {
+            channels = channelSelector.select(
+                    product,
+                    requestedChannelIds,
+                    maxAttempts,
+                    amount,
+                    mode
+            );
+        } catch (IllegalStateException ex) {
+            return new GatewayResponse(
+                    null,
+                    PaymentStatus.FAILED,
+                    "NO_MATCHING_CHANNEL",
+                    ex.getMessage(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    routeFailureRaw(product, requestedChannelIds, amount, mode),
+                    List.of()
+            );
+        }
         GatewayException lastGatewayException = null;
         RuntimeException lastRuntimeException = null;
 
@@ -333,6 +349,20 @@ public class PaymentGatewayService {
                 Map.of(),
                 List.copyOf(attempts)
         );
+    }
+
+    private static Map<String, Object> routeFailureRaw(
+            PaymentProduct product,
+            Collection<String> requestedChannelIds,
+            BigDecimal amount,
+            RoutingMode routingMode
+    ) {
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("product", product == null ? null : product.name());
+        raw.put("requestedChannelIds", requestedChannelIds == null ? List.of() : List.copyOf(requestedChannelIds));
+        raw.put("amount", amount);
+        raw.put("routingMode", routingMode == null ? null : routingMode.name());
+        return raw;
     }
 
     private PaymentProvider provider(PaymentGatewayProperties.Channel channel) {

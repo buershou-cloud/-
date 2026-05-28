@@ -1346,6 +1346,7 @@
                 </div>
                 <div class="form-actions"><button class="btn" type="submit">提交进件</button></div>
               </form>
+              <pre id="onboardResult" class="operation-result">等待进件提交</pre>
             </div>
           </section>
           <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>时间</th></tr></thead><tbody id="onboardingRecordTableBody"></tbody></table></div></div></section>
@@ -1784,6 +1785,17 @@
     if (!element) return;
     if (value && typeof value === "object" && value.message) {
       const detail = value.response ? value.response : value.items;
+      element.textContent = value.message + (detail ? `\n${json(detail)}` : "");
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function setOnboardResult(value) {
+    const element = $("onboardResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.message) {
+      const detail = value.response || value;
       element.textContent = value.message + (detail ? `\n${json(detail)}` : "");
       return;
     }
@@ -2614,16 +2626,34 @@
   }
 
   function renderChannelChecks() {
-    const checks = state.channels.map((channel) => `
-      <label class="check">
-        <input type="checkbox" value="${html(channel.id)}" ${channel.enabled ? "checked" : ""}>
-        ${html(channel.id)}
-      </label>
-    `).join("");
+    const checks = channelChecks(state.channels, "暂无支付通道");
+    const onboardingChecks = channelChecks(
+      state.channels.filter((channel) => channel.provider === "ALIPAY_DIRECT"),
+      "暂无直付通通道，请先新增或启用直付通通道"
+    );
     channelCheckTargets.forEach((target) => {
       const element = $(target);
-      if (element) element.innerHTML = checks;
+      if (element) element.innerHTML = target === "onboardChannelChecks" ? onboardingChecks : checks;
     });
+  }
+
+  function channelChecks(channels, emptyMessage) {
+    if (!channels.length) {
+      return `<span class="muted">${html(emptyMessage)}</span>`;
+    }
+    return channels.map((channel) => `
+      <label class="check">
+        <input type="checkbox" value="${html(channel.id)}" ${channel.enabled ? "checked" : ""}>
+        ${html(channelCheckLabel(channel))}
+      </label>
+    `).join("");
+  }
+
+  function channelCheckLabel(channel) {
+    const tags = [];
+    if (channel.provider === "ALIPAY_DIRECT") tags.push("直付通");
+    if (!channel.enabled) tags.push("未启用");
+    return tags.length ? `${channel.id}（${tags.join("，")}）` : channel.id;
   }
 
   function renderOrderChannelOptions() {
@@ -3060,6 +3090,17 @@
   function onboardPayload() {
     const method = $("onboardMethod").value.trim();
     const externalId = $("onboardOutBizNo").value.trim();
+    const channelIds = checkedChannels("onboardChannelChecks");
+    const enabledDirectChannel = channelIds.some((channelId) => {
+      const channel = state.channels.find((item) => item.id === channelId);
+      return channel?.provider === "ALIPAY_DIRECT" && channel.enabled;
+    });
+    if (!externalId) {
+      throw { message: "请填写外部商户编号 external_id" };
+    }
+    if (!enabledDirectChannel) {
+      throw { message: "请先启用并勾选支付宝直付通通道，否则不会向支付宝发起进件" };
+    }
     const contactInfos = compact({
       name: $("onboardContactName").value.trim(),
       mobile: $("onboardContactMobile").value.trim()
@@ -3084,7 +3125,7 @@
       outBizNo: externalId,
       method,
       appAuthToken: $("onboardAppAuthToken").value,
-      channelIds: checkedChannels("onboardChannelChecks"),
+      channelIds,
       payload
     });
   }
@@ -3366,8 +3407,17 @@
 
   $("onboardForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await postAndShow("提交进件", "/api/v1/payments/onboarding", onboardPayload());
-    await loadOnboardingRecords();
+    setOnboardResult("正在提交进件...");
+    try {
+      const data = await request("/api/v1/payments/onboarding", {
+        method: "POST",
+        body: JSON.stringify(onboardPayload())
+      });
+      setOnboardResult({ message: data.status === "FAILED" ? "进件提交失败" : "进件已提交", response: data });
+      await loadOnboardingRecords();
+    } catch (error) {
+      setOnboardResult(error);
+    }
   });
 
   $("complaintForm").addEventListener("submit", async (event) => {

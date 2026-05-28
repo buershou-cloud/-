@@ -12,6 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -21,6 +23,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class OnboardingRecordService {
 
     private static final int LIST_LIMIT = 100;
+    private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -111,7 +114,7 @@ public class OnboardingRecordService {
                 statusText(status),
                 response.code(),
                 response.message(),
-                null
+                LocalDateTime.now().format(DISPLAY_TIME)
         );
     }
 
