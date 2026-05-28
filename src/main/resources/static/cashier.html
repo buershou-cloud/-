@@ -263,28 +263,6 @@
       pointer-events: none;
     }
 
-    .payment-form-holder.order-code-frame {
-      position: static;
-      width: 100%;
-      height: auto;
-      margin-top: 16px;
-      overflow: visible;
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .payment-form-holder.order-code-frame form {
-      display: none;
-    }
-
-    .alipay-order-code-frame {
-      width: 100%;
-      min-height: 520px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: #fff;
-    }
-
     .pay-panel.active {
       display: grid;
       gap: 12px;
@@ -467,9 +445,7 @@
   function hideContinuePanel() {
     $("continuePanel").classList.remove("active");
     alipaySubmitForm = null;
-    const holder = $("paymentFormHolder");
-    holder.classList.remove("order-code-frame");
-    holder.innerHTML = "";
+    $("paymentFormHolder").innerHTML = "";
   }
 
   function submitAlipayForm() {
@@ -500,27 +476,6 @@
     $("payPanelHint").textContent = hint;
     $("payQrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(text)}&t=${Date.now()}`;
     $("payPanel").classList.add("active");
-  }
-
-  function isOrderCodeProduct(product = currentProduct) {
-    return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
-  }
-
-  function showOrderCodeFrame(form) {
-    hidePaymentQr();
-    const holder = $("paymentFormHolder");
-    const frameName = `alipay_order_code_${Date.now()}`;
-    const frame = document.createElement("iframe");
-    frame.name = frameName;
-    frame.className = "alipay-order-code-frame";
-    frame.title = "支付宝订单码";
-    holder.classList.add("order-code-frame");
-    holder.appendChild(frame);
-    form.setAttribute("target", frameName);
-    alipaySubmitForm = form;
-    writeResult("请在下方支付宝订单码中扫码付款。", "ok");
-    setMessage("请在下方支付宝订单码中扫码付款。", "ok");
-    setTimeout(() => submitAlipayForm(), 60);
   }
 
   function openAlipayQr(text) {
@@ -697,10 +652,6 @@
         if (form) {
           form.setAttribute("target", "_self");
           alipaySubmitForm = form;
-          if (isOrderCodeProduct()) {
-            showOrderCodeFrame(form);
-            return;
-          }
           if (isMobilePayClient()) {
             setTimeout(() => submitAlipayForm(), 60);
             return;

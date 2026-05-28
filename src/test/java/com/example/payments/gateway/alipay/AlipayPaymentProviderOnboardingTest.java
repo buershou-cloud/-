@@ -126,7 +126,7 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
-    void orderCodeProductUsesPagePayOrderCodeMode() {
+    void orderCodeProductUsesPrecreateOfflineQrCode() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
 
@@ -153,14 +153,13 @@ class AlipayPaymentProviderOnboardingTest {
                 )
         );
 
-        assertThat(client.method).isEqualTo("alipay.trade.page.pay");
+        assertThat(client.method).isEqualTo("alipay.trade.precreate");
         assertThat(client.bizContent)
-                .containsEntry("product_code", "FAST_INSTANT_TRADE_PAY")
-                .containsEntry("qr_pay_mode", "4")
-                .containsEntry("qrcode_width", "180")
-                .doesNotContainEntry("product_code", "FACE_TO_FACE_PAYMENT");
-        assertThat(response.redirectHtml()).contains("alipay.trade.page.pay");
-        assertThat(response.qrCode()).isNull();
+                .containsEntry("product_code", "QR_CODE_OFFLINE")
+                .doesNotContainEntry("product_code", "FACE_TO_FACE_PAYMENT")
+                .doesNotContainKeys("qr_pay_mode", "qrcode_width");
+        assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/ORDER-CODE-001");
+        assertThat(response.redirectHtml()).isNull();
     }
 
     private static PaymentGatewayProperties.Channel channel() {

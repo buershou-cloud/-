@@ -169,27 +169,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private GatewayResponse orderCodePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         Map<String, Object> bizContent = tradeBiz(channel, request);
-        bizContent.putIfAbsent("product_code", "FAST_INSTANT_TRADE_PAY");
-        bizContent.putIfAbsent("qr_pay_mode", "4");
-        bizContent.putIfAbsent("qrcode_width", "180");
-        String redirectHtml = client.pageForm(channel, METHOD_PAGE_PAY, bizContent, options(request));
-        return new GatewayResponse(
-                channel.getId(),
-                PaymentStatus.CREATED,
-                "PAGE_FORM_CREATED",
-                "Alipay order-code cashier form created",
-                request.outTradeNo(),
-                null,
-                null,
-                redirectHtml,
-                null,
-                Map.of(
-                        "method", METHOD_PAGE_PAY,
-                        "product", request.product().name(),
-                        "qrPayMode", bizContent.get("qr_pay_mode")
-                ),
-                List.of()
-        );
+        bizContent.put("product_code", "QR_CODE_OFFLINE");
+        AlipayGatewayResponse response = client.execute(channel, METHOD_PRECREATE, bizContent, options(request));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")));
     }
 
     private GatewayResponse jsapi(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
