@@ -3,10 +3,10 @@
 Spring Boot payment gateway skeleton for these Alipay flows:
 
 - 手机网站支付: `alipay.trade.wap.pay`
-- 当面付: `alipay.trade.pay` for barcode payment, `alipay.trade.precreate` for QR code payment
+- 当面付: `alipay.trade.precreate` QR-code payment, no buyer `auth_code` required
 - 预授权: default `alipay.fund.auth.order.app.freeze`
 - 电脑网站支付: `alipay.trade.page.pay`
-- 订单码: `alipay.trade.precreate`
+- 订单码: `alipay.trade.page.pay` with `FAST_INSTANT_TRADE_PAY` and `qr_pay_mode`
 - JSAPI 支付: `alipay.trade.create`
 - 直付通支付: standard trade API plus `app_auth_token`, `settle_info`, `sub_merchant`, or extra contract fields
 - 直付通进件: `ant.merchant.expand.indirect.zft.simplecreate`
@@ -102,8 +102,8 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 }
 ```
 
-For WAP/page payments, the response contains `redirectHtml`. Return it directly to the browser.
-For QR/order-code payments, the response contains `qrCode`.
+For WAP/page/order-code payments, the response contains `redirectHtml`. Return it directly to the browser.
+For face-to-face QR payments, the response contains `qrCode`.
 
 ## Direct Pay Onboarding
 

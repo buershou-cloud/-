@@ -90,6 +90,78 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(response.redirectHtml()).contains("alipay.trade.wap.pay");
     }
 
+    @Test
+    void faceToFaceProductCreatesQrWithoutBuyerAuthCode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_F2F,
+                        "F2F-001",
+                        "face to face qr",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.precreate");
+        assertThat(client.bizContent)
+                .containsEntry("product_code", "FACE_TO_FACE_PAYMENT")
+                .doesNotContainKeys("auth_code", "scene");
+        assertThat(response.qrCode()).isEqualTo("https://qr.alipay.test/F2F-001");
+    }
+
+    @Test
+    void orderCodeProductUsesPagePayOrderCodeMode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_ORDER_CODE,
+                        "ORDER-CODE-001",
+                        "order code",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.page.pay");
+        assertThat(client.bizContent)
+                .containsEntry("product_code", "FAST_INSTANT_TRADE_PAY")
+                .containsEntry("qr_pay_mode", "2")
+                .doesNotContainEntry("product_code", "FACE_TO_FACE_PAYMENT");
+        assertThat(response.redirectHtml()).contains("alipay.trade.page.pay");
+        assertThat(response.qrCode()).isNull();
+    }
+
     private static PaymentGatewayProperties.Channel channel() {
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("ali-direct");
