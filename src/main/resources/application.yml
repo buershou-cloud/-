@@ -24,8 +24,8 @@ payment:
     mode: ROUND_ROBIN
   operations:
     # These operation names can be overridden per real Alipay contract/product.
-    complaint-list-method: alipay.merchant.tradecomplain.batchquery
-    complaint-detail-method: alipay.merchant.tradecomplain.query
+    complaint-list-method: alipay.security.risk.complaint.info.batchquery
+    complaint-detail-method: alipay.security.risk.complaint.info.query
     onboarding-method: ant.merchant.expand.indirect.zft.simplecreate
   channels:
     - id: ali-main

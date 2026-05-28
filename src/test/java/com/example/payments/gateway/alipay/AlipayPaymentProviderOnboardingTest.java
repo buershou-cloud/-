@@ -1,6 +1,7 @@
 package com.example.payments.gateway.alipay;
 
 import com.example.payments.config.PaymentGatewayProperties;
+import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
@@ -332,6 +333,90 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("product_code", "PREAUTH_PAY")
                 .containsEntry("timeout_express", "30m")
                 .doesNotContainKey("pay_timeout");
+    }
+
+    @Test
+    void complaintListUsesOfficialSecurityRiskBatchQueryFields() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.queryComplaints(
+                standardChannel(),
+                new ComplaintQueryRequest(
+                        null,
+                        "2026-05-01 00:00:00",
+                        "2026-05-29 23:59:59",
+                        2,
+                        20,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of()
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.security.risk.complaint.info.batchquery");
+        assertThat(client.bizContent)
+                .containsEntry("gmt_complaint_start", "2026-05-01 00:00:00")
+                .containsEntry("gmt_complaint_end", "2026-05-29 23:59:59")
+                .containsEntry("current_page_num", 2)
+                .containsEntry("page_size", 20)
+                .doesNotContainKeys("begin_time", "end_time", "page_num");
+    }
+
+    @Test
+    void complaintDetailUsesOfficialSecurityRiskQueryComplainId() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.queryComplaints(
+                standardChannel(),
+                new ComplaintQueryRequest(
+                        "1000000001",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("record_id", 1000000001L)
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.security.risk.complaint.info.query");
+        assertThat(client.bizContent)
+                .containsEntry("complain_id", "1000000001")
+                .containsEntry("record_id", 1000000001L)
+                .doesNotContainKey("complaint_id");
+    }
+
+    @Test
+    void explicitComplaintBatchQueryCanFilterByTaskId() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.queryComplaints(
+                standardChannel(),
+                new ComplaintQueryRequest(
+                        "TSK20260529001",
+                        null,
+                        null,
+                        1,
+                        10,
+                        "alipay.security.risk.complaint.info.batchquery",
+                        null,
+                        List.of("ali-main"),
+                        Map.of("status_list", List.of("WAIT_PROCESS"))
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.security.risk.complaint.info.batchquery");
+        assertThat(client.bizContent)
+                .containsEntry("task_id", "TSK20260529001")
+                .containsEntry("current_page_num", 1)
+                .containsEntry("page_size", 10)
+                .containsEntry("status_list", List.of("WAIT_PROCESS"));
     }
 
     private static PaymentGatewayProperties.Channel channel() {

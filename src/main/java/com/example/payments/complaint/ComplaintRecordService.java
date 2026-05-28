@@ -26,11 +26,13 @@ public class ComplaintRecordService {
     private static final int MEMORY_LIMIT = 300;
     private static final DateTimeFormatter TEXT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String[] COMPLAINT_ID_KEYS = {
+            "task_id", "taskId", "complaint_task_id", "complaintTaskId",
             "complaint_id", "complain_id", "complaintId", "complainId",
-            "complain_event_id", "complainEventId", "complaint_event_id", "event_id", "id"
+            "complain_event_id", "complainEventId", "complaint_event_id", "event_id", "record_id", "recordId", "id"
     };
     private static final String[] OUT_TRADE_NO_KEYS = {
-            "out_trade_no", "outTradeNo", "merchant_order_no", "merchantOrderNo"
+            "out_trade_no", "outTradeNo", "out_no", "outNo", "merchant_order_no", "merchantOrderNo",
+            "merchant_trade_no", "merchantTradeNo"
     };
     private static final String[] TRADE_NO_KEYS = {
             "trade_no", "tradeNo", "alipay_trade_no", "alipayTradeNo"
@@ -38,7 +40,8 @@ public class ComplaintRecordService {
     private static final String[] CONTENT_KEYS = {
             "complain_content", "complaint_content", "content", "content_text", "detail", "description", "memo",
             "user_complain_content", "user_complaint_content", "buyer_message", "user_message", "message_content",
-            "feedback_content", "reply_content"
+            "feedback_content", "reply_content", "upgrade_content", "upgradeContent", "process_remark",
+            "processRemark", "complaint_desc", "complain_desc", "problem_description", "issue_desc"
     };
 
     private final JdbcTemplate jdbcTemplate;
@@ -110,22 +113,29 @@ public class ComplaintRecordService {
     }
 
     private ComplaintRecordView toRecord(Map<String, Object> map, String channelId, String outTradeNo, String tradeNo) {
+        if (isNestedComplaintTradeInfo(map)) {
+            return null;
+        }
         String complaintId = value(map, null, COMPLAINT_ID_KEYS);
         String directOutTradeNo = value(map, null, OUT_TRADE_NO_KEYS);
         String directTradeNo = value(map, null, TRADE_NO_KEYS);
-        String recordOutTradeNo = textOr(directOutTradeNo, outTradeNo);
-        String recordTradeNo = textOr(directTradeNo, tradeNo);
-        String merchantId = value(map, null, "merchant_id", "merchantId", "sub_merchant_id", "smid");
+        String recordOutTradeNo = firstText(directOutTradeNo, nestedValue(map, OUT_TRADE_NO_KEYS), outTradeNo);
+        String recordTradeNo = firstText(directTradeNo, nestedValue(map, TRADE_NO_KEYS), tradeNo);
+        String merchantId = value(map, null, "merchant_id", "merchantId", "sub_merchant_id", "smid",
+                "opposite_pid", "oppositePid");
         String recordChannelId = value(map, channelId, "channel_id", "channelId");
         String status = value(map, null, "status", "complaint_status", "complain_status", "process_status",
-                "complain_status_text", "complaint_status_text");
+                "complain_status_text", "complaint_status_text", "status_description", "statusDescription",
+                "process_message", "processMessage");
         String title = value(map, null, "title", "subject", "reason", "complain_reason", "complaint_reason",
-                "reason_desc", "code", "msg");
+                "reason_desc", "opposite_name", "oppositeName", "process_message", "processMessage");
         String directContent = value(map, null, CONTENT_KEYS);
         String content = firstText(directContent, nestedValue(map, CONTENT_KEYS));
         String occurredAt = value(map, null, "gmt_create", "gmtCreate", "create_time", "createTime",
-                "complain_time", "complaint_time", "event_time", "modified_time", "gmt_modified");
-        if (!isComplaintLike(map, complaintId, directOutTradeNo, directTradeNo, status, content)) {
+                "gmt_complain", "gmtComplain", "complain_time", "complaint_time", "event_time",
+                "modified_time", "gmt_modified", "gmt_process", "gmtProcess", "gmt_overdue", "gmtOverdue",
+                "gmt_upgrade", "gmtUpgrade", "gmt_risk_finish_time", "gmtRiskFinishTime");
+        if (!isComplaintLike(map, complaintId, directOutTradeNo, directTradeNo, status, directContent)) {
             return null;
         }
         return new ComplaintRecordView(complaintId, recordOutTradeNo, recordTradeNo, merchantId, recordChannelId,
@@ -151,6 +161,17 @@ public class ComplaintRecordService {
             return true;
         }
         return hasText(content) && (hasText(outTradeNo) || hasText(tradeNo));
+    }
+
+    private boolean isNestedComplaintTradeInfo(Map<String, Object> map) {
+        boolean hasTradeInfoShape = map.containsKey("complaint_record_id")
+                || map.containsKey("complaintRecordId")
+                || (map.containsKey("out_no") && map.containsKey("gmt_trade"));
+        if (!hasTradeInfoShape) {
+            return false;
+        }
+        return !hasText(value(map, null, "task_id", "taskId", "complain_content", "complaint_content",
+                "upgrade_content", "opposite_pid", "oppositePid", "opposite_name", "oppositeName"));
     }
 
     private void remember(ComplaintRecordView record) {

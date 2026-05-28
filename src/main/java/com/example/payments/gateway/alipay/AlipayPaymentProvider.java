@@ -32,6 +32,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
+    private static final String METHOD_COMPLAINT_BATCH_QUERY = "alipay.security.risk.complaint.info.batchquery";
+    private static final String METHOD_COMPLAINT_INFO_QUERY = "alipay.security.risk.complaint.info.query";
 
     private final PaymentGatewayProperties properties;
     private final AlipayOpenApiClient client;
@@ -114,14 +116,10 @@ public class AlipayPaymentProvider implements PaymentProvider {
             method = request.method();
         } else if (hasText(request.complaintId())) {
             method = properties.getOperations().getComplaintDetailMethod();
-            bizContent.put("complaint_id", request.complaintId());
         } else {
             method = properties.getOperations().getComplaintListMethod();
-            putIfText(bizContent, "begin_time", request.beginTime());
-            putIfText(bizContent, "end_time", request.endTime());
-            putIfPresent(bizContent, "page_num", request.pageNum());
-            putIfPresent(bizContent, "page_size", request.pageSize());
         }
+        putComplaintQueryFields(method, bizContent, request);
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, null, null);
@@ -266,6 +264,33 @@ public class AlipayPaymentProvider implements PaymentProvider {
             return;
         }
         bizContent.putIfAbsent("out_biz_no", externalId);
+    }
+
+    private static void putComplaintQueryFields(
+            String method,
+            Map<String, Object> bizContent,
+            ComplaintQueryRequest request
+    ) {
+        if (METHOD_COMPLAINT_INFO_QUERY.equals(method)) {
+            putIfText(bizContent, "complain_id", request.complaintId());
+            return;
+        }
+        if (METHOD_COMPLAINT_BATCH_QUERY.equals(method)) {
+            putIfText(bizContent, "task_id", request.complaintId());
+            putIfText(bizContent, "gmt_complaint_start", request.beginTime());
+            putIfText(bizContent, "gmt_complaint_end", request.endTime());
+            putIfPresent(bizContent, "current_page_num", request.pageNum());
+            putIfPresent(bizContent, "page_size", request.pageSize());
+            return;
+        }
+        if (hasText(request.complaintId())) {
+            putIfText(bizContent, "complaint_id", request.complaintId());
+        } else {
+            putIfText(bizContent, "begin_time", request.beginTime());
+            putIfText(bizContent, "end_time", request.endTime());
+            putIfPresent(bizContent, "page_num", request.pageNum());
+            putIfPresent(bizContent, "page_size", request.pageSize());
+        }
     }
 
     private GatewayResponse apiResponse(String channelId, AlipayGatewayResponse response, String fallbackOutTradeNo, String qrCode) {
