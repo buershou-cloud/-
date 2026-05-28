@@ -2417,7 +2417,6 @@
       complete: { method: "POST", path: `/api/v1/orders/${encoded}/complete`, title: "订单已改为完成" },
       "manual-supplement": { method: "POST", path: `/api/v1/orders/${encoded}/manual-supplement`, title: "手动补单完成" },
       uncomplete: { method: "POST", path: `/api/v1/orders/${encoded}/uncomplete`, title: "订单已改为未完成" },
-      refund: { method: "POST", path: `/api/v1/orders/${encoded}/refund`, title: "退款处理完成" },
       "convert-to-pay": { method: "POST", path: `/api/v1/orders/${encoded}/convert-to-pay`, title: "预授权已转支付" },
       delete: { method: "DELETE", path: `/api/v1/orders/${encoded}`, title: "订单已删除" }
     };
@@ -2496,6 +2495,7 @@
       $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
     }
     setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请填写收入方账号后提交单笔分账` });
+    $("profitShareTransIn").focus();
   }
 
   function renderProfitShareOrders() {

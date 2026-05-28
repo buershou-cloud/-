@@ -4,6 +4,8 @@ import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 
@@ -24,6 +26,7 @@ import java.util.stream.Collectors;
 @Component
 public class AlipayOpenApiClient {
 
+    private static final Logger log = LoggerFactory.getLogger(AlipayOpenApiClient.class);
     private static final DateTimeFormatter ALIPAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -46,16 +49,35 @@ public class AlipayOpenApiClient {
             Map<String, String> params = signedParams(channel, method, bizContent, options);
             Charset charset = charset(channel);
             String body = formEncode(params, charset);
+            log.info(
+                    "Sending Alipay request method={} channel={} outTradeNo={} tradeNo={} outRequestNo={} refundAmount={}",
+                    method,
+                    channel.getId(),
+                    bizValue(bizContent, "out_trade_no"),
+                    bizValue(bizContent, "trade_no"),
+                    bizValue(bizContent, "out_request_no"),
+                    bizValue(bizContent, "refund_amount")
+            );
             HttpRequest request = HttpRequest.newBuilder(URI.create(channel.getAlipay().getGatewayUrl()))
                     .header("Content-Type", "application/x-www-form-urlencoded;charset=" + charset.name())
                     .header("Accept", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body, charset))
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(charset));
+            log.info("Received Alipay HTTP response method={} channel={} status={}", method, channel.getId(), response.statusCode());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new GatewayException("ALIPAY_HTTP_" + response.statusCode(), response.body());
             }
-            return parse(method, response.body());
+            AlipayGatewayResponse gatewayResponse = parse(method, response.body());
+            log.info(
+                    "Parsed Alipay response method={} channel={} code={} subCode={} success={}",
+                    method,
+                    channel.getId(),
+                    gatewayResponse.code(),
+                    gatewayResponse.subCode(),
+                    gatewayResponse.success()
+            );
+            return gatewayResponse;
         } catch (GatewayException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -197,6 +219,14 @@ public class AlipayOpenApiClient {
         if (value != null && !value.isBlank()) {
             params.put(key, value);
         }
+    }
+
+    private static String bizValue(Map<String, Object> bizContent, String key) {
+        if (bizContent == null) {
+            return null;
+        }
+        Object value = bizContent.get(key);
+        return value == null ? null : String.valueOf(value);
     }
 
     private static String firstText(String preferred, String fallback) {
