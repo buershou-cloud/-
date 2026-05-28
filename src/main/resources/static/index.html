@@ -1390,8 +1390,8 @@
           </section>
           <section class="panel wide-panel">
             <div class="panel-head">
-              <h2 class="panel-title">投诉记录</h2>
-              <button class="btn secondary" id="refreshComplaintRecordsBtn" type="button">刷新记录</button>
+              <h2 class="panel-title">本次投诉结果</h2>
+              <button class="btn secondary" id="refreshComplaintRecordsBtn" type="button">查看已保存投诉</button>
             </div>
             <div class="panel-body">
               <div class="table-wrap">
@@ -1752,6 +1752,10 @@
   function setComplaintResult(value) {
     const element = $("complaintResult");
     if (!element) return;
+    if (value && typeof value === "object" && (value.raw || value.status || value.code)) {
+      element.textContent = complaintResultText(value, complaintRecordsFromResponse(value));
+      return;
+    }
     if (value && typeof value === "object" && value.message) {
       element.textContent = value.message;
       return;
@@ -3189,12 +3193,54 @@
     return `<span class="status ${className}">${html(text)}</span>`;
   }
 
+  function visibleComplaintRecord(record) {
+    const id = String(record?.complaintId || record?.complaint_id || "");
+    return !id.startsWith("QUERY-");
+  }
+
+  function normalizeComplaintRecord(record) {
+    return {
+      complaintId: record.complaintId ?? record.complaint_id,
+      outTradeNo: record.outTradeNo ?? record.out_trade_no,
+      tradeNo: record.tradeNo ?? record.trade_no,
+      merchantId: record.merchantId ?? record.merchant_id,
+      channelId: record.channelId ?? record.channel_id,
+      status: record.status ?? record.complaint_status ?? record.complain_status,
+      title: record.title ?? record.subject ?? record.reason,
+      content: record.content ?? record.complain_content ?? record.complaint_content ?? record.detail,
+      queriedAt: record.queriedAt ?? record.queried_at ?? record.gmt_create ?? record.create_time
+    };
+  }
+
+  function complaintRecordsFromResponse(data) {
+    const records = data?.raw?.complaintRecords || data?.raw?.complaint_records || data?.complaintRecords || [];
+    return Array.isArray(records) ? records.filter(visibleComplaintRecord).map(normalizeComplaintRecord) : [];
+  }
+
+  function complaintResultText(data, records = []) {
+    const lines = [];
+    lines.push(data?.status === "FAILED" ? "投诉查询失败" : "投诉查询完成");
+    if (data?.channelId) lines.push(`通道：${data.channelId}`);
+    if (data?.code) lines.push(`支付宝返回码：${data.code}`);
+    if (data?.message) lines.push(`支付宝返回消息：${data.message}`);
+    lines.push(`投诉内容：${records.length ? `${records.length} 条` : "本次没有返回投诉内容"}`);
+    if (records.length) {
+      records.slice(0, 5).forEach((record, index) => {
+        lines.push(`${index + 1}. ${record.complaintId || "-"} ${record.status || "-"} ${record.content || record.title || "-"}`);
+      });
+    }
+    lines.push("");
+    lines.push("原始查询结果：");
+    lines.push(json(data?.raw || data));
+    return lines.join("\n");
+  }
+
   function renderComplaintRecords() {
     const tableBody = $("complaintRecordTableBody");
     if (!tableBody) return;
-    const records = state.complaintRecords || [];
+    const records = (state.complaintRecords || []).filter(visibleComplaintRecord).map(normalizeComplaintRecord);
     if (!records.length) {
-      tableBody.innerHTML = '<tr><td colspan="7" class="muted">暂无投诉记录，点击查询后会显示支付宝返回内容或失败原因</td></tr>';
+      tableBody.innerHTML = '<tr><td colspan="7" class="muted">本次查询没有可显示的投诉内容，请查看上方原始查询结果或调整时间范围后重试</td></tr>';
       return;
     }
     tableBody.innerHTML = records.map((record) => `
@@ -3211,7 +3257,8 @@
   }
 
   async function loadComplaintRecords() {
-    state.complaintRecords = await request("/api/v1/payments/complaints/records?limit=100");
+    const records = await request("/api/v1/payments/complaints/records?limit=100");
+    state.complaintRecords = Array.isArray(records) ? records.filter(visibleComplaintRecord).map(normalizeComplaintRecord) : [];
     renderComplaintRecords();
   }
 
@@ -3231,7 +3278,8 @@
     });
     state.complaintAuto = data;
     renderComplaintAutoStatus();
-    await loadComplaintRecords();
+    state.complaintRecords = complaintRecordsFromResponse(data.lastResult);
+    renderComplaintRecords();
   }
 
   async function postAndShow(title, path, payload) {
@@ -3422,14 +3470,20 @@
 
   $("complaintForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    setComplaintResult("正在查询投诉...");
+    state.complaintRecords = [];
+    renderComplaintRecords();
     try {
       const data = await request("/api/v1/payments/complaints/query", {
         method: "POST",
         body: JSON.stringify(complaintPayload())
       });
+      state.complaintRecords = complaintRecordsFromResponse(data);
+      renderComplaintRecords();
       setComplaintResult(data);
-      await loadComplaintRecords();
     } catch (error) {
+      state.complaintRecords = [];
+      renderComplaintRecords();
       setComplaintResult(error);
     }
   });
@@ -3461,6 +3515,7 @@
   $("refreshComplaintRecordsBtn").addEventListener("click", async () => {
     try {
       await loadComplaintRecords();
+      setComplaintResult(`已加载保存的投诉内容：${state.complaintRecords.length} 条`);
     } catch (error) {
       setComplaintResult(error);
     }
@@ -3560,11 +3615,11 @@
   syncChannelCallbackUrls();
   renderTopbarDate();
   renderDefaultComplaintTimes();
+  renderComplaintRecords();
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
-  setInterval(() => loadComplaintRecords().catch(() => {}), 60000);
 
   checkAdminSession()
-    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus(), loadComplaintRecords()]))
+    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>

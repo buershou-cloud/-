@@ -17,14 +17,29 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 @Service
 public class ComplaintRecordService {
     private static final int MEMORY_LIMIT = 300;
     private static final DateTimeFormatter TEXT_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final String[] COMPLAINT_ID_KEYS = {
+            "complaint_id", "complain_id", "complaintId", "complainId",
+            "complain_event_id", "complainEventId", "complaint_event_id", "event_id", "id"
+    };
+    private static final String[] OUT_TRADE_NO_KEYS = {
+            "out_trade_no", "outTradeNo", "merchant_order_no", "merchantOrderNo"
+    };
+    private static final String[] TRADE_NO_KEYS = {
+            "trade_no", "tradeNo", "alipay_trade_no", "alipayTradeNo"
+    };
+    private static final String[] CONTENT_KEYS = {
+            "complain_content", "complaint_content", "content", "content_text", "detail", "description", "memo",
+            "user_complain_content", "user_complaint_content", "buyer_message", "user_message", "message_content",
+            "feedback_content", "reply_content"
+    };
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -40,9 +55,6 @@ public class ComplaintRecordService {
             return List.of();
         }
         List<ComplaintRecordView> records = extractRecords(response);
-        if (records.isEmpty()) {
-            records = List.of(summaryRecord(response));
-        }
         records.forEach(record -> {
             remember(record);
             save(record, response.raw());
@@ -57,6 +69,7 @@ public class ComplaintRecordService {
                 return jdbcTemplate.query("""
                         SELECT complaint_id, out_trade_no, trade_no, merchant_id, channel_id, status, title, content, queried_at
                         FROM complaint_record
+                        WHERE complaint_id IS NULL OR complaint_id NOT LIKE 'QUERY-%'
                         ORDER BY queried_at DESC, id DESC
                         LIMIT ?
                         """, this::mapRow, safeLimit);
@@ -64,7 +77,10 @@ public class ComplaintRecordService {
                 // If the database table is not imported yet, keep the UI useful with in-memory records.
             }
         }
-        return memoryRecords.stream().limit(safeLimit).toList();
+        return memoryRecords.stream()
+                .filter(record -> !isSyntheticQueryRecord(record))
+                .limit(safeLimit)
+                .toList();
     }
 
     private List<ComplaintRecordView> extractRecords(GatewayResponse response) {
@@ -84,8 +100,8 @@ public class ComplaintRecordService {
                 records.add(record);
             }
             map.values().forEach(item -> collectRecords(item, value(map, channelId, "channel_id", "channelId"),
-                    value(map, outTradeNo, "out_trade_no", "outTradeNo", "merchant_order_no"),
-                    value(map, tradeNo, "trade_no", "tradeNo", "alipay_trade_no"), records));
+                    value(map, outTradeNo, OUT_TRADE_NO_KEYS),
+                    value(map, tradeNo, TRADE_NO_KEYS), records));
             return;
         }
         if (value instanceof Collection<?> collection) {
@@ -94,44 +110,47 @@ public class ComplaintRecordService {
     }
 
     private ComplaintRecordView toRecord(Map<String, Object> map, String channelId, String outTradeNo, String tradeNo) {
-        String complaintId = value(map, null, "complaint_id", "complain_id", "complaintId", "complainId",
-                "complain_event_id", "complainEventId", "complaint_event_id", "event_id", "id");
-        String recordOutTradeNo = value(map, outTradeNo, "out_trade_no", "outTradeNo", "merchant_order_no");
-        String recordTradeNo = value(map, tradeNo, "trade_no", "tradeNo", "alipay_trade_no");
+        String complaintId = value(map, null, COMPLAINT_ID_KEYS);
+        String directOutTradeNo = value(map, null, OUT_TRADE_NO_KEYS);
+        String directTradeNo = value(map, null, TRADE_NO_KEYS);
+        String recordOutTradeNo = textOr(directOutTradeNo, outTradeNo);
+        String recordTradeNo = textOr(directTradeNo, tradeNo);
         String merchantId = value(map, null, "merchant_id", "merchantId", "sub_merchant_id", "smid");
         String recordChannelId = value(map, channelId, "channel_id", "channelId");
-        String status = value(map, null, "status", "complaint_status", "complain_status", "process_status");
-        String title = value(map, null, "title", "subject", "reason", "code", "msg");
-        String content = value(map, null, "content", "complaint_content", "detail", "description", "memo",
-                "message", "sub_msg");
-        if (!isComplaintLike(complaintId, recordOutTradeNo, recordTradeNo, status, content)) {
+        String status = value(map, null, "status", "complaint_status", "complain_status", "process_status",
+                "complain_status_text", "complaint_status_text");
+        String title = value(map, null, "title", "subject", "reason", "complain_reason", "complaint_reason",
+                "reason_desc", "code", "msg");
+        String directContent = value(map, null, CONTENT_KEYS);
+        String content = firstText(directContent, nestedValue(map, CONTENT_KEYS));
+        String occurredAt = value(map, null, "gmt_create", "gmtCreate", "create_time", "createTime",
+                "complain_time", "complaint_time", "event_time", "modified_time", "gmt_modified");
+        if (!isComplaintLike(map, complaintId, directOutTradeNo, directTradeNo, status, content)) {
             return null;
-        }
-        if (!hasText(complaintId)) {
-            complaintId = "QUERY-" + shortId();
         }
         return new ComplaintRecordView(complaintId, recordOutTradeNo, recordTradeNo, merchantId, recordChannelId,
                 textOr(status, "UNKNOWN"), textOr(title, "投诉查询结果"), textOr(content, title),
-                LocalDateTime.now().format(TEXT_TIME));
+                textOr(occurredAt, LocalDateTime.now().format(TEXT_TIME)));
     }
 
-    private boolean isComplaintLike(String complaintId, String outTradeNo, String tradeNo, String status,
-            String content) {
+    private boolean isComplaintLike(Map<String, Object> map, String complaintId, String outTradeNo, String tradeNo,
+            String status, String content) {
+        if (!hasText(complaintId) && !hasText(outTradeNo) && !hasText(tradeNo) && !hasText(status)) {
+            return false;
+        }
+        if (isApiEnvelope(map) && !hasText(complaintId) && !hasText(outTradeNo) && !hasText(tradeNo)) {
+            return false;
+        }
         if (hasText(complaintId)) {
             return true;
         }
-        if (hasText(status) && (hasText(content) || hasText(outTradeNo) || hasText(tradeNo))) {
+        if (hasText(content) && hasComplaintMarker(map)) {
+            return true;
+        }
+        if (hasText(status) && (hasText(outTradeNo) || hasText(tradeNo))) {
             return true;
         }
         return hasText(content) && (hasText(outTradeNo) || hasText(tradeNo));
-    }
-
-    private ComplaintRecordView summaryRecord(GatewayResponse response) {
-        String title = hasText(response.code()) ? response.code() : "投诉查询结果";
-        String content = hasText(response.message()) ? response.message() : "支付宝未返回投诉内容";
-        String status = response.status() == null ? "UNKNOWN" : response.status().name();
-        return new ComplaintRecordView("QUERY-" + shortId(), response.outTradeNo(), response.tradeNo(), null,
-                response.channelId(), status, title, content, LocalDateTime.now().format(TEXT_TIME));
     }
 
     private void remember(ComplaintRecordView record) {
@@ -213,6 +232,10 @@ public class ComplaintRecordService {
                 queriedAt == null ? "" : queriedAt.toLocalDateTime().format(TEXT_TIME));
     }
 
+    private boolean isSyntheticQueryRecord(ComplaintRecordView record) {
+        return record != null && hasText(record.complaintId()) && record.complaintId().startsWith("QUERY-");
+    }
+
     private String value(Map<String, Object> map, String fallback, String... keys) {
         for (String key : keys) {
             Object value = map.get(key);
@@ -223,16 +246,57 @@ public class ComplaintRecordService {
         return fallback;
     }
 
+    private String nestedValue(Object source, String... keys) {
+        if (source instanceof Map<?, ?> rawMap) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            rawMap.forEach((key, item) -> map.put(String.valueOf(key), item));
+            String direct = value(map, null, keys);
+            if (hasText(direct)) {
+                return direct;
+            }
+            for (Object item : map.values()) {
+                String nested = nestedValue(item, keys);
+                if (hasText(nested)) {
+                    return nested;
+                }
+            }
+        }
+        if (source instanceof Collection<?> collection) {
+            for (Object item : collection) {
+                String nested = nestedValue(item, keys);
+                if (hasText(nested)) {
+                    return nested;
+                }
+            }
+        }
+        return null;
+    }
+
+    private boolean isApiEnvelope(Map<String, Object> map) {
+        return map.containsKey("code") && (map.containsKey("msg") || map.containsKey("sub_msg"));
+    }
+
+    private boolean hasComplaintMarker(Map<String, Object> map) {
+        return map.keySet().stream()
+                .map(key -> key.toLowerCase(Locale.ROOT))
+                .anyMatch(key -> key.contains("complain") || key.contains("complaint"));
+    }
+
+    private String firstText(String... values) {
+        for (String value : values) {
+            if (hasText(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private String textOr(String value, String fallback) {
         return hasText(value) ? value : fallback;
     }
 
     private boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private String shortId() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
     }
 
     public record ComplaintRecordView(
