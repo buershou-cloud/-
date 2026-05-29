@@ -6,6 +6,7 @@ import com.example.payments.complaint.ComplaintAutoQueryStatus;
 import com.example.payments.complaint.ComplaintRecordService;
 import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
+import com.example.payments.domain.OnboardingActionRequest;
 import com.example.payments.domain.OnboardingRequest;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
@@ -115,6 +116,16 @@ public class PaymentController {
     @PostMapping("/onboarding")
     public GatewayResponse onboard(@Valid @RequestBody OnboardingRequest request) {
         return paymentGatewayService.onboard(request);
+    }
+
+    @PostMapping("/onboarding/query")
+    public GatewayResponse queryOnboarding(@Valid @RequestBody OnboardingActionRequest request) {
+        return paymentGatewayService.queryOnboarding(request);
+    }
+
+    @PostMapping("/onboarding/cancel")
+    public GatewayResponse cancelOnboarding(@Valid @RequestBody OnboardingActionRequest request) {
+        return paymentGatewayService.cancelOnboarding(request);
     }
 
     @GetMapping("/onboarding")

@@ -1349,7 +1349,7 @@
               <pre id="onboardResult" class="operation-result">等待进件提交</pre>
             </div>
           </section>
-          <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>时间</th></tr></thead><tbody id="onboardingRecordTableBody"></tbody></table></div></div></section>
+          <section class="panel"><div class="panel-head"><h2 class="panel-title">进件状态</h2></div><div class="panel-body"><div class="table-wrap"><table><thead><tr><th>业务号</th><th>商户</th><th>状态</th><th>结果</th><th>时间</th><th>操作</th></tr></thead><tbody id="onboardingRecordTableBody"></tbody></table></div></div></section>
         </div>
       </section>
 
@@ -2120,6 +2120,7 @@
     const status = record.status || "PENDING";
     if (status === "SUCCESS") return { className: "success", label: "已通过" };
     if (status === "FAILED") return { className: "refunded", label: "失败" };
+    if (status === "CANCELLED") return { className: "frozen", label: "已取消" };
     if (status === "AUDITING") return { className: "pending", label: "审核中" };
     return { className: "pending", label: "待提交" };
   }
@@ -2128,18 +2129,24 @@
     const tableBody = $("onboardingRecordTableBody");
     if (!tableBody) return;
     if (!state.onboardingRecords.length) {
-      tableBody.innerHTML = `<tr><td colspan="4" class="muted">暂无进件记录</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="6" class="muted">暂无进件记录</td></tr>`;
       return;
     }
-    tableBody.innerHTML = state.onboardingRecords.map((record) => {
+    tableBody.innerHTML = state.onboardingRecords.map((record, index) => {
       const status = onboardingStatus(record);
-      const createdAt = record.createdAt ? String(record.createdAt).slice(0, 10) : "-";
+      const createdAt = record.createdAt ? String(record.createdAt).slice(0, 19).replace("T", " ") : "-";
+      const canCancel = record.status === "SUCCESS" || record.status === "AUDITING";
       return `
         <tr>
           <td>${html(record.outBizNo || "-")}</td>
           <td>${html(record.merchantName || "-")}</td>
           <td><span class="status ${status.className}">${status.label}</span></td>
+          <td>${html(record.message || record.code || "-")}</td>
           <td>${html(createdAt)}</td>
+          <td>
+            <button class="btn secondary small" type="button" data-onboard-query="${index}">查询</button>
+            ${canCancel ? `<button class="btn danger small" type="button" data-onboard-cancel="${index}">取消</button>` : ""}
+          </td>
         </tr>
       `;
     }).join("");
@@ -3195,6 +3202,47 @@
     });
   }
 
+  function onboardingActionPayload(record) {
+    const channelIds = record.channelId ? [record.channelId] : checkedChannels("onboardChannelChecks");
+    if (!record.outBizNo) {
+      throw { message: "缺少进件业务号 external_id" };
+    }
+    if (!channelIds.length) {
+      throw { message: "请先勾选直付通通道，或刷新进件记录后重试" };
+    }
+    return compact({
+      outBizNo: record.outBizNo,
+      appAuthToken: $("onboardAppAuthToken").value,
+      channelIds,
+      payload: {
+        external_id: record.outBizNo
+      }
+    });
+  }
+
+  async function queryOnboardingRecord(record) {
+    setOnboardResult(`正在查询进件 ${record.outBizNo}...`);
+    const data = await request("/api/v1/payments/onboarding/query", {
+      method: "POST",
+      body: JSON.stringify(onboardingActionPayload(record))
+    });
+    setOnboardResult({ message: data.status === "FAILED" ? "进件状态查询失败" : "进件状态已更新", response: data });
+    await loadOnboardingRecords();
+  }
+
+  async function cancelOnboardingRecord(record) {
+    if (!window.confirm(`确认取消进件 ${record.outBizNo}？`)) {
+      return;
+    }
+    setOnboardResult(`正在取消进件 ${record.outBizNo}...`);
+    const data = await request("/api/v1/payments/onboarding/cancel", {
+      method: "POST",
+      body: JSON.stringify(onboardingActionPayload(record))
+    });
+    setOnboardResult({ message: data.status === "FAILED" ? "取消进件失败" : "进件已取消", response: data });
+    await loadOnboardingRecords();
+  }
+
   function complaintPayload() {
     return compact({
       complaintId: $("complaintId").value,
@@ -3526,6 +3574,28 @@
       await loadOnboardingRecords();
     } catch (error) {
       setOnboardResult(error);
+    }
+  });
+
+  $("onboardingRecordTableBody").addEventListener("click", async (event) => {
+    const query = event.target.closest("button[data-onboard-query]");
+    const cancel = event.target.closest("button[data-onboard-cancel]");
+    const button = query || cancel;
+    if (!button) return;
+    const index = Number(query ? query.dataset.onboardQuery : cancel.dataset.onboardCancel);
+    const record = state.onboardingRecords[index];
+    if (!record) return;
+    button.disabled = true;
+    try {
+      if (query) {
+        await queryOnboardingRecord(record);
+      } else {
+        await cancelOnboardingRecord(record);
+      }
+    } catch (error) {
+      setOnboardResult(error);
+    } finally {
+      button.disabled = false;
     }
   });
 

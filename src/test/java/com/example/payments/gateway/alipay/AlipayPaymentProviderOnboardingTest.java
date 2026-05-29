@@ -61,6 +61,48 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void directZftOrderQueryMapsBusinessNoToExternalId() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.onboard(
+                channel(),
+                new OnboardingRequest(
+                        "ZFT-QUERY-001",
+                        "ant.merchant.expand.indirect.zftorder.query",
+                        null,
+                        List.of("ali-direct"),
+                        Map.of("out_biz_no", "WRONG-LEGACY")
+                )
+        );
+
+        assertThat(client.method).isEqualTo("ant.merchant.expand.indirect.zftorder.query");
+        assertThat(client.bizContent)
+                .containsEntry("external_id", "ZFT-QUERY-001")
+                .doesNotContainKey("out_biz_no");
+    }
+
+    @Test
+    void directZftDeleteMapsBusinessNoToExternalId() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.onboard(
+                channel(),
+                new OnboardingRequest(
+                        "ZFT-DELETE-001",
+                        "ant.merchant.expand.indirect.zft.delete",
+                        null,
+                        List.of("ali-direct"),
+                        Map.of()
+                )
+        );
+
+        assertThat(client.method).isEqualTo("ant.merchant.expand.indirect.zft.delete");
+        assertThat(client.bizContent).containsEntry("external_id", "ZFT-DELETE-001");
+    }
+
+    @Test
     void desktopCashierKeepsSelectedRedirectProduct() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);

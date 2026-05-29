@@ -39,6 +39,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_PREAUTH_VOUCHER_CREATE = "alipay.fund.auth.order.voucher.create";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
+    private static final String METHOD_DIRECT_ZFT_ORDER_QUERY = "ant.merchant.expand.indirect.zftorder.query";
+    private static final String METHOD_DIRECT_ZFT_DELETE = "ant.merchant.expand.indirect.zft.delete";
     private static final String METHOD_COMPLAINT_BATCH_QUERY = "alipay.security.risk.complaint.info.batchquery";
     private static final String METHOD_COMPLAINT_INFO_QUERY = "alipay.security.risk.complaint.info.query";
 
@@ -352,7 +354,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
     }
 
     private static void putOnboardingExternalId(String method, Map<String, Object> bizContent, String externalId) {
-        if (METHOD_DIRECT_ZFT_SIMPLE_CREATE.equals(method)) {
+        if (METHOD_DIRECT_ZFT_SIMPLE_CREATE.equals(method)
+                || METHOD_DIRECT_ZFT_ORDER_QUERY.equals(method)
+                || METHOD_DIRECT_ZFT_DELETE.equals(method)) {
             Object legacyOutBizNo = bizContent.remove("out_biz_no");
             String value = firstText(externalId, firstText(asString(bizContent.get("external_id")), asString(legacyOutBizNo)));
             putIfText(bizContent, "external_id", value);

@@ -77,6 +77,8 @@ public class PaymentGatewayProperties {
         private String complaintListMethod = "alipay.security.risk.complaint.info.batchquery";
         private String complaintDetailMethod = "alipay.security.risk.complaint.info.query";
         private String onboardingMethod = "ant.merchant.expand.indirect.zft.simplecreate";
+        private String onboardingQueryMethod = "ant.merchant.expand.indirect.zftorder.query";
+        private String onboardingCancelMethod = "ant.merchant.expand.indirect.zft.delete";
 
         public String getComplaintListMethod() {
             return complaintListMethod;
@@ -100,6 +102,22 @@ public class PaymentGatewayProperties {
 
         public void setOnboardingMethod(String onboardingMethod) {
             this.onboardingMethod = onboardingMethod;
+        }
+
+        public String getOnboardingQueryMethod() {
+            return onboardingQueryMethod;
+        }
+
+        public void setOnboardingQueryMethod(String onboardingQueryMethod) {
+            this.onboardingQueryMethod = onboardingQueryMethod;
+        }
+
+        public String getOnboardingCancelMethod() {
+            return onboardingCancelMethod;
+        }
+
+        public void setOnboardingCancelMethod(String onboardingCancelMethod) {
+            this.onboardingCancelMethod = onboardingCancelMethod;
         }
     }
 

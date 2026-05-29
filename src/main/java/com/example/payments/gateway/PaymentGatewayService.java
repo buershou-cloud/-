@@ -7,6 +7,7 @@ import com.example.payments.domain.ChannelAttempt;
 import com.example.payments.domain.ComplaintQueryRequest;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.OnboardingRequest;
+import com.example.payments.domain.OnboardingActionRequest;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
@@ -296,6 +297,44 @@ public class PaymentGatewayService {
         GatewayResponse response = execute(PaymentProduct.ALIPAY_DIRECT, request.channelIds(), null, null, channel -> provider(channel).onboard(channel, request));
         onboardingRecordService.record(request, response);
         return response;
+    }
+
+    public GatewayResponse queryOnboarding(OnboardingActionRequest request) {
+        OnboardingRequest actionRequest = onboardingActionRequest(request, properties.getOperations().getOnboardingQueryMethod());
+        GatewayResponse response = execute(
+                PaymentProduct.ALIPAY_DIRECT,
+                actionRequest.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).onboard(channel, actionRequest)
+        );
+        onboardingRecordService.record(actionRequest, response);
+        return response;
+    }
+
+    public GatewayResponse cancelOnboarding(OnboardingActionRequest request) {
+        OnboardingRequest actionRequest = onboardingActionRequest(request, properties.getOperations().getOnboardingCancelMethod());
+        GatewayResponse response = execute(
+                PaymentProduct.ALIPAY_DIRECT,
+                actionRequest.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).onboard(channel, actionRequest)
+        );
+        onboardingRecordService.record(actionRequest, response);
+        return response;
+    }
+
+    private OnboardingRequest onboardingActionRequest(OnboardingActionRequest request, String defaultMethod) {
+        Map<String, Object> payload = new LinkedHashMap<>(request.payload() == null ? Map.of() : request.payload());
+        payload.putIfAbsent("external_id", request.outBizNo());
+        return new OnboardingRequest(
+                request.outBizNo(),
+                firstText(request.method(), defaultMethod),
+                request.appAuthToken(),
+                request.channelIds(),
+                payload
+        );
     }
 
     private GatewayResponse execute(

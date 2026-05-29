@@ -27,6 +27,8 @@ payment:
     complaint-list-method: alipay.security.risk.complaint.info.batchquery
     complaint-detail-method: alipay.security.risk.complaint.info.query
     onboarding-method: ant.merchant.expand.indirect.zft.simplecreate
+    onboarding-query-method: ant.merchant.expand.indirect.zftorder.query
+    onboarding-cancel-method: ant.merchant.expand.indirect.zft.delete
   channels:
     - id: ali-main
       provider: ALIPAY
