@@ -35,6 +35,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_REFUND = "alipay.trade.refund";
     private static final String METHOD_TRADE_PAY = "alipay.trade.pay";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
+    private static final String METHOD_OAUTH_TOKEN = "alipay.system.oauth.token";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_PREAUTH_VOUCHER_CREATE = "alipay.fund.auth.order.voucher.create";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
@@ -232,15 +233,52 @@ public class AlipayPaymentProvider implements PaymentProvider {
         Map<String, Object> bizContent = tradeBiz(channel, request);
         putIfText(bizContent, "buyer_id", request.buyerId());
         putIfText(bizContent, "buyer_open_id", request.buyerOpenId());
+        if (!hasText(asString(bizContent.get("buyer_id")))
+                && !hasText(asString(bizContent.get("buyer_open_id")))
+                && hasText(request.authCode())) {
+            putJsapiBuyerFromAuthCode(channel, request, bizContent);
+        }
         if (!hasText(asString(bizContent.get("buyer_id"))) && !hasText(asString(bizContent.get("buyer_open_id")))) {
             throw new GatewayException(
                     "ALIPAY_JSAPI_BUYER_MISSING",
-                    "Alipay JSAPI payment requires buyerId or buyerOpenId"
+                    "Alipay JSAPI payment requires buyerId, buyerOpenId, or OAuth authCode"
             );
         }
         bizContent.put("product_code", "JSAPI_PAY");
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CREATE, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+    }
+
+    private void putJsapiBuyerFromAuthCode(
+            PaymentGatewayProperties.Channel channel,
+            PayCreateRequest request,
+            Map<String, Object> bizContent
+    ) {
+        Map<String, String> tokenParams = new LinkedHashMap<>();
+        tokenParams.put("grant_type", "authorization_code");
+        tokenParams.put("code", request.authCode());
+        AlipayGatewayResponse tokenResponse = client.executeWithParams(
+                channel,
+                METHOD_OAUTH_TOKEN,
+                tokenParams,
+                options(request.appAuthToken(), null, null)
+        );
+        if (!tokenResponse.success()) {
+            throw new GatewayException(
+                    firstText(tokenResponse.subCode(), tokenResponse.code()),
+                    "Failed to exchange Alipay JSAPI authCode: " + firstText(tokenResponse.subMessage(), tokenResponse.message())
+            );
+        }
+        String userId = firstText(
+                asString(tokenResponse.response().get("user_id")),
+                asString(tokenResponse.response().get("alipay_user_id"))
+        );
+        String openId = asString(tokenResponse.response().get("open_id"));
+        if (hasText(userId)) {
+            bizContent.put("buyer_id", userId);
+        } else {
+            putIfText(bizContent, "buyer_open_id", openId);
+        }
     }
 
     private GatewayResponse preauth(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {

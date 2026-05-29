@@ -1817,7 +1817,19 @@
   function gatewayFailure(action, value) {
     const code = value?.code ? `（${value.code}）` : "";
     const message = value?.message || "支付宝接口返回失败";
-    return { message: `${action}失败${code}: ${message}`, response: value };
+    const attempts = gatewayAttemptsText(value);
+    return { message: `${action}失败${code}: ${message}${attempts ? `\n\n${attempts}` : ""}`, response: value };
+  }
+
+  function gatewayAttemptsText(value) {
+    if (!Array.isArray(value?.attempts) || !value.attempts.length) return "";
+    const lines = value.attempts.map((attempt) => {
+      const status = attempt.success ? "成功" : "失败";
+      const attemptCode = attempt.code ? ` ${attempt.code}` : "";
+      const attemptMessage = attempt.message ? ` ${attempt.message}` : "";
+      return `${attempt.channelId || "-"} ${status}${attemptCode}${attemptMessage}`;
+    });
+    return `通道尝试:\n${lines.join("\n")}`;
   }
 
   function html(value) {

@@ -50,14 +50,59 @@ public class AlipayOpenApiClient {
             Charset charset = charset(channel);
             String body = formEncode(params, charset);
             log.info(
-                    "Sending Alipay request method={} channel={} productCode={} outTradeNo={} tradeNo={} outRequestNo={} refundAmount={}",
+                    "Sending Alipay request method={} channel={} productCode={} outTradeNo={} tradeNo={} outRequestNo={} outOrderNo={} authNo={} refundAmount={}",
                     method,
                     channel.getId(),
                     bizValue(bizContent, "product_code"),
                     bizValue(bizContent, "out_trade_no"),
                     bizValue(bizContent, "trade_no"),
                     bizValue(bizContent, "out_request_no"),
+                    bizValue(bizContent, "out_order_no"),
+                    bizValue(bizContent, "auth_no"),
                     bizValue(bizContent, "refund_amount")
+            );
+            HttpRequest request = HttpRequest.newBuilder(URI.create(channel.getAlipay().getGatewayUrl()))
+                    .header("Content-Type", "application/x-www-form-urlencoded;charset=" + charset.name())
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body, charset))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(charset));
+            log.info("Received Alipay HTTP response method={} channel={} status={}", method, channel.getId(), response.statusCode());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new GatewayException("ALIPAY_HTTP_" + response.statusCode(), response.body());
+            }
+            AlipayGatewayResponse gatewayResponse = parse(method, response.body());
+            log.info(
+                    "Parsed Alipay response method={} channel={} code={} subCode={} success={}",
+                    method,
+                    channel.getId(),
+                    gatewayResponse.code(),
+                    gatewayResponse.subCode(),
+                    gatewayResponse.success()
+            );
+            return gatewayResponse;
+        } catch (GatewayException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new GatewayException("ALIPAY_REQUEST_ERROR", "Failed to call Alipay gateway", ex);
+        }
+    }
+
+    public AlipayGatewayResponse executeWithParams(
+            PaymentGatewayProperties.Channel channel,
+            String method,
+            Map<String, String> businessParams,
+            AlipayRequestOptions options
+    ) {
+        try {
+            Map<String, String> params = signedParamsFromFields(channel, method, businessParams, options);
+            Charset charset = charset(channel);
+            String body = formEncode(params, charset);
+            log.info(
+                    "Sending Alipay request method={} channel={} params={}",
+                    method,
+                    channel.getId(),
+                    businessParams == null ? Map.of() : businessParams.keySet()
             );
             HttpRequest request = HttpRequest.newBuilder(URI.create(channel.getAlipay().getGatewayUrl()))
                     .header("Content-Type", "application/x-www-form-urlencoded;charset=" + charset.name())
@@ -146,6 +191,22 @@ public class AlipayOpenApiClient {
             Map<String, Object> bizContent,
             AlipayRequestOptions options
     ) {
+        try {
+            String bizContentJson = objectMapper.writeValueAsString(bizContent == null ? Map.of() : bizContent);
+            return signedParamsFromFields(channel, method, Map.of("biz_content", bizContentJson), options);
+        } catch (GatewayException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new GatewayException("ALIPAY_SERIALIZE_ERROR", "Failed to serialize Alipay request", ex);
+        }
+    }
+
+    private Map<String, String> signedParamsFromFields(
+            PaymentGatewayProperties.Channel channel,
+            String method,
+            Map<String, String> businessParams,
+            AlipayRequestOptions options
+    ) {
         PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
         validateCredentials(channel);
         try {
@@ -157,7 +218,9 @@ public class AlipayOpenApiClient {
             params.put("sign_type", alipay.getSignType());
             params.put("timestamp", LocalDateTime.now(ZoneId.of("Asia/Shanghai")).format(ALIPAY_TIME));
             params.put("version", "1.0");
-            params.put("biz_content", objectMapper.writeValueAsString(bizContent == null ? Map.of() : bizContent));
+            if (businessParams != null) {
+                businessParams.forEach((key, value) -> putIfPresent(params, key, value));
+            }
             putIfPresent(params, "notify_url", firstText(options == null ? null : options.notifyUrl(), alipay.getNotifyUrl()));
             putIfPresent(params, "return_url", firstText(options == null ? null : options.returnUrl(), alipay.getReturnUrl()));
             putIfPresent(params, "app_auth_token", firstText(options == null ? null : options.appAuthToken(), alipay.getAppAuthToken()));
@@ -170,7 +233,7 @@ public class AlipayOpenApiClient {
         } catch (GatewayException ex) {
             throw ex;
         } catch (Exception ex) {
-            throw new GatewayException("ALIPAY_SERIALIZE_ERROR", "Failed to serialize Alipay request", ex);
+            throw new GatewayException("ALIPAY_SIGN_ERROR", "Failed to sign Alipay request", ex);
         }
     }
 

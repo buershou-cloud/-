@@ -357,10 +357,15 @@ public class PaymentGatewayService {
             }
         }
 
-        String code = lastGatewayException != null ? lastGatewayException.code() : "ALL_CHANNELS_FAILED";
+        ChannelAttempt lastAttempt = attempts.isEmpty() ? null : attempts.getLast();
+        String code = lastGatewayException != null
+                ? lastGatewayException.code()
+                : firstText(lastAttempt == null ? null : lastAttempt.code(), "ALL_CHANNELS_FAILED");
         String message = lastGatewayException != null
                 ? lastGatewayException.getMessage()
-                : lastRuntimeException != null ? lastRuntimeException.getMessage() : "All payment channels failed";
+                : lastRuntimeException != null
+                        ? lastRuntimeException.getMessage()
+                        : firstText(lastAttempt == null ? null : lastAttempt.message(), "All payment channels failed");
         return new GatewayResponse(
                 null,
                 PaymentStatus.FAILED,

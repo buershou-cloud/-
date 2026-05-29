@@ -14,6 +14,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -326,7 +327,46 @@ class AlipayPaymentProviderOnboardingTest {
                 )
         ))
                 .isInstanceOf(GatewayException.class)
-                .hasMessageContaining("requires buyerId or buyerOpenId");
+                .hasMessageContaining("requires buyerId, buyerOpenId, or OAuth authCode");
+    }
+
+    @Test
+    void jsapiProductCanExchangeOauthAuthCodeForBuyerIdentifier() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_JSAPI,
+                        "JSAPI-003",
+                        "jsapi pay",
+                        new BigDecimal("1.00"),
+                        "oauth-auth-code",
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.methods)
+                .containsExactly("alipay.system.oauth.token", "alipay.trade.create");
+        assertThat(client.businessParams)
+                .containsEntry("grant_type", "authorization_code")
+                .containsEntry("code", "oauth-auth-code");
+        assertThat(client.bizContent)
+                .containsEntry("buyer_id", "2088102146225135")
+                .containsEntry("product_code", "JSAPI_PAY")
+                .doesNotContainKey("auth_code");
     }
 
     @Test
@@ -542,6 +582,8 @@ class AlipayPaymentProviderOnboardingTest {
     private static class CapturingAlipayClient extends AlipayOpenApiClient {
         private String method;
         private Map<String, Object> bizContent;
+        private Map<String, String> businessParams;
+        private final List<String> methods = new ArrayList<>();
 
         private CapturingAlipayClient() {
             super(new ObjectMapper());
@@ -554,6 +596,7 @@ class AlipayPaymentProviderOnboardingTest {
                 Map<String, Object> bizContent,
                 AlipayRequestOptions options
         ) {
+            this.methods.add(method);
             this.method = method;
             this.bizContent = new LinkedHashMap<>(bizContent);
             return "<form action=\"https://openapi.alipay.com/gateway.do\" method=\"post\">"
@@ -568,9 +611,38 @@ class AlipayPaymentProviderOnboardingTest {
                 Map<String, Object> bizContent,
                 AlipayRequestOptions options
         ) {
+            this.methods.add(method);
             this.method = method;
             this.bizContent = new LinkedHashMap<>(bizContent);
             return "app_id=2021000000000000&method=" + method + "&biz_content=mock&sign=mock";
+        }
+
+        @Override
+        public AlipayGatewayResponse executeWithParams(
+                PaymentGatewayProperties.Channel channel,
+                String method,
+                Map<String, String> businessParams,
+                AlipayRequestOptions options
+        ) {
+            this.methods.add(method);
+            this.method = method;
+            this.businessParams = new LinkedHashMap<>(businessParams);
+            Map<String, Object> response = new LinkedHashMap<>();
+            response.put("code", "10000");
+            response.put("msg", "Success");
+            response.put("user_id", "2088102146225135");
+            response.put("open_id", "074a00d0000000000000000000000000");
+            return new AlipayGatewayResponse(
+                    method,
+                    "mock_response",
+                    true,
+                    "10000",
+                    "Success",
+                    null,
+                    null,
+                    response,
+                    Map.of()
+            );
         }
 
         @Override
@@ -580,6 +652,7 @@ class AlipayPaymentProviderOnboardingTest {
                 Map<String, Object> bizContent,
                 AlipayRequestOptions options
         ) {
+            this.methods.add(method);
             this.method = method;
             this.bizContent = new LinkedHashMap<>(bizContent);
             Map<String, Object> response = new LinkedHashMap<>();

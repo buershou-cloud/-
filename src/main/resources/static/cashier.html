@@ -341,6 +341,7 @@
   const channelId = params.get("channelId");
   const merchantId = params.get("merchantId");
   const preferredProduct = params.get("product");
+  const oauthAuthCode = params.get("auth_code") || params.get("authCode");
   const normalizedChannelId = safeDecode(channelId);
   const normalizedMerchantId = safeDecode(merchantId);
   const productLabels = {
@@ -377,6 +378,7 @@
 
   let currentChannel;
   let currentMerchant;
+  let currentAvailableChannels = [];
   let currentProduct;
   let currentProductOptions = [];
   let alipaySubmitForm;
@@ -387,6 +389,10 @@
 
   function isMobilePayClient() {
     return /AlipayClient|Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || "");
+  }
+
+  function isAlipayClient() {
+    return /AlipayClient/i.test(navigator.userAgent || "");
   }
 
   function safeDecode(value) {
@@ -428,7 +434,20 @@
       if (value.orderString) {
         return `${value.message || "APP支付订单信息已生成"}\n\norderString:\n${value.orderString}`;
       }
-      return value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
+      const text = value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
+      const attempts = gatewayAttemptsText(value);
+      return attempts ? `${text}\n\n${attempts}` : text;
+    }
+
+    function gatewayAttemptsText(value) {
+      if (!Array.isArray(value?.attempts) || !value.attempts.length) return "";
+      const lines = value.attempts.map((attempt) => {
+        const status = attempt.success ? "成功" : "失败";
+        const code = attempt.code ? ` ${attempt.code}` : "";
+        const message = attempt.message ? ` ${attempt.message}` : "";
+        return `${attempt.channelId || "-"} ${status}${code}${message}`;
+      });
+      return `通道尝试:\n${lines.join("\n")}`;
     }
 
   function setMessage(value, tone = "") {
@@ -637,6 +656,29 @@
     return "当前通道没有可用于收银台的支付产品，请在支付通道里至少勾选一个支付产品。";
   }
 
+  function isJsapiProduct(product) {
+    return product === "ALIPAY_JSAPI" || product === "ALIPAY_DIRECT_JSAPI";
+  }
+
+  function channelsForCurrentProduct() {
+    if (currentChannel) return [currentChannel];
+    return currentAvailableChannels.filter((channel) => productOptions(channel).includes(currentProduct));
+  }
+
+  function oauthRedirectUrl() {
+    const url = new URL(location.href);
+    ["auth_code", "authCode", "app_id", "scope", "source"].forEach((key) => url.searchParams.delete(key));
+    return url.toString();
+  }
+
+  function alipayOauthUrl(appId) {
+    const url = new URL("https://openauth.alipay.com/oauth2/publicAppAuthorize.htm");
+    url.searchParams.set("app_id", appId);
+    url.searchParams.set("scope", "auth_base");
+    url.searchParams.set("redirect_uri", oauthRedirectUrl());
+    return url.toString();
+  }
+
   async function loadChannel() {
     const channels = await request("/api/v1/channels");
     if (normalizedChannelId) {
@@ -644,6 +686,7 @@
       if (!currentChannel) {
         throw { code: "BAD_REQUEST", message: "支付通道不存在" };
       }
+      currentAvailableChannels = [currentChannel];
       $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
       $("channelText").textContent = currentChannel.id;
       $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
@@ -656,6 +699,7 @@
     } else if (normalizedMerchantId) {
       currentMerchant = await request(`/api/v1/merchants/${encodeURIComponent(normalizedMerchantId)}/cashier-info`);
       const availableChannels = merchantChannels(currentMerchant, channels);
+      currentAvailableChannels = availableChannels;
       $("cashierTitle").textContent = `${currentMerchant.name} 收银台`;
       $("cashierHint").textContent = "输入金额后发起支付，订单将按商户可用支付通道自动路由。";
       $("subject").value = `${currentMerchant.name} 扫码收款`;
@@ -711,6 +755,29 @@
     if (currentChannel) {
       payload.channelIds = [currentChannel.id];
       payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
+    }
+    if (isJsapiProduct(currentProduct)) {
+      const jsapiChannel = channelsForCurrentProduct()[0];
+      if (jsapiChannel && !currentChannel) {
+        payload.channelIds = [jsapiChannel.id];
+      }
+      if (oauthAuthCode) {
+        payload.authCode = oauthAuthCode;
+      } else if (isAlipayClient()) {
+        if (!jsapiChannel?.appId) {
+          writeResult({ code: "ALIPAY_JSAPI_APP_ID_MISSING", message: "JSAPI支付需要当前通道配置支付宝 app_id" }, "bad");
+          return;
+        }
+        writeResult("正在获取支付宝用户授权，请稍候...", "loading");
+        window.location.href = alipayOauthUrl(jsapiChannel.appId);
+        return;
+      } else {
+        writeResult({
+          code: "ALIPAY_JSAPI_AUTH_REQUIRED",
+          message: "JSAPI支付需要在支付宝内打开并完成用户授权，或由接口传 buyerId、buyerOpenId、authCode。"
+        }, "bad");
+        return;
+      }
     }
     payButton.disabled = true;
     writeResult("正在发起支付，请稍候...", "loading");
