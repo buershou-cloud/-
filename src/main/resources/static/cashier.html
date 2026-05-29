@@ -513,8 +513,12 @@
     $("payPanel").classList.add("active");
   }
 
-  function openAlipayQr(text) {
-    writeResult("正在打开支付宝付款...", "loading");
+  function openAlipayQr(text, message = "正在打开支付宝付款...") {
+    writeResult(message, "loading");
+    if (/^alipays?:\/\//i.test(text)) {
+      window.location.href = text;
+      return;
+    }
     if (/AlipayClient/i.test(navigator.userAgent || "")) {
       window.location.href = text;
       return;
@@ -546,6 +550,10 @@
 
   function appOrderString(data) {
     return data && data.raw && data.raw.order_string ? data.raw.order_string : "";
+  }
+
+  function appPayLaunchUrl(orderString) {
+    return `alipays://platformapi/startapp?appId=20000125&orderSuffix=${encodeURIComponent(orderString)}`;
   }
 
   function jsapiTradeNo(data) {
@@ -660,6 +668,47 @@
       }
     };
     paymentPollTimer = setTimeout(poll, 1000);
+  }
+
+  function startAppPaymentPolling(paymentResponse, payload) {
+    clearPaymentPolling();
+    if (!payload.outTradeNo) {
+      return;
+    }
+    const channelId = paymentChannelId(paymentResponse);
+    const maxAttempts = 90;
+    const poll = async () => {
+      paymentPollAttempts += 1;
+      try {
+        const data = await queryPaymentStatus(payload.outTradeNo, channelId);
+        if (isPaymentComplete(data)) {
+          clearPaymentPolling();
+          hidePaymentQr();
+          writeResult("支付成功，订单状态已同步。", "ok");
+          return;
+        }
+        if (isPaymentClosed(data)) {
+          clearPaymentPolling();
+          hidePaymentQr();
+          writeResult("订单已关闭，未完成付款。", "bad");
+          return;
+        }
+        if (paymentPollAttempts >= maxAttempts) {
+          clearPaymentPolling();
+          writeResult("APP支付结果确认中，请稍后在后台订单列表查看。", "loading");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 2000);
+      } catch (error) {
+        if (paymentPollAttempts >= maxAttempts) {
+          clearPaymentPolling();
+          writeResult(error, "bad");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 2000);
+      }
+    };
+    paymentPollTimer = setTimeout(poll, 2000);
   }
 
   async function request(url, options = {}) {
@@ -989,11 +1038,18 @@
       }
       const orderString = appOrderString(data);
       if (orderString) {
-        hidePaymentQr();
-        writeResult({
-          message: "APP支付订单信息已生成，请交给支付宝 App SDK 调起支付。",
-          orderString
-        }, "ok");
+        const appPayUrl = appPayLaunchUrl(orderString);
+        startAppPaymentPolling(data, payload);
+        if (isMobilePayClient()) {
+          openAlipayQr(appPayUrl, "正在打开支付宝 APP 支付...");
+          return;
+        }
+        writeResult("已调用支付宝 APP 支付接口，请使用支付宝扫码付款。", "loading");
+        showPaymentQr(
+          appPayUrl,
+          "APP支付二维码",
+          "请使用支付宝扫码付款；本二维码由 alipay.trade.app.pay 返回的订单信息生成。"
+        );
         return;
       }
       if (data.qrCode) {
