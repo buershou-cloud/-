@@ -702,6 +702,43 @@
     return url.toString();
   }
 
+  function waitAlipayBridge(timeoutMs = 3000) {
+    return new Promise((resolve, reject) => {
+      if (window.AlipayJSBridge) {
+        resolve(window.AlipayJSBridge);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        reject({ code: "ALIPAY_JSAPI_BRIDGE_TIMEOUT", message: "支付宝 JSBridge 未就绪，请确认页面是在支付宝内打开。" });
+      }, timeoutMs);
+      document.addEventListener("AlipayJSBridgeReady", () => {
+        window.clearTimeout(timer);
+        resolve(window.AlipayJSBridge);
+      }, { once: true });
+    });
+  }
+
+  async function getAlipayJsapiAuthCode(appId) {
+    const bridge = await waitAlipayBridge();
+    return new Promise((resolve, reject) => {
+      bridge.call("getAuthCode", {
+        appId,
+        scopes: ["auth_base"]
+      }, (result) => {
+        const authCode = result?.authCode || result?.auth_code;
+        if (authCode) {
+          resolve(authCode);
+          return;
+        }
+        reject({
+          code: "ALIPAY_JSAPI_GET_AUTH_CODE_FAILED",
+          message: result?.errorMessage || result?.error || "支付宝授权码获取失败",
+          raw: result
+        });
+      });
+    });
+  }
+
   function applyOauthStateDefaults() {
     if (oauthState.get("amount")) {
       $("amount").value = oauthState.get("amount");
@@ -801,9 +838,13 @@
           writeResult({ code: "ALIPAY_JSAPI_APP_ID_MISSING", message: "JSAPI支付需要当前通道配置支付宝 app_id" }, "bad");
           return;
         }
-        writeResult("正在获取支付宝用户授权，请稍候...", "loading");
-        window.location.href = alipayOauthUrl(jsapiChannel.appId);
-        return;
+        try {
+          writeResult("正在获取支付宝用户授权，请稍候...", "loading");
+          payload.authCode = await getAlipayJsapiAuthCode(jsapiChannel.appId);
+        } catch (error) {
+          writeResult(error, "bad");
+          return;
+        }
       } else {
         writeResult({
           code: "ALIPAY_JSAPI_AUTH_REQUIRED",
