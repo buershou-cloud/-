@@ -138,6 +138,10 @@
       gap: 10px;
     }
 
+    .payment-code-panel[hidden] {
+      display: none !important;
+    }
+
     .payment-code-actions {
       display: grid;
       gap: 8px;
@@ -965,8 +969,14 @@
     const paymentCodeMode = isPaymentCodeProduct(currentProduct);
     const paymentCodePanel = $("paymentCodePanel");
     const paymentCodeInput = $("paymentCode");
+    const paymentCodeFile = $("paymentCodeFile");
+    const paymentCodeUploadButton = $("paymentCodeUploadButton");
     paymentCodePanel.hidden = !paymentCodeMode;
+    paymentCodePanel.style.display = paymentCodeMode ? "grid" : "none";
     paymentCodeInput.required = paymentCodeMode;
+    paymentCodeInput.disabled = !paymentCodeMode;
+    paymentCodeFile.disabled = !paymentCodeMode;
+    paymentCodeUploadButton.disabled = !paymentCodeMode;
     if (!paymentCodeMode) {
       clearPaymentCodeUi();
       return;
