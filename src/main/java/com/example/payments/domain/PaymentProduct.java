@@ -2,6 +2,7 @@ package com.example.payments.domain;
 
 public enum PaymentProduct {
     ALIPAY_WAP("手机网站支付"),
+    ALIPAY_APP("APP支付"),
     ALIPAY_F2F("当面付"),
     ALIPAY_PREAUTH("预授权"),
     ALIPAY_PAGE("电脑网站支付"),
@@ -9,6 +10,7 @@ public enum PaymentProduct {
     ALIPAY_JSAPI("JSAPI支付"),
     ALIPAY_DIRECT("直付通基础能力"),
     ALIPAY_DIRECT_WAP("直付通手机网站支付"),
+    ALIPAY_DIRECT_APP("直付通APP支付"),
     ALIPAY_DIRECT_F2F("直付通当面付"),
     ALIPAY_DIRECT_PAGE("直付通电脑网站支付"),
     ALIPAY_DIRECT_ORDER_CODE("直付通订单码"),
@@ -27,6 +29,7 @@ public enum PaymentProduct {
     public boolean directPaymentProduct() {
         return switch (this) {
             case ALIPAY_DIRECT_WAP,
+                 ALIPAY_DIRECT_APP,
                  ALIPAY_DIRECT_F2F,
                  ALIPAY_DIRECT_PAGE,
                  ALIPAY_DIRECT_ORDER_CODE,
@@ -38,6 +41,7 @@ public enum PaymentProduct {
     public boolean standardPaymentProduct() {
         return switch (this) {
             case ALIPAY_WAP,
+                 ALIPAY_APP,
                  ALIPAY_F2F,
                  ALIPAY_PREAUTH,
                  ALIPAY_PAGE,

@@ -130,6 +130,48 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void appProductUsesOfficialAppPayOrderString() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_APP,
+                        "APP-001",
+                        "app pay",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.app.pay");
+        assertThat(client.bizContent)
+                .containsEntry("out_trade_no", "APP-001")
+                .containsEntry("product_code", "QUICK_MSECURITY_PAY")
+                .containsEntry("timeout_express", "10m");
+        assertThat(response.redirectUrl()).contains("method=alipay.trade.app.pay");
+        assertThat(response.raw())
+                .containsEntry("request_method", "alipay.trade.app.pay")
+                .containsEntry("request_product_code", "QUICK_MSECURITY_PAY");
+        assertThat(response.raw().get("order_string")).isEqualTo(response.redirectUrl());
+        assertThat(response.qrCode()).isNull();
+        assertThat(response.redirectHtml()).isNull();
+    }
+
+    @Test
     void faceToFaceProductCreatesQrWithoutBuyerAuthCode() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
@@ -517,6 +559,18 @@ class AlipayPaymentProviderOnboardingTest {
             return "<form action=\"https://openapi.alipay.com/gateway.do\" method=\"post\">"
                     + "<input name=\"method\" value=\"" + method + "\">"
                     + "</form>";
+        }
+
+        @Override
+        public String orderString(
+                PaymentGatewayProperties.Channel channel,
+                String method,
+                Map<String, Object> bizContent,
+                AlipayRequestOptions options
+        ) {
+            this.method = method;
+            this.bizContent = new LinkedHashMap<>(bizContent);
+            return "app_id=2021000000000000&method=" + method + "&biz_content=mock&sign=mock";
         }
 
         @Override

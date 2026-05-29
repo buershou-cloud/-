@@ -120,6 +120,16 @@ public class AlipayOpenApiClient {
         return appendQuery(channel.getAlipay().getGatewayUrl(), formEncode(params, charset));
     }
 
+    public String orderString(
+            PaymentGatewayProperties.Channel channel,
+            String method,
+            Map<String, Object> bizContent,
+            AlipayRequestOptions options
+    ) {
+        Map<String, String> params = signedParams(channel, method, bizContent, options);
+        return formEncode(params, charset(channel));
+    }
+
     public boolean verifyNotify(PaymentGatewayProperties.Channel channel, Map<String, String> params) {
         Charset charset = charset(channel);
         return AlipaySignatureSupport.verify(

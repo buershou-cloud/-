@@ -346,12 +346,14 @@
   const productLabels = {
     ALIPAY_ORDER_CODE: "订单码",
     ALIPAY_F2F: "当面付",
+    ALIPAY_APP: "APP支付",
     ALIPAY_WAP: "WAP手机",
     ALIPAY_PAGE: "PC网页",
     ALIPAY_JSAPI: "JSAPI",
     ALIPAY_PREAUTH: "预授权",
     ALIPAY_DIRECT_WAP: "直付通WAP手机",
     ALIPAY_DIRECT_F2F: "直付通当面付",
+    ALIPAY_DIRECT_APP: "直付通APP支付",
     ALIPAY_DIRECT_PAGE: "直付通PC网页",
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
     ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
@@ -362,6 +364,8 @@
     "ALIPAY_F2F",
     "ALIPAY_DIRECT_F2F",
     "ALIPAY_PREAUTH",
+    "ALIPAY_APP",
+    "ALIPAY_DIRECT_APP",
     "ALIPAY_WAP",
     "ALIPAY_DIRECT_WAP",
     "ALIPAY_PAGE",
@@ -503,6 +507,10 @@
 
   function paymentChannelId(data) {
     return data.channelId || (currentChannel && currentChannel.id) || "";
+  }
+
+  function appOrderString(data) {
+    return data && data.raw && data.raw.order_string ? data.raw.order_string : "";
   }
 
   function isPaymentComplete(data) {
@@ -711,6 +719,15 @@
       const failed = data.status === "FAILED";
       writeResult(data.message || "支付请求已创建", failed ? "bad" : "ok");
       if (failed && !data.qrCode && !data.redirectUrl && !data.redirectHtml) {
+        return;
+      }
+      const orderString = appOrderString(data);
+      if (orderString) {
+        hidePaymentQr();
+        writeResult({
+          message: "APP支付订单信息已生成，请交给支付宝 App SDK 调起支付。",
+          orderString
+        }, "ok");
         return;
       }
       if (data.qrCode) {

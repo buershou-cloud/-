@@ -27,6 +27,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private static final String METHOD_WAP_PAY = "alipay.trade.wap.pay";
     private static final String METHOD_PAGE_PAY = "alipay.trade.page.pay";
+    private static final String METHOD_APP_PAY = "alipay.trade.app.pay";
     private static final String METHOD_PRECREATE = "alipay.trade.precreate";
     private static final String METHOD_TRADE_CREATE = "alipay.trade.create";
     private static final String METHOD_TRADE_QUERY = "alipay.trade.query";
@@ -63,6 +64,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     public GatewayResponse pay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
         return switch (request.product()) {
             case ALIPAY_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
+            case ALIPAY_APP -> appPay(channel, request);
             case ALIPAY_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
             case ALIPAY_F2F -> faceToFaceQrPay(channel, request);
             case ALIPAY_ORDER_CODE -> orderCodePay(channel, request);
@@ -70,6 +72,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
             case ALIPAY_PREAUTH -> preauth(channel, request);
             case ALIPAY_DIRECT -> directPay(channel, request);
             case ALIPAY_DIRECT_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
+            case ALIPAY_DIRECT_APP -> appPay(channel, request);
             case ALIPAY_DIRECT_F2F -> faceToFaceQrPay(channel, request);
             case ALIPAY_DIRECT_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
             case ALIPAY_DIRECT_ORDER_CODE -> orderCodePay(channel, request);
@@ -186,6 +189,27 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 redirectHtml,
                 null,
                 requestRaw(method, productCode),
+                List.of()
+        );
+    }
+
+    private GatewayResponse appPay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        Map<String, Object> bizContent = tradeBiz(channel, request);
+        bizContent.put("product_code", "QUICK_MSECURITY_PAY");
+        String orderString = client.orderString(channel, METHOD_APP_PAY, bizContent, options(request));
+        Map<String, Object> raw = requestRaw(METHOD_APP_PAY, "QUICK_MSECURITY_PAY");
+        raw.put("order_string", orderString);
+        return new GatewayResponse(
+                channel.getId(),
+                PaymentStatus.CREATED,
+                "APP_ORDER_CREATED",
+                "Alipay app order string created",
+                request.outTradeNo(),
+                null,
+                null,
+                null,
+                orderString,
+                raw,
                 List.of()
         );
     }
