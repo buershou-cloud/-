@@ -811,33 +811,58 @@
   }
 
   async function getAlipayJsapiAuthCode(appId) {
-    const bridge = await waitAlipayBridge();
+    const bridge = window.my?.getAuthCode ? null : await waitAlipayBridge();
     const attempts = [
-      { scopeNicks: ["auth_base"] },
       { scopes: ["auth_base"] },
+      { scopes: ["auth_user"] },
+      { scopeNicks: ["auth_base"] },
+      { scopeNicks: ["auth_user"] },
       { appId, scopeNicks: ["auth_base"] },
-      { appId, scopes: ["auth_base"] }
+      { appId, scopes: ["auth_base"] },
+      { appId, scopeNicks: ["auth_user"] },
+      { appId, scopes: ["auth_user"] }
     ];
-    let lastResult;
+    const failures = [];
     for (const options of attempts) {
       const result = await callAlipayGetAuthCode(bridge, options);
       const authCode = result?.authCode || result?.auth_code;
       if (authCode) {
         return authCode;
       }
-      lastResult = result;
-      if (!authCode && !isInvalidBridgeParams(result)) {
-        break;
-      }
+      failures.push({ options, result });
     }
+    const lastFailure = failures[failures.length - 1] || {};
+    const lastResult = lastFailure.result || {};
     throw {
       code: "ALIPAY_JSAPI_GET_AUTH_CODE_FAILED",
       message: lastResult?.errorMessage || lastResult?.errorMessageKey || lastResult?.error || "支付宝授权码获取失败",
-      raw: lastResult
+      raw: lastResult,
+      attempts: failures
     };
   }
 
   function callAlipayGetAuthCode(bridge, options) {
+    if (window.my?.getAuthCode) {
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (result) => {
+          if (settled) return;
+          settled = true;
+          resolve(result || {});
+        };
+        const timer = setTimeout(() => finish({ error: "ALIPAY_JSAPI_AUTH_TIMEOUT", errorMessage: "支付宝授权码获取超时" }), 5000);
+        const done = (result) => {
+          clearTimeout(timer);
+          finish(result);
+        };
+        window.my.getAuthCode({
+          ...options,
+          success: done,
+          fail: done,
+          complete: done
+        });
+      });
+    }
     return new Promise((resolve) => {
       bridge.call("getAuthCode", options, (result) => resolve(result || {}));
     });
