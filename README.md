@@ -107,6 +107,10 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 
 For WAP/page payments, the response contains `redirectHtml`. Return it directly to the browser.
 For face-to-face QR and order-code payments, the response contains `qrCode`.
+For payment-code collection, use product `ALIPAY_PAYMENT_CODE` and pass the
+customer Alipay barcode digits in `authCode`; the gateway calls
+`alipay.trade.pay` with `product_code=FACE_TO_FACE_PAYMENT` and
+`scene=bar_code`.
 
 ## Direct Pay Onboarding
 

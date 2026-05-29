@@ -250,6 +250,76 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void paymentCodeProductUsesFaceToFaceTradePayWithAuthCode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PAYMENT_CODE,
+                        "PAYMENT-CODE-001",
+                        "payment code",
+                        new BigDecimal("1.00"),
+                        "281234567890123456",
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.pay");
+        assertThat(client.bizContent)
+                .containsEntry("out_trade_no", "PAYMENT-CODE-001")
+                .containsEntry("scene", "bar_code")
+                .containsEntry("auth_code", "281234567890123456")
+                .containsEntry("product_code", "FACE_TO_FACE_PAYMENT");
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(response.qrCode()).isNull();
+        assertThat(response.redirectHtml()).isNull();
+    }
+
+    @Test
+    void paymentCodeProductRejectsMissingAuthCode() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        assertThatThrownBy(() -> provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PAYMENT_CODE,
+                        "PAYMENT-CODE-002",
+                        "payment code",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        ))
+                .isInstanceOf(GatewayException.class)
+                .hasMessageContaining("requires authCode");
+    }
+
+    @Test
     void orderCodeProductUsesPrecreateOfflineQrCode() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);

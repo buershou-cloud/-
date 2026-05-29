@@ -315,6 +315,9 @@
       <label>订单标题
         <input id="subject" value="扫码收银台支付" required>
       </label>
+      <label id="paymentCodeLabel" hidden>付款码数字
+        <input id="paymentCode" inputmode="numeric" pattern="[0-9]*" placeholder="请输入顾客支付宝付款码">
+      </label>
       <button id="payButton" class="btn" type="submit" disabled>确认支付</button>
     </form>
     <div class="meta">
@@ -348,6 +351,7 @@
   const productLabels = {
     ALIPAY_ORDER_CODE: "订单码",
     ALIPAY_F2F: "当面付",
+    ALIPAY_PAYMENT_CODE: "付款码",
     ALIPAY_APP: "APP支付",
     ALIPAY_WAP: "WAP手机",
     ALIPAY_PAGE: "PC网页",
@@ -363,6 +367,7 @@
   const desktopProductPreference = [
     "ALIPAY_ORDER_CODE",
     "ALIPAY_DIRECT_ORDER_CODE",
+    "ALIPAY_PAYMENT_CODE",
     "ALIPAY_F2F",
     "ALIPAY_DIRECT_F2F",
     "ALIPAY_PREAUTH",
@@ -597,6 +602,10 @@
 
   function isOrderCodeProduct(product) {
     return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
+  }
+
+  function isPaymentCodeProduct(product) {
+    return product === "ALIPAY_PAYMENT_CODE";
   }
 
   function isPagePayProduct(product) {
@@ -849,6 +858,19 @@
     return "当前通道没有可用于收银台的支付产品，请在支付通道里至少勾选一个支付产品。";
   }
 
+  function applyProductUi() {
+    const paymentCodeMode = isPaymentCodeProduct(currentProduct);
+    const paymentCodeLabel = $("paymentCodeLabel");
+    const paymentCodeInput = $("paymentCode");
+    paymentCodeLabel.hidden = !paymentCodeMode;
+    paymentCodeInput.required = paymentCodeMode;
+    if (!paymentCodeMode) {
+      paymentCodeInput.value = "";
+      return;
+    }
+    $("cashierHint").textContent = "输入金额和顾客支付宝付款码后发起收款，本产品调用支付宝当面付付款码能力。";
+  }
+
   function isJsapiProduct(product) {
     return product === "ALIPAY_JSAPI" || product === "ALIPAY_DIRECT_JSAPI";
   }
@@ -1027,6 +1049,7 @@
     }
 
     applyOauthStateDefaults();
+    applyProductUi();
     if (!currentProduct) {
       $("payButton").disabled = true;
       writeResult({ code: "NO_PRODUCT", message: noProductMessage(), products: currentProductOptions }, "bad");
@@ -1071,6 +1094,14 @@
     if (currentChannel) {
       payload.channelIds = [currentChannel.id];
       payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
+    }
+    if (isPaymentCodeProduct(currentProduct)) {
+      const paymentCode = $("paymentCode").value.replace(/\s+/g, "");
+      if (!/^\d{10,32}$/.test(paymentCode)) {
+        writeResult({ code: "BAD_PAYMENT_CODE", message: "请输入正确的支付宝付款码数字" }, "bad");
+        return;
+      }
+      payload.authCode = paymentCode;
     }
     if (isJsapiProduct(currentProduct)) {
       const jsapiChannel = channelsForCurrentProduct()[0];
@@ -1142,6 +1173,18 @@
           message: tradePayErrorMessage(tradePayResult),
           raw: tradePayResult
         }, "bad");
+        return;
+      }
+      if (isPaymentCodeProduct(currentProduct)) {
+        if (data.status === "SUCCESS") {
+          writeResult({ message: "付款码收款成功", response: data }, "ok");
+          return;
+        }
+        if (data.status === "PENDING" || data.status === "PAYING") {
+          writeResult({ message: "付款码支付处理中，请稍后到后台订单列表查询结果。", response: data }, "loading");
+          return;
+        }
+        writeResult(data, failed ? "bad" : "ok");
         return;
       }
       const orderString = appOrderString(data);

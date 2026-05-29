@@ -12,6 +12,11 @@ The script creates database `payment_gateway`, all core tables, a merchant order
 
 After import, add real channels and merchants from the admin pages.
 
+For an existing database, run incremental SQL files in this folder after pulling
+new code. For example, `20260529_add_alipay_payment_code_product.sql` enables
+the new `ALIPAY_PAYMENT_CODE` product on channels that already support
+`ALIPAY_F2F`.
+
 ## Spring Boot Startup
 
 After importing the SQL, start the app with database persistence enabled:

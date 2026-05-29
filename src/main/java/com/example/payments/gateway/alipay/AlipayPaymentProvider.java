@@ -70,6 +70,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
             case ALIPAY_APP -> appPay(channel, request);
             case ALIPAY_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
             case ALIPAY_F2F -> faceToFaceQrPay(channel, request);
+            case ALIPAY_PAYMENT_CODE -> paymentCodePay(channel, request);
             case ALIPAY_ORDER_CODE -> orderCodePay(channel, request);
             case ALIPAY_JSAPI -> jsapi(channel, request);
             case ALIPAY_PREAUTH -> preauth(channel, request);
@@ -222,6 +223,22 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.put("product_code", "FACE_TO_FACE_PAYMENT");
         AlipayGatewayResponse response = client.execute(channel, METHOD_PRECREATE, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), asString(response.response().get("qr_code")), bizContent);
+    }
+
+    private GatewayResponse paymentCodePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        Map<String, Object> bizContent = tradeBiz(channel, request);
+        String authCode = firstText(request.authCode(), asString(bizContent.get("auth_code")));
+        if (!hasText(authCode)) {
+            throw new GatewayException(
+                    "ALIPAY_PAYMENT_CODE_MISSING",
+                    "Alipay payment-code pay requires authCode"
+            );
+        }
+        bizContent.put("scene", "bar_code");
+        bizContent.put("auth_code", authCode);
+        bizContent.put("product_code", "FACE_TO_FACE_PAYMENT");
+        AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_PAY, bizContent, options(request));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 
     private GatewayResponse orderCodePay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
