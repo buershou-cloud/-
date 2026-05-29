@@ -1167,7 +1167,6 @@
     <header class="topbar">
       <div id="pageTitle" class="top-title">订单管理</div>
       <div class="top-actions">
-        <span id="healthText">服务检测中</span>
         <span id="serverDateText"></span>
         <button class="top-action-btn" id="changePasswordBtn" type="button">修改密码</button>
         <button class="top-action-btn" id="logoutBtn" type="button">退出</button>
@@ -2671,15 +2670,6 @@
     await loadOrders();
   }
 
-  async function loadHealth() {
-    try {
-      const data = await request("/actuator/health");
-      $("healthText").textContent = `服务 ${data.status}`;
-    } catch (error) {
-      $("healthText").textContent = "服务异常";
-    }
-  }
-
   function renderTopbarDate() {
     setText("serverDateText", topbarDateText());
   }
@@ -3750,7 +3740,7 @@
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
   checkAdminSession()
-    .then(() => Promise.all([loadHealth(), loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
+    .then(() => Promise.all([loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>
