@@ -535,7 +535,49 @@
 
   function openAlipayNativePay(text, message = "正在打开支付宝付款...") {
     writeResult(message, "loading");
+    if (/AlipayClient/i.test(navigator.userAgent || "")) {
+      startAlipayH5App(text);
+      return;
+    }
     window.location.href = alipayStartAppUrl(text);
+  }
+
+  function startAlipayH5App(url) {
+    let fallbackTimer;
+    const fallback = () => {
+      window.location.href = alipayStartAppUrl(url);
+    };
+    const callStartApp = () => {
+      try {
+        if (fallbackTimer) clearTimeout(fallbackTimer);
+        fallbackTimer = setTimeout(fallback, 800);
+        window.AlipayJSBridge.call("startApp", {
+          appId: "20000067",
+          param: {
+            url,
+            appClearTop: false,
+            startMultApp: "YES"
+          }
+        }, (result) => {
+          if (fallbackTimer) clearTimeout(fallbackTimer);
+          if (result && result.error) {
+            fallback();
+          }
+        });
+      } catch (error) {
+        fallback();
+      }
+    };
+    if (window.AlipayJSBridge) {
+      callStartApp();
+      return;
+    }
+    document.addEventListener("AlipayJSBridgeReady", callStartApp, { once: true });
+    setTimeout(() => {
+      if (!window.AlipayJSBridge) {
+        fallback();
+      }
+    }, 1000);
   }
 
   function isOrderCodeProduct(product) {
