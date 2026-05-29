@@ -845,13 +845,8 @@
     const bridge = window.my?.getAuthCode ? null : await waitAlipayBridge();
     const attempts = [
       { scopes: ["auth_base"] },
-      { scopes: ["auth_user"] },
-      { scopeNicks: ["auth_base"] },
-      { scopeNicks: ["auth_user"] },
-      { appId, scopeNicks: ["auth_base"] },
-      { appId, scopes: ["auth_base"] },
-      { appId, scopeNicks: ["auth_user"] },
-      { appId, scopes: ["auth_user"] }
+      {},
+      { scopeNicks: ["auth_base"] }
     ];
     const failures = [];
     for (const options of attempts) {
