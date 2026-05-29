@@ -338,12 +338,13 @@
 
 <script>
   const params = new URLSearchParams(location.search);
+  const oauthState = oauthStateParams(params.get("state"));
   const channelId = params.get("channelId");
   const merchantId = params.get("merchantId");
-  const preferredProduct = params.get("product");
+  const preferredProduct = paramValue("product");
   const oauthAuthCode = params.get("auth_code") || params.get("authCode");
-  const normalizedChannelId = safeDecode(channelId);
-  const normalizedMerchantId = safeDecode(merchantId);
+  const normalizedChannelId = safeDecode(paramValue("channelId"));
+  const normalizedMerchantId = safeDecode(paramValue("merchantId"));
   const productLabels = {
     ALIPAY_ORDER_CODE: "订单码",
     ALIPAY_F2F: "当面付",
@@ -408,6 +409,18 @@
       }
     }
     return decoded;
+  }
+
+  function oauthStateParams(rawState) {
+    try {
+      return new URLSearchParams(rawState || "");
+    } catch (error) {
+      return new URLSearchParams();
+    }
+  }
+
+  function paramValue(key) {
+    return params.get(key) || oauthState.get(key);
   }
 
   function tokenVariants(value) {
@@ -666,9 +679,17 @@
   }
 
   function oauthRedirectUrl() {
-    const url = new URL(location.href);
-    ["auth_code", "authCode", "app_id", "scope", "source"].forEach((key) => url.searchParams.delete(key));
-    return url.toString();
+    return `${location.origin}${location.pathname}`;
+  }
+
+  function oauthStateValue() {
+    const state = new URLSearchParams();
+    if (normalizedChannelId) state.set("channelId", normalizedChannelId);
+    if (normalizedMerchantId) state.set("merchantId", normalizedMerchantId);
+    if (currentProduct) state.set("product", currentProduct);
+    if ($("amount")?.value) state.set("amount", $("amount").value);
+    if ($("subject")?.value) state.set("subject", $("subject").value);
+    return state.toString();
   }
 
   function alipayOauthUrl(appId) {
@@ -676,7 +697,18 @@
     url.searchParams.set("app_id", appId);
     url.searchParams.set("scope", "auth_base");
     url.searchParams.set("redirect_uri", oauthRedirectUrl());
+    const state = oauthStateValue();
+    if (state) url.searchParams.set("state", state);
     return url.toString();
+  }
+
+  function applyOauthStateDefaults() {
+    if (oauthState.get("amount")) {
+      $("amount").value = oauthState.get("amount");
+    }
+    if (oauthState.get("subject")) {
+      $("subject").value = oauthState.get("subject");
+    }
   }
 
   async function loadChannel() {
@@ -711,6 +743,7 @@
       throw { code: "BAD_REQUEST", message: "缺少 channelId 或 merchantId" };
     }
 
+    applyOauthStateDefaults();
     if (!currentProduct) {
       $("payButton").disabled = true;
       writeResult({ code: "NO_PRODUCT", message: noProductMessage(), products: currentProductOptions }, "bad");
