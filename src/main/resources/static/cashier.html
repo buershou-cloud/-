@@ -548,6 +548,10 @@
     return data && data.raw && data.raw.order_string ? data.raw.order_string : "";
   }
 
+  function jsapiTradeNo(data) {
+    return data?.tradeNo || data?.trade_no || responseBody(data).trade_no || "";
+  }
+
   function isPaymentComplete(data) {
     return data.status === "SUCCESS" || responseTradeStatus(data) === "TRADE_SUCCESS" || responseTradeStatus(data) === "TRADE_FINISHED";
   }
@@ -617,6 +621,45 @@
       }
     };
     paymentPollTimer = setTimeout(poll, 5000);
+  }
+
+  function startJsapiPaymentPolling(paymentResponse, payload) {
+    clearPaymentPolling();
+    if (!payload.outTradeNo) {
+      return;
+    }
+    const channelId = paymentChannelId(paymentResponse);
+    const maxAttempts = 30;
+    const poll = async () => {
+      paymentPollAttempts += 1;
+      try {
+        const data = await queryPaymentStatus(payload.outTradeNo, channelId);
+        if (isPaymentComplete(data)) {
+          clearPaymentPolling();
+          writeResult("支付成功，订单状态已同步。", "ok");
+          return;
+        }
+        if (isPaymentClosed(data)) {
+          clearPaymentPolling();
+          writeResult("订单已关闭，未完成付款。", "bad");
+          return;
+        }
+        if (paymentPollAttempts >= maxAttempts) {
+          clearPaymentPolling();
+          writeResult("支付结果确认中，请稍后在后台订单列表查看。", "loading");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 2000);
+      } catch (error) {
+        if (paymentPollAttempts >= maxAttempts) {
+          clearPaymentPolling();
+          writeResult(error, "bad");
+          return;
+        }
+        paymentPollTimer = setTimeout(poll, 2000);
+      }
+    };
+    paymentPollTimer = setTimeout(poll, 1000);
   }
 
   async function request(url, options = {}) {
@@ -756,6 +799,42 @@
     return /参数|invalid|INVALID|ILLEGAL|PARAM/i.test(text);
   }
 
+  async function alipayJsapiTradePay(tradeNo) {
+    const bridge = await waitAlipayBridge();
+    const attempts = [
+      { tradeNO: tradeNo },
+      { tradeNo },
+      { orderStr: tradeNo }
+    ];
+    let lastResult;
+    for (const options of attempts) {
+      const result = await callAlipayTradePay(bridge, options);
+      lastResult = result;
+      if (!isInvalidBridgeParams(result)) {
+        return result;
+      }
+    }
+    return lastResult || {};
+  }
+
+  function callAlipayTradePay(bridge, options) {
+    return new Promise((resolve) => {
+      bridge.call("tradePay", options, (result) => resolve(result || {}));
+    });
+  }
+
+  function tradePayResultCode(result) {
+    return String(result?.resultCode || result?.result_code || result?.code || "");
+  }
+
+  function tradePayErrorMessage(result) {
+    const code = tradePayResultCode(result);
+    if (code === "6001") return "用户取消支付";
+    if (code === "6002") return "网络连接异常，请稍后重试";
+    if (code === "4000") return "支付宝支付失败";
+    return result?.memo || result?.errorMessage || result?.error || "支付宝支付未完成";
+  }
+
   function applyOauthStateDefaults() {
     if (oauthState.get("amount")) {
       $("amount").value = oauthState.get("amount");
@@ -880,6 +959,32 @@
       const failed = data.status === "FAILED";
       writeResult(data.message || "支付请求已创建", failed ? "bad" : "ok");
       if (failed && !data.qrCode && !data.redirectUrl && !data.redirectHtml) {
+        return;
+      }
+      if (isJsapiProduct(currentProduct)) {
+        const tradeNo = jsapiTradeNo(data);
+        if (!tradeNo) {
+          writeResult({ code: "ALIPAY_JSAPI_TRADE_NO_MISSING", message: "支付宝 JSAPI 创建交易后未返回 trade_no", response: data }, "bad");
+          return;
+        }
+        writeResult("正在调起支付宝付款...", "loading");
+        const tradePayResult = await alipayJsapiTradePay(tradeNo);
+        const resultCode = tradePayResultCode(tradePayResult);
+        if (resultCode === "9000") {
+          writeResult("支付成功，正在同步订单状态...", "loading");
+          startJsapiPaymentPolling(data, payload);
+          return;
+        }
+        if (resultCode === "8000") {
+          writeResult("支付处理中，正在确认订单状态...", "loading");
+          startJsapiPaymentPolling(data, payload);
+          return;
+        }
+        writeResult({
+          code: resultCode || "ALIPAY_JSAPI_TRADE_PAY_FAILED",
+          message: tradePayErrorMessage(tradePayResult),
+          raw: tradePayResult
+        }, "bad");
         return;
       }
       const orderString = appOrderString(data);
