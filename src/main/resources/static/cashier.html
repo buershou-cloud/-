@@ -764,10 +764,10 @@
   async function getAlipayJsapiAuthCode(appId) {
     const bridge = await waitAlipayBridge();
     const attempts = [
-      { appId, scopeNicks: ["auth_base"] },
-      { appId, scopes: ["auth_base"] },
       { scopeNicks: ["auth_base"] },
-      { scopes: ["auth_base"] }
+      { scopes: ["auth_base"] },
+      { appId, scopeNicks: ["auth_base"] },
+      { appId, scopes: ["auth_base"] }
     ];
     let lastResult;
     for (const options of attempts) {
@@ -796,7 +796,7 @@
 
   function isInvalidBridgeParams(result) {
     const text = `${result?.error || ""} ${result?.errorMessage || ""} ${result?.errorMessageKey || ""}`;
-    return /参数|invalid|INVALID|ILLEGAL|PARAM/i.test(text);
+    return /参数|invalid|INVALID|ILLEGAL|PARAM|REDIRECT_URI/i.test(text);
   }
 
   async function alipayJsapiTradePay(tradeNo) {

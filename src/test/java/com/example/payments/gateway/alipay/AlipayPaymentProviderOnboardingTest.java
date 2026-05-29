@@ -338,7 +338,8 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.method).isEqualTo("alipay.trade.create");
         assertThat(client.bizContent)
                 .containsEntry("buyer_id", "2088102146225135")
-                .containsEntry("product_code", "JSAPI_PAY");
+                .containsEntry("product_code", "JSAPI_PAY")
+                .containsEntry("op_app_id", "2021000000000000");
     }
 
     @Test
@@ -408,6 +409,7 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.bizContent)
                 .containsEntry("buyer_id", "2088102146225135")
                 .containsEntry("product_code", "JSAPI_PAY")
+                .containsEntry("op_app_id", "2021000000000000")
                 .doesNotContainKey("auth_code");
     }
 
@@ -618,6 +620,7 @@ class AlipayPaymentProviderOnboardingTest {
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("ali-main");
         channel.setProvider("ALIPAY");
+        channel.getAlipay().setAppId("2021000000000000");
         return channel;
     }
 

@@ -246,6 +246,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
                     "Alipay JSAPI payment requires buyerId, buyerOpenId, or OAuth authCode"
             );
         }
+        if (!hasText(asString(bizContent.get("op_app_id")))) {
+            putIfText(bizContent, "op_app_id", channel.getAlipay().getAppId());
+        }
         bizContent.put("product_code", "JSAPI_PAY");
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CREATE, bizContent, options(request));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
