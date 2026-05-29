@@ -4,6 +4,10 @@ server:
 spring:
   application:
     name: payment-gateway
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 8MB
 
 management:
   endpoints:

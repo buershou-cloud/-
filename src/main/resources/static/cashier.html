@@ -133,6 +133,57 @@
       cursor: pointer;
     }
 
+    .payment-code-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .payment-code-actions {
+      display: grid;
+      gap: 8px;
+    }
+
+    .payment-code-upload {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      border: 1px solid rgba(22, 119, 255, 0.28);
+      border-radius: 8px;
+      background: #eef6ff;
+      color: var(--primary);
+      padding: 0 14px;
+      font: inherit;
+      font-size: 14px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .payment-code-upload:disabled {
+      cursor: not-allowed;
+      opacity: 0.65;
+    }
+
+    .payment-code-status {
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.5;
+    }
+
+    .payment-code-status.ok {
+      color: var(--green);
+    }
+
+    .payment-code-status.bad {
+      color: var(--red);
+    }
+
+    .payment-code-status.loading {
+      color: var(--primary);
+    }
+
     .meta {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -315,9 +366,16 @@
       <label>订单标题
         <input id="subject" value="扫码收银台支付" required>
       </label>
-      <label id="paymentCodeLabel" hidden>付款码数字
-        <input id="paymentCode" inputmode="numeric" pattern="[0-9]*" placeholder="请输入顾客支付宝付款码">
-      </label>
+      <div id="paymentCodePanel" class="payment-code-panel" hidden>
+        <label>付款码数字
+          <input id="paymentCode" inputmode="numeric" pattern="[0-9]*" placeholder="可手动输入，也可上传照片自动识别">
+        </label>
+        <div class="payment-code-actions">
+          <input id="paymentCodeFile" type="file" accept="image/*" hidden>
+          <button id="paymentCodeUploadButton" class="payment-code-upload" type="button">上传照片识别付款码</button>
+          <div id="paymentCodeUploadStatus" class="payment-code-status">只在付款码产品中使用，其他支付产品不会显示。</div>
+        </div>
+      </div>
       <button id="payButton" class="btn" type="submit" disabled>确认支付</button>
     </form>
     <div class="meta">
@@ -497,6 +555,33 @@
       return;
     }
     setMessage(value, tone);
+  }
+
+  function setPaymentCodeUploadStatus(text, tone = "") {
+    const status = $("paymentCodeUploadStatus");
+    status.textContent = text;
+    status.className = `payment-code-status${tone ? ` ${tone}` : ""}`;
+  }
+
+  function clearPaymentCodeUi() {
+    $("paymentCode").value = "";
+    $("paymentCodeFile").value = "";
+    setPaymentCodeUploadStatus("只在付款码产品中使用，其他支付产品不会显示。");
+  }
+
+  function normalizePaymentCode(value) {
+    const compact = String(value || "").replace(/\s+/g, "");
+    const direct = compact.match(/^\d{10,32}$/);
+    if (direct) return compact;
+    const query = String(value || "").match(/(?:auth_code|authCode|payment_code|paymentCode|code)=([0-9]{10,32})/i);
+    if (query) return query[1];
+    const digits = String(value || "").match(/(?:^|\D)(\d{10,32})(?!\d)/);
+    return digits ? digits[1] : "";
+  }
+
+  function maskPaymentCode(code) {
+    if (!code || code.length <= 8) return code || "";
+    return `${code.slice(0, 4)}****${code.slice(-4)}`;
   }
 
   function hidePaymentQr() {
@@ -819,6 +904,24 @@
     return data;
   }
 
+  async function decodePaymentCodePhoto(file) {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch("/api/v1/payment-code/decode", {
+      method: "POST",
+      body
+    });
+    const text = await response.text();
+    let data = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (error) {
+      data = { message: text || "付款码照片识别失败" };
+    }
+    if (!response.ok) throw data;
+    return data;
+  }
+
   function productOptions(channel) {
     return (channel.products || [])
       .filter((product) => product !== "ALIPAY_DIRECT")
@@ -860,14 +963,15 @@
 
   function applyProductUi() {
     const paymentCodeMode = isPaymentCodeProduct(currentProduct);
-    const paymentCodeLabel = $("paymentCodeLabel");
+    const paymentCodePanel = $("paymentCodePanel");
     const paymentCodeInput = $("paymentCode");
-    paymentCodeLabel.hidden = !paymentCodeMode;
+    paymentCodePanel.hidden = !paymentCodeMode;
     paymentCodeInput.required = paymentCodeMode;
     if (!paymentCodeMode) {
-      paymentCodeInput.value = "";
+      clearPaymentCodeUi();
       return;
     }
+    setPaymentCodeUploadStatus("可手动输入付款码，也可以上传付款码照片自动识别。");
     $("cashierHint").textContent = "输入金额和顾客支付宝付款码后发起收款，本产品调用支付宝当面付付款码能力。";
   }
 
@@ -1062,6 +1166,48 @@
     return `CASHIER${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
   }
 
+  $("paymentCodeUploadButton").addEventListener("click", () => {
+    if (!isPaymentCodeProduct(currentProduct)) {
+      clearPaymentCodeUi();
+      return;
+    }
+    $("paymentCodeFile").click();
+  });
+
+  $("paymentCodeFile").addEventListener("change", async () => {
+    if (!isPaymentCodeProduct(currentProduct)) {
+      clearPaymentCodeUi();
+      return;
+    }
+    const file = $("paymentCodeFile").files?.[0];
+    if (!file) {
+      return;
+    }
+    const uploadButton = $("paymentCodeUploadButton");
+    uploadButton.disabled = true;
+    setPaymentCodeUploadStatus("正在识别照片，请稍候...", "loading");
+    try {
+      const data = await decodePaymentCodePhoto(file);
+      const paymentCode = normalizePaymentCode(data.paymentCode || data.text);
+      if (!paymentCode) {
+        throw {
+          code: "PAYMENT_CODE_NOT_FOUND",
+          message: "照片已识别，但没有找到付款码数字，请换一张更清晰的照片或手动输入。",
+          raw: data
+        };
+      }
+      $("paymentCode").value = paymentCode;
+      setPaymentCodeUploadStatus(`已识别付款码 ${maskPaymentCode(paymentCode)}`, "ok");
+      setMessage("付款码已识别，请确认金额后发起收款。", "loading");
+    } catch (error) {
+      $("paymentCodeFile").value = "";
+      setPaymentCodeUploadStatus(messageText(error), "bad");
+      setMessage(error, "bad");
+    } finally {
+      uploadButton.disabled = false;
+    }
+  });
+
   $("cashierForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     hidePaymentQr();
@@ -1096,9 +1242,9 @@
       payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
     }
     if (isPaymentCodeProduct(currentProduct)) {
-      const paymentCode = $("paymentCode").value.replace(/\s+/g, "");
+      const paymentCode = normalizePaymentCode($("paymentCode").value);
       if (!/^\d{10,32}$/.test(paymentCode)) {
-        writeResult({ code: "BAD_PAYMENT_CODE", message: "请输入正确的支付宝付款码数字" }, "bad");
+        writeResult({ code: "BAD_PAYMENT_CODE", message: "请输入正确的支付宝付款码数字，或上传付款码照片自动识别。" }, "bad");
         return;
       }
       payload.authCode = paymentCode;
