@@ -720,23 +720,40 @@
 
   async function getAlipayJsapiAuthCode(appId) {
     const bridge = await waitAlipayBridge();
-    return new Promise((resolve, reject) => {
-      bridge.call("getAuthCode", {
-        appId,
-        scopes: ["auth_base"]
-      }, (result) => {
-        const authCode = result?.authCode || result?.auth_code;
-        if (authCode) {
-          resolve(authCode);
-          return;
-        }
-        reject({
-          code: "ALIPAY_JSAPI_GET_AUTH_CODE_FAILED",
-          message: result?.errorMessage || result?.error || "支付宝授权码获取失败",
-          raw: result
-        });
-      });
+    const attempts = [
+      { appId, scopeNicks: ["auth_base"] },
+      { appId, scopes: ["auth_base"] },
+      { scopeNicks: ["auth_base"] },
+      { scopes: ["auth_base"] }
+    ];
+    let lastResult;
+    for (const options of attempts) {
+      const result = await callAlipayGetAuthCode(bridge, options);
+      const authCode = result?.authCode || result?.auth_code;
+      if (authCode) {
+        return authCode;
+      }
+      lastResult = result;
+      if (!authCode && !isInvalidBridgeParams(result)) {
+        break;
+      }
+    }
+    throw {
+      code: "ALIPAY_JSAPI_GET_AUTH_CODE_FAILED",
+      message: lastResult?.errorMessage || lastResult?.errorMessageKey || lastResult?.error || "支付宝授权码获取失败",
+      raw: lastResult
+    };
+  }
+
+  function callAlipayGetAuthCode(bridge, options) {
+    return new Promise((resolve) => {
+      bridge.call("getAuthCode", options, (result) => resolve(result || {}));
     });
+  }
+
+  function isInvalidBridgeParams(result) {
+    const text = `${result?.error || ""} ${result?.errorMessage || ""} ${result?.errorMessageKey || ""}`;
+    return /参数|invalid|INVALID|ILLEGAL|PARAM/i.test(text);
   }
 
   function applyOauthStateDefaults() {
