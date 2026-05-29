@@ -513,6 +513,13 @@
     $("payPanel").classList.add("active");
   }
 
+  function alipayStartAppUrl(text) {
+    if (/^alipays?:\/\//i.test(text)) {
+      return text;
+    }
+    return `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(text)}`;
+  }
+
   function openAlipayQr(text, message = "正在打开支付宝付款...") {
     writeResult(message, "loading");
     if (/^alipays?:\/\//i.test(text)) {
@@ -523,12 +530,36 @@
       window.location.href = text;
       return;
     }
-    const target = `alipays://platformapi/startapp?appId=20000067&url=${encodeURIComponent(text)}`;
-    window.location.href = target;
+    window.location.href = alipayStartAppUrl(text);
+  }
+
+  function openAlipayNativePay(text, message = "正在打开支付宝付款...") {
+    writeResult(message, "loading");
+    window.location.href = alipayStartAppUrl(text);
   }
 
   function isOrderCodeProduct(product) {
     return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
+  }
+
+  function isPagePayProduct(product) {
+    return product === "ALIPAY_PAGE" || product === "ALIPAY_DIRECT_PAGE";
+  }
+
+  function alipayFormActionUrl(form) {
+    if (!form) {
+      return "";
+    }
+    const action = form.getAttribute("action");
+    if (!action) {
+      return "";
+    }
+    const params = new URLSearchParams();
+    form.querySelectorAll("input[name]").forEach((input) => {
+      params.append(input.name, input.value || "");
+    });
+    const separator = action.includes("?") ? "&" : "?";
+    return `${action}${separator}${params.toString()}`;
   }
 
   function responseBody(data) {
@@ -1106,6 +1137,13 @@
         if (form) {
           form.setAttribute("target", "_self");
           alipaySubmitForm = form;
+          if (isMobilePayClient() && isPagePayProduct(currentProduct)) {
+            const pagePayUrl = alipayFormActionUrl(form);
+            if (pagePayUrl) {
+              openAlipayNativePay(pagePayUrl, "正在打开支付宝电脑网站支付...");
+              return;
+            }
+          }
           if (isMobilePayClient()) {
             setTimeout(() => submitAlipayForm(), 60);
             return;
