@@ -787,7 +787,7 @@
     }
 
     .channel-table .product-cell {
-      min-width: 380px;
+      min-width: 190px;
       white-space: normal;
     }
 
@@ -797,25 +797,63 @@
       gap: 5px;
     }
 
-    .product-checks {
+    .product-summary {
       display: grid;
-      grid-template-columns: repeat(2, minmax(126px, 1fr));
       gap: 8px;
+      min-width: 178px;
     }
 
-    .product-check {
+    .product-summary-line {
+      display: grid;
+      gap: 4px;
+    }
+
+    .product-summary-line strong {
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .product-summary-line span {
+      max-width: 210px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.45;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .product-edit-button {
+      justify-self: start;
+    }
+
+    .product-picker-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .product-picker-option {
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      min-height: 28px;
-      padding: 5px 8px;
+      gap: 9px;
+      min-height: 46px;
+      padding: 10px 12px;
       border: 1px solid #dbeafe;
-      border-radius: 7px;
+      border-radius: 8px;
       background: #eff6ff;
       color: var(--primary);
-      font-size: 12px;
-      font-weight: 800;
-      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 900;
+    }
+
+    .product-picker-option input {
+      width: 16px;
+      min-width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
     }
 
     .channel-actions {
@@ -1128,6 +1166,10 @@
       }
 
       .channel-form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .product-picker-grid {
         grid-template-columns: 1fr;
       }
 
@@ -1638,6 +1680,24 @@
   </section>
 </div>
 
+<div id="productModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="productModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="productModalTitle">选择支付产品</h3>
+      <button class="btn secondary small" id="closeProductModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <p id="productModalHint" class="muted"></p>
+      <div id="productModalChecks" class="product-picker-grid"></div>
+      <div class="form-actions">
+        <button class="btn secondary" id="selectAllProductsBtn" type="button">全选</button>
+        <button class="btn secondary" id="clearProductsBtn" type="button">清空</button>
+        <button class="btn" id="saveProductsBtn" type="button">保存产品</button>
+      </div>
+    </div>
+  </section>
+</div>
+
 <div id="qrModal" class="qr-modal hidden">
   <section class="qr-dialog">
     <div class="qr-head">
@@ -1662,7 +1722,8 @@
     complaintAuto: null,
     complaintRecords: [],
     editingChannelId: null,
-    editingMerchantId: null
+    editingMerchantId: null,
+    productEditorChannelId: null
   };
 
   const channelCheckTargets = [
@@ -2779,14 +2840,7 @@
         </td>
         <td>${channel.dailyEnabled ? '<span class="status success">可用</span>' : '<span class="status pending">熔断</span>'}</td>
         <td class="product-cell">
-          <div class="product-checks">
-            ${channelProductIds(channel).map((product) => `
-              <label class="product-check">
-                <input data-channel-product="${html(channel.id)}" type="checkbox" value="${html(product)}" ${(channel.products || []).includes(product) ? "checked" : ""}>
-                ${html(productLabels[product] || product)}
-              </label>
-            `).join("")}
-          </div>
+          ${productSummaryHtml(channel)}
         </td>
         <td><input data-channel-input="${html(channel.id)}" data-field="payMin" type="number" min="0" step="0.01" value="${html(channel.payMin ?? "")}"></td>
         <td><input data-channel-input="${html(channel.id)}" data-field="payMax" type="number" min="0" step="0.01" value="${html(channel.payMax ?? "")}"></td>
@@ -2824,20 +2878,40 @@
   }
 
   function channelProductIds(channel) {
+    if (!channel) return [];
     return channel.provider === "ALIPAY_DIRECT" ? directProductIds : standardProductIds;
+  }
+
+  function enabledChannelProducts(channel) {
+    const enabled = new Set(channel?.products || []);
+    return channelProductIds(channel).filter((product) => enabled.has(product));
+  }
+
+  function productSummaryHtml(channel) {
+    const products = enabledChannelProducts(channel);
+    const names = products.map((product) => productLabels[product] || product);
+    const summary = names.length ? names.join("、") : "未选择";
+    return `
+      <div class="product-summary">
+        <div class="product-summary-line">
+          <strong>${names.length ? `已选 ${names.length} 个` : "未选择产品"}</strong>
+          <span>${html(summary)}</span>
+        </div>
+        <button class="btn secondary small product-edit-button" type="button" data-channel-products="${html(channel.id)}">选择产品</button>
+      </div>
+    `;
   }
 
   function cashierEligibleProducts(channel) {
     if (!channel) return [];
-    const enabled = new Set(channel.products || []);
-    return channelProductIds(channel).filter((product) => enabled.has(product));
+    return enabledChannelProducts(channel);
   }
 
   function cashierProductSelectId(channelId) {
     return `cashier-product-${String(channelId).replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   }
 
-  function channelPatchPayload(channelId) {
+  function channelPatchPayload(channelId, productsOverride = null) {
     const payload = {};
     document.querySelectorAll(`[data-channel-input="${CSS.escape(channelId)}"]`).forEach((input) => {
       const field = input.dataset.field;
@@ -2849,13 +2923,14 @@
         payload[field] = input.value;
       }
     });
-    payload.products = Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
-      .map((input) => input.value);
+    payload.products = Array.isArray(productsOverride)
+      ? productsOverride
+      : enabledChannelProducts(state.channels.find((item) => item.id === channelId));
     return payload;
   }
 
-  async function saveChannel(channelId) {
-    const payload = channelPatchPayload(channelId);
+  async function saveChannel(channelId, productsOverride = null) {
+    const payload = channelPatchPayload(channelId, productsOverride);
     const channel = state.channels.find((item) => item.id === channelId);
     if (channel?.provider === "ALIPAY_DIRECT" && !payload.subMerchantId?.trim()) {
       setConsole({ error: "支付宝直付通通道必须填写二级商户 SMID", channelId });
@@ -2872,6 +2947,51 @@
     setConsole(data);
     await loadChannels();
     return true;
+  }
+
+  function openProductModal(channelId) {
+    const channel = state.channels.find((item) => item.id === channelId);
+    if (!channel) return;
+    state.productEditorChannelId = channelId;
+    const enabled = new Set(enabledChannelProducts(channel));
+    $("productModalTitle").textContent = `${channelId} 支付产品`;
+    $("productModalHint").textContent = "勾选当前通道支持的支付产品，保存后立即更新该通道。";
+    $("productModalChecks").innerHTML = channelProductIds(channel).map((product) => `
+      <label class="product-picker-option">
+        <input data-product-modal-check type="checkbox" value="${html(product)}" ${enabled.has(product) ? "checked" : ""}>
+        ${html(productLabels[product] || product)}
+      </label>
+    `).join("");
+    $("productModal").classList.remove("hidden");
+    $("productModal").setAttribute("aria-hidden", "false");
+  }
+
+  function closeProductModal() {
+    $("productModal").classList.add("hidden");
+    $("productModal").setAttribute("aria-hidden", "true");
+    $("productModalChecks").innerHTML = "";
+    state.productEditorChannelId = null;
+  }
+
+  function selectedProductModalValues() {
+    return Array.from(document.querySelectorAll("[data-product-modal-check]:checked"))
+      .map((input) => input.value);
+  }
+
+  async function saveProductModal() {
+    const channelId = state.productEditorChannelId;
+    if (!channelId) return;
+    const products = selectedProductModalValues();
+    if (!products.length) {
+      setConsole({ error: "请至少选择一个支付产品", channelId });
+      return;
+    }
+    const remembered = cashierProductByChannel.get(channelId);
+    if (!products.includes(remembered)) {
+      rememberCashierProduct(channelId, products[0] || "");
+    }
+    const saved = await saveChannel(channelId, products);
+    if (saved) closeProductModal();
   }
 
   async function deleteChannel(channelId) {
@@ -3692,19 +3812,6 @@
       rememberCashierProduct(cashierPicker.dataset.channelCashierProduct, cashierPicker.value);
       return;
     }
-    const product = event.target.closest("input[data-channel-product]");
-    if (product) {
-      const channelId = product.dataset.channelProduct;
-      const checkedProducts = Array.from(document.querySelectorAll(`[data-channel-product="${CSS.escape(channelId)}"]:checked`))
-        .map((input) => input.value);
-      if (product.checked) {
-        rememberCashierProduct(channelId, product.value);
-      } else if (cashierProductByChannel.get(channelId) === product.value) {
-        rememberCashierProduct(channelId, checkedProducts[0] || "");
-      }
-      const saved = await saveChannel(channelId);
-      if (!saved) await loadChannels();
-    }
   });
 
   $("channelTableBody").addEventListener("click", async (event) => {
@@ -3712,6 +3819,11 @@
     if (toggle) {
       const channel = state.channels.find((item) => item.id === toggle.dataset.channelToggle);
       if (channel) await setChannel(channel.id, !channel.enabled);
+      return;
+    }
+    const products = event.target.closest("button[data-channel-products]");
+    if (products) {
+      openProductModal(products.dataset.channelProducts);
       return;
     }
     const edit = event.target.closest("button[data-channel-edit]");
@@ -3752,6 +3864,28 @@
 
   $("addChannelPanel").addEventListener("click", (event) => {
     if (event.target.id === "addChannelPanel") closeChannelModal();
+  });
+
+  $("closeProductModalBtn").addEventListener("click", closeProductModal);
+
+  $("productModal").addEventListener("click", (event) => {
+    if (event.target.id === "productModal") closeProductModal();
+  });
+
+  $("selectAllProductsBtn").addEventListener("click", () => {
+    document.querySelectorAll("[data-product-modal-check]").forEach((input) => {
+      input.checked = true;
+    });
+  });
+
+  $("clearProductsBtn").addEventListener("click", () => {
+    document.querySelectorAll("[data-product-modal-check]").forEach((input) => {
+      input.checked = false;
+    });
+  });
+
+  $("saveProductsBtn").addEventListener("click", () => {
+    saveProductModal().catch((error) => setConsole(error));
   });
 
   $("closeQrBtn").addEventListener("click", hideCashierQr);
