@@ -1,0 +1,16 @@
+<view class="page">
+  <view class="card">
+    <view class="title">通道收银台</view>
+    <view class="merchant">支付宝 JSAPI 支付</view>
+    <view class="field">
+      <text>支付金额</text>
+      <input value="{{amount}}" type="digit" onInput="onAmountInput" />
+    </view>
+    <view class="field">
+      <text>订单标题</text>
+      <input value="{{subject}}" onInput="onSubjectInput" />
+    </view>
+    <button type="primary" loading="{{loading}}" disabled="{{loading}}" onTap="pay">确认支付</button>
+  </view>
+  <view class="message {{messageTone}}" a:if="{{message}}">{{message}}</view>
+</view>

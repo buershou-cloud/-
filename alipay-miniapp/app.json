@@ -1,0 +1,8 @@
+{
+  "pages": [
+    "pages/cashier/index"
+  ],
+  "window": {
+    "defaultTitle": "通道收银台"
+  }
+}
