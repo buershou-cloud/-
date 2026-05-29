@@ -448,8 +448,23 @@
         return `${value.message || "APP支付订单信息已生成"}\n\norderString:\n${value.orderString}`;
       }
       const text = value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
+      const authAttempts = authAttemptsText(value);
+      if (authAttempts) return `${text}\n\n${authAttempts}`;
       const attempts = gatewayAttemptsText(value);
       return attempts ? `${text}\n\n${attempts}` : text;
+    }
+
+    function authAttemptsText(value) {
+      if (!Array.isArray(value?.attempts) || !value.attempts.length || !value.attempts.some((attempt) => attempt?.options)) {
+        return "";
+      }
+      const lines = value.attempts.map((attempt, index) => {
+        const options = JSON.stringify(attempt.options || {});
+        const result = attempt.result || {};
+        const error = result.errorMessage || result.errorMessageKey || result.error || result.resultCode || JSON.stringify(result);
+        return `${index + 1}. ${options}: ${error || "无返回"}`;
+      });
+      return `授权尝试:\n${lines.join("\n")}`;
     }
 
     function gatewayAttemptsText(value) {
@@ -884,10 +899,9 @@
   }
 
   async function getAlipayJsapiAuthCode(appId) {
-    const bridge = window.my?.getAuthCode ? null : await waitAlipayBridge();
+    const bridge = await waitAlipayBridge();
     const attempts = [
       { scopes: ["auth_base"] },
-      {},
       { scopeNicks: ["auth_base"] }
     ];
     const failures = [];
@@ -910,29 +924,21 @@
   }
 
   function callAlipayGetAuthCode(bridge, options) {
-    if (window.my?.getAuthCode) {
-      return new Promise((resolve) => {
-        let settled = false;
-        const finish = (result) => {
-          if (settled) return;
-          settled = true;
-          resolve(result || {});
-        };
-        const timer = setTimeout(() => finish({ error: "ALIPAY_JSAPI_AUTH_TIMEOUT", errorMessage: "支付宝授权码获取超时" }), 5000);
-        const done = (result) => {
-          clearTimeout(timer);
-          finish(result);
-        };
-        window.my.getAuthCode({
-          ...options,
-          success: done,
-          fail: done,
-          complete: done
-        });
-      });
-    }
     return new Promise((resolve) => {
-      bridge.call("getAuthCode", options, (result) => resolve(result || {}));
+      let settled = false;
+      const finish = (result) => {
+        if (settled) return;
+        settled = true;
+        resolve(result || {});
+      };
+      const timer = setTimeout(() => finish({
+        error: "ALIPAY_JSAPI_AUTH_TIMEOUT",
+        errorMessage: "支付宝授权码获取超时"
+      }), 5000);
+      bridge.call("getAuthCode", options, (result) => {
+        clearTimeout(timer);
+        finish(result);
+      });
     });
   }
 
