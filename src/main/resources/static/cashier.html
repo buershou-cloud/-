@@ -422,11 +422,14 @@
     return [channel.id, channel.name, channel.appId, channel.provider].some((token) => tokenMatches(token, value));
   }
 
-  function messageText(value) {
-    if (typeof value === "string") return value;
-    if (!value || typeof value !== "object") return String(value || "");
-    return value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
-  }
+    function messageText(value) {
+      if (typeof value === "string") return value;
+      if (!value || typeof value !== "object") return String(value || "");
+      if (value.orderString) {
+        return `${value.message || "APP支付订单信息已生成"}\n\norderString:\n${value.orderString}`;
+      }
+      return value.message || value.subMessage || value.error || value.code || JSON.stringify(value);
+    }
 
   function setMessage(value, tone = "") {
     const message = $("message");
