@@ -264,7 +264,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
             );
         }
         if (!hasText(asString(bizContent.get("op_app_id")))) {
-            putIfText(bizContent, "op_app_id", firstText(channel.getAlipay().getMiniAppId(), channel.getAlipay().getAppId()));
+            putIfText(bizContent, "op_app_id", channel.getAlipay().getAppId());
         }
         bizContent.put("product_code", "JSAPI_PAY");
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_CREATE, bizContent, options(request));
@@ -357,7 +357,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.remove("cashierOriginalProduct");
         bizContent.remove("merchantId");
         bizContent.remove("merchantName");
-        bizContent.remove("source");
     }
 
     private static void putDirectSubMerchant(PaymentGatewayProperties.Channel channel, Map<String, Object> bizContent) {

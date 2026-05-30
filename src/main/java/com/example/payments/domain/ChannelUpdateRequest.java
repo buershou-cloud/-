@@ -14,7 +14,6 @@ public record ChannelUpdateRequest(
         Set<PaymentProduct> products,
         String gatewayUrl,
         String appId,
-        String miniAppId,
         String merchantPrivateKey,
         String alipayPublicKey,
         String credentialMode,

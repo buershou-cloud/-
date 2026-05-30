@@ -1035,15 +1035,16 @@
   }
 
   async function getAlipayJsapiAuthCode(appId) {
+    const bridge = await waitAlipayBridge();
     const attempts = [
-      { scopes: ["auth_base"] },
-      { scopes: "auth_base" },
-      { scopeNicks: ["auth_base"] },
-      { scopeNicks: "auth_base" }
+      { appId, scopeNicks: ["auth_base"] },
+      { appId, scopes: ["auth_base"] },
+      { appId, scopeNicks: "auth_base" },
+      { appId, scopes: "auth_base" }
     ];
     const failures = [];
     for (const options of attempts) {
-      const result = await callAlipayGetAuthCode(options);
+      const result = await callAlipayGetAuthCode(bridge, options);
       const authCode = result?.authCode || result?.auth_code;
       if (authCode) {
         return authCode;
@@ -1060,12 +1061,8 @@
     };
   }
 
-  function callAlipayGetAuthCode(options) {
+  function callAlipayGetAuthCode(bridge, options) {
     return new Promise((resolve) => {
-      if (!window.my?.getAuthCode) {
-        resolve({ error: "ALIPAY_MINI_API_MISSING", errorMessage: "支付宝小程序 my.getAuthCode 不可用" });
-        return;
-      }
       let settled = false;
       const finish = (result) => {
         if (settled) return;
@@ -1076,16 +1073,9 @@
         error: "ALIPAY_JSAPI_AUTH_TIMEOUT",
         errorMessage: "支付宝授权码获取超时"
       }), 5000);
-      window.my.getAuthCode({
-        ...options,
-        success: (result) => {
-          clearTimeout(timer);
-          finish(result);
-        },
-        fail: (result) => {
-          clearTimeout(timer);
-          finish(result);
-        }
+      bridge.call("getAuthCode", options, (result) => {
+        clearTimeout(timer);
+        finish(result);
       });
     });
   }
@@ -1096,9 +1086,6 @@
   }
 
   async function alipayJsapiTradePay(tradeNo) {
-    if (window.my?.tradePay) {
-      return callAlipayMiniTradePay({ tradeNO: tradeNo });
-    }
     const bridge = await waitAlipayBridge();
     const attempts = [
       { tradeNO: tradeNo },
@@ -1119,16 +1106,6 @@
   function callAlipayTradePay(bridge, options) {
     return new Promise((resolve) => {
       bridge.call("tradePay", options, (result) => resolve(result || {}));
-    });
-  }
-
-  function callAlipayMiniTradePay(options) {
-    return new Promise((resolve) => {
-      window.my.tradePay({
-        ...options,
-        success: (result) => resolve(result || {}),
-        fail: (result) => resolve(result || {})
-      });
     });
   }
 
@@ -1287,11 +1264,7 @@
       if (jsapiChannel && !currentChannel) {
         payload.channelIds = [jsapiChannel.id];
       }
-      const jsapiMiniAppId = (jsapiChannel?.miniAppId || jsapiChannel?.appId || "").trim();
-      if (jsapiMiniAppId) {
-        payload.extra.op_app_id = jsapiMiniAppId;
-      }
-      if (!window.my?.getAuthCode || !window.my?.tradePay) {
+      if (!window.AlipayJSBridge || !window.my?.tradePay) {
         writeResult({
           code: "ALIPAY_JSAPI_REQUIRES_MINI_PROGRAM",
           message: "支付宝 JSAPI 支付必须从支付宝小程序收银台发起。普通 H5 收银台不能完成 JSAPI 支付，请在后台重新生成 JSAPI 产品二维码，二维码会打开支付宝小程序页面。"
@@ -1301,9 +1274,13 @@
       if (oauthAuthCode) {
         payload.authCode = oauthAuthCode;
       } else if (isAlipayClient()) {
+        if (!jsapiChannel?.appId) {
+          writeResult({ code: "ALIPAY_JSAPI_APP_ID_MISSING", message: "JSAPI支付需要当前通道配置支付宝 app_id" }, "bad");
+          return;
+        }
         try {
           writeResult("正在获取支付宝用户授权，请稍候...", "loading");
-          payload.authCode = await getAlipayJsapiAuthCode(jsapiMiniAppId);
+          payload.authCode = await getAlipayJsapiAuthCode(jsapiChannel.appId);
         } catch (error) {
           writeResult(error, "bad");
           return;

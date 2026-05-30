@@ -1624,7 +1624,6 @@
             </select>
           </label>
           <label>支付宝 AppID<input id="newChannelAppId" required placeholder="支付宝开放平台 AppID"></label>
-          <label>JSAPI小程序AppID<input id="newChannelMiniAppId" placeholder="JSAPI 收银台小程序 AppID，可与支付 AppID 不同"></label>
           <label>密钥模式
             <select id="newChannelCredentialMode">
               <option value="PUBLIC_KEY">普通公钥模式</option>
@@ -2812,9 +2811,6 @@
     if (channel.provider === "ALIPAY_DIRECT") {
       tags.push(`<span class="mini">${channel.hasSubMerchantId ? "SMID已配" : "缺SMID"}</span>`);
     }
-    if (enabledChannelProducts(channel).some(isJsapiCashierProduct)) {
-      tags.push(`<span class="mini">${channel.miniAppId ? "小程序AppID已配" : "JSAPI复用支付AppID"}</span>`);
-    }
     return tags.join("");
   }
 
@@ -3072,7 +3068,7 @@
 
   function cashierUrl(channelId, product = selectedProductForChannel(channelId)) {
     const channel = state.channels.find((item) => item.id === channelId);
-    if (isJsapiCashierProduct(product) && jsapiMiniAppId(channel)) {
+    if (isJsapiCashierProduct(product) && channel?.appId) {
       return alipayMiniCashierUrl(channel, product);
     }
     const params = new URLSearchParams({ channelId });
@@ -3085,23 +3081,17 @@
   }
 
   function alipayMiniCashierUrl(channel, product) {
-    const miniAppId = jsapiMiniAppId(channel);
     const query = new URLSearchParams({
       baseUrl: location.origin,
       channelId: channel.id,
-      product,
-      miniAppId
+      product
     });
     const params = new URLSearchParams({
-      appId: miniAppId,
+      appId: channel.appId,
       page: "pages/cashier/index",
       query: query.toString()
     });
     return `alipays://platformapi/startapp?${params.toString()}`;
-  }
-
-  function jsapiMiniAppId(channel) {
-    return (channel?.miniAppId || channel?.appId || "").trim();
   }
 
   function showCashierQr(channelId) {
@@ -3111,8 +3101,8 @@
       return;
     }
     const channel = state.channels.find((item) => item.id === channelId);
-    if (isJsapiCashierProduct(product) && !jsapiMiniAppId(channel)) {
-      alert("JSAPI 收银台二维码需要先配置支付宝小程序 AppID");
+    if (isJsapiCashierProduct(product) && !channel?.appId) {
+      alert("JSAPI 收银台二维码需要先配置支付宝小程序 appId");
       return;
     }
     rememberCashierProduct(channelId, product);
@@ -3236,7 +3226,6 @@
     $("newChannelProvider").disabled = true;
     $("newChannelProvider").setAttribute("disabled", "");
     $("newChannelAppId").value = channel.appId || "";
-    $("newChannelMiniAppId").value = channel.miniAppId || "";
     $("newChannelAlipayPublicKey").value = channel.alipayPublicKey || "";
     $("newChannelMerchantPrivateKey").value = channel.merchantPrivateKey || "";
     $("newChannelAppAuthToken").value = channel.appAuthToken || "";
@@ -3271,7 +3260,6 @@
       payMax: amountField("newChannelPayMax"),
       gatewayUrl: $("newChannelGatewayUrl").value,
       appId: $("newChannelAppId").value,
-      miniAppId: $("newChannelMiniAppId").value,
       credentialMode: $("newChannelCredentialMode").value,
       subMerchantId: $("newChannelSubMerchantId").value,
       appCertSn: $("newChannelAppCertSn").value.trim(),

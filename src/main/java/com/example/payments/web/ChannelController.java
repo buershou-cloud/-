@@ -125,7 +125,6 @@ public class ChannelController {
                 channel.getProducts(),
                 channel.getAlipay().getGatewayUrl(),
                 channel.getAlipay().getAppId(),
-                channel.getAlipay().getMiniAppId(),
                 channel.getAlipay().getMerchantPrivateKey(),
                 channel.getAlipay().getAlipayPublicKey(),
                 hasText(channel.getAlipay().getMerchantPrivateKey()),
@@ -149,7 +148,6 @@ public class ChannelController {
     private void applyAlipayConfig(PaymentGatewayProperties.Alipay alipay, ChannelCreateRequest request) {
         setIfPresent(request.gatewayUrl(), alipay::setGatewayUrl);
         setIfPresent(request.appId(), alipay::setAppId);
-        setIfPresent(request.miniAppId(), alipay::setMiniAppId);
         setIfPresent(request.merchantPrivateKey(), alipay::setMerchantPrivateKey);
         setIfPresent(request.alipayPublicKey(), alipay::setAlipayPublicKey);
         setIfPresent(request.credentialMode(), value -> alipay.setCredentialMode(normalizeCredentialMode(value)));
@@ -168,7 +166,6 @@ public class ChannelController {
     private void applyAlipayConfig(PaymentGatewayProperties.Alipay alipay, ChannelUpdateRequest request) {
         setIfPresent(request.gatewayUrl(), alipay::setGatewayUrl);
         setIfPresent(request.appId(), alipay::setAppId);
-        setIfPresent(request.miniAppId(), alipay::setMiniAppId);
         setIfPresent(request.merchantPrivateKey(), alipay::setMerchantPrivateKey);
         setIfPresent(request.alipayPublicKey(), alipay::setAlipayPublicKey);
         setIfPresent(request.credentialMode(), value -> alipay.setCredentialMode(normalizeCredentialMode(value)));
@@ -306,7 +303,6 @@ public class ChannelController {
             Set<PaymentProduct> products,
             String gatewayUrl,
             String appId,
-            String miniAppId,
             String merchantPrivateKey,
             String alipayPublicKey,
             boolean hasMerchantPrivateKey,

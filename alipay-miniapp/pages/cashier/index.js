@@ -2,7 +2,6 @@ Page({
   data: {
     baseUrl: "",
     channelId: "",
-    miniAppId: "",
     product: "ALIPAY_JSAPI",
     amount: "1",
     subject: "扫码收银台支付",
@@ -15,7 +14,6 @@ Page({
     this.setData({
       baseUrl: decodeURIComponent(query.baseUrl || ""),
       channelId: query.channelId || "",
-      miniAppId: query.miniAppId || "",
       product: query.product || "ALIPAY_JSAPI"
     });
   },
@@ -39,7 +37,7 @@ Page({
     }
     this.setData({ loading: true, message: "正在获取支付宝授权...", messageTone: "" });
     my.getAuthCode({
-      scopes: ["auth_base"],
+      scopes: "auth_base",
       success: (authResult) => this.createOrder(authResult.authCode || authResult.auth_code),
       fail: (error) => {
         this.setData({ loading: false });
@@ -67,7 +65,7 @@ Page({
         timeoutExpress: "10m",
         channelIds: [this.data.channelId],
         notifyUrl: `${this.data.baseUrl}/api/v1/alipay/notify/${encodeURIComponent(this.data.channelId)}`,
-        extra: this.orderExtra()
+        extra: { cashier: true, source: "alipay-miniapp" }
       },
       success: (response) => {
         const data = response.data || {};
@@ -118,14 +116,6 @@ Page({
 
   orderNo() {
     return `MP${Date.now()}${Math.floor(Math.random() * 1000)}`;
-  },
-
-  orderExtra() {
-    const extra = { cashier: true, source: "alipay-miniapp" };
-    if (this.data.miniAppId) {
-      extra.op_app_id = this.data.miniAppId;
-    }
-    return extra;
   },
 
   setMessage(message, tone) {
