@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS pay_channel (
   pay_max DECIMAL(18,2) NOT NULL DEFAULT 50000.00 COMMENT '最大支付金额',
   gateway_url VARCHAR(255) NOT NULL DEFAULT 'https://openapi.alipay.com/gateway.do' COMMENT '支付宝网关',
   app_id VARCHAR(64) NOT NULL DEFAULT '' COMMENT '支付宝 AppID',
+  mini_app_id VARCHAR(64) NULL COMMENT '支付宝小程序 AppID，用于 JSAPI 收银台',
   alipay_public_key TEXT NULL COMMENT '支付宝公钥',
   merchant_private_key MEDIUMTEXT NULL COMMENT '应用私钥',
   credential_mode VARCHAR(32) NOT NULL DEFAULT 'PUBLIC_KEY' COMMENT '支付宝验签模式：PUBLIC_KEY 或 CERTIFICATE',

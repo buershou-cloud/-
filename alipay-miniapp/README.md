@@ -15,6 +15,7 @@ The QR query contains:
 baseUrl=https://your-domain.example
 channelId=ali-main
 product=ALIPAY_JSAPI
+miniAppId=202100...
 ```
 
 Flow:
@@ -26,3 +27,7 @@ Flow:
 
 Before publishing, set the Mini Program request domain to your deployed backend
 domain in the Alipay Open Platform console.
+
+For JSAPI QR generation, configure the channel `miniAppId` with the Alipay Mini
+Program AppID. If it is left empty, the backend falls back to the normal payment
+AppID, which only works when that same AppID is also the published mini program.

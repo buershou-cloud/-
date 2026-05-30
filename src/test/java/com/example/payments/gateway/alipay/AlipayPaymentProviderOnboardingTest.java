@@ -413,6 +413,41 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void jsapiProductUsesConfiguredMiniAppIdForOperationAppId() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+        PaymentGatewayProperties.Channel channel = standardChannel();
+        channel.getAlipay().setMiniAppId("202100MINIAPPID");
+
+        provider.pay(
+                channel,
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_JSAPI,
+                        "JSAPI-MINI-001",
+                        "jsapi pay",
+                        new BigDecimal("1.00"),
+                        null,
+                        "2088102146225135",
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("source", "alipay-miniapp"),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.bizContent)
+                .containsEntry("op_app_id", "202100MINIAPPID")
+                .doesNotContainKey("source");
+    }
+
+    @Test
     void jsapiProductRejectsMissingBuyerIdentifier() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);

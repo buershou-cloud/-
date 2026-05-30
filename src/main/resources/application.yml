@@ -54,6 +54,7 @@ payment:
       alipay:
         gateway-url: https://openapi.alipay.com/gateway.do
         app-id: ${ALI_MAIN_APP_ID:}
+        mini-app-id: ${ALI_MAIN_MINI_APP_ID:}
         merchant-private-key: ${ALI_MAIN_PRIVATE_KEY:}
         alipay-public-key: ${ALI_MAIN_PUBLIC_KEY:}
         app-auth-token: ${ALI_MAIN_APP_AUTH_TOKEN:}
@@ -78,6 +79,7 @@ payment:
       alipay:
         gateway-url: https://openapi.alipay.com/gateway.do
         app-id: ${ALI_BACKUP_APP_ID:}
+        mini-app-id: ${ALI_BACKUP_MINI_APP_ID:}
         merchant-private-key: ${ALI_BACKUP_PRIVATE_KEY:}
         alipay-public-key: ${ALI_BACKUP_PUBLIC_KEY:}
         notify-url: ${ALI_BACKUP_NOTIFY_URL:http://localhost:8080/api/v1/alipay/notify/ali-backup}
@@ -100,6 +102,7 @@ payment:
       alipay:
         gateway-url: https://openapi.alipay.com/gateway.do
         app-id: ${ALI_DIRECT_APP_ID:}
+        mini-app-id: ${ALI_DIRECT_MINI_APP_ID:}
         merchant-private-key: ${ALI_DIRECT_PRIVATE_KEY:}
         alipay-public-key: ${ALI_DIRECT_PUBLIC_KEY:}
         app-auth-token: ${ALI_DIRECT_APP_AUTH_TOKEN:}

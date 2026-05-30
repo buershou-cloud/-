@@ -217,6 +217,7 @@ public class PaymentGatewayProperties {
     public static class Alipay {
         private String gatewayUrl = "https://openapi.alipay.com/gateway.do";
         private String appId;
+        private String miniAppId;
         private String merchantPrivateKey;
         private String alipayPublicKey;
         private String credentialMode = "PUBLIC_KEY";
@@ -247,6 +248,14 @@ public class PaymentGatewayProperties {
 
         public void setAppId(String appId) {
             this.appId = appId;
+        }
+
+        public String getMiniAppId() {
+            return miniAppId;
+        }
+
+        public void setMiniAppId(String miniAppId) {
+            this.miniAppId = miniAppId;
         }
 
         public String getMerchantPrivateKey() {

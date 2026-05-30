@@ -71,14 +71,15 @@ public class CashierQrController {
             PaymentProduct product,
             HttpServletRequest request
     ) {
-        String appId = channel.getAlipay().getAppId();
+        String appId = firstText(channel.getAlipay().getMiniAppId(), channel.getAlipay().getAppId());
         if (appId == null || appId.isBlank()) {
-            throw new IllegalArgumentException("Alipay JSAPI cashier QR requires channel appId");
+            throw new IllegalArgumentException("Alipay JSAPI cashier QR requires channel miniAppId or appId");
         }
         String query = UriComponentsBuilder.newInstance()
                 .queryParam("baseUrl", RequestUrlSupport.origin(request))
                 .queryParam("channelId", channelId)
                 .queryParam("product", product.name())
+                .queryParam("miniAppId", appId)
                 .build()
                 .getQuery();
         return "alipays://platformapi/startapp"
@@ -89,5 +90,9 @@ public class CashierQrController {
 
     private static String encode(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String firstText(String preferred, String fallback) {
+        return preferred != null && !preferred.isBlank() ? preferred.trim() : fallback;
     }
 }

@@ -176,7 +176,7 @@ public class ChannelRegistry {
         }
         List<PaymentGatewayProperties.Channel> loaded = jdbcTemplate.query("""
                 SELECT id, provider, enabled, daily_enabled, priority, weight, pay_min, pay_max,
-                       gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
+                       gateway_url, app_id, mini_app_id, alipay_public_key, merchant_private_key, credential_mode,
                        app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
                        app_cert_content, alipay_cert_content, alipay_root_cert_content,
                        app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
@@ -194,6 +194,7 @@ public class ChannelRegistry {
             PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
             alipay.setGatewayUrl(firstText(rs.getString("gateway_url"), DEFAULT_GATEWAY));
             alipay.setAppId(nullIfBlank(rs.getString("app_id")));
+            alipay.setMiniAppId(nullIfBlank(rs.getString("mini_app_id")));
             alipay.setAlipayPublicKey(nullIfBlank(rs.getString("alipay_public_key")));
             alipay.setMerchantPrivateKey(nullIfBlank(rs.getString("merchant_private_key")));
             alipay.setCredentialMode(normalizeCredentialMode(rs.getString("credential_mode")));
@@ -237,11 +238,11 @@ public class ChannelRegistry {
         jdbcTemplate.update("""
                 INSERT INTO pay_channel (
                   id, provider, enabled, daily_enabled, priority, weight, pay_min, pay_max,
-                  gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
+                  gateway_url, app_id, mini_app_id, alipay_public_key, merchant_private_key, credential_mode,
                   app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
                   app_cert_content, alipay_cert_content, alipay_root_cert_content,
                   app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 channel.getId(),
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -253,6 +254,7 @@ public class ChannelRegistry {
                 firstAmount(channel.getPayMax(), new BigDecimal("50000.00")),
                 firstText(channel.getAlipay().getGatewayUrl(), DEFAULT_GATEWAY),
                 firstText(channel.getAlipay().getAppId(), ""),
+                nullIfBlank(channel.getAlipay().getMiniAppId()),
                 nullIfBlank(channel.getAlipay().getAlipayPublicKey()),
                 nullIfBlank(channel.getAlipay().getMerchantPrivateKey()),
                 normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
@@ -276,7 +278,7 @@ public class ChannelRegistry {
         jdbcTemplate.update("""
                 UPDATE pay_channel
                 SET provider = ?, enabled = ?, daily_enabled = ?, priority = ?, weight = ?,
-                    pay_min = ?, pay_max = ?, gateway_url = ?, app_id = ?,
+                    pay_min = ?, pay_max = ?, gateway_url = ?, app_id = ?, mini_app_id = ?,
                     alipay_public_key = ?, merchant_private_key = ?, credential_mode = ?,
                     app_cert_sn = ?, alipay_cert_sn = ?, alipay_root_cert_sn = ?,
                     app_cert_content = ?, alipay_cert_content = ?, alipay_root_cert_content = ?,
@@ -293,6 +295,7 @@ public class ChannelRegistry {
                 firstAmount(channel.getPayMax(), new BigDecimal("50000.00")),
                 firstText(channel.getAlipay().getGatewayUrl(), DEFAULT_GATEWAY),
                 firstText(channel.getAlipay().getAppId(), ""),
+                nullIfBlank(channel.getAlipay().getMiniAppId()),
                 nullIfBlank(channel.getAlipay().getAlipayPublicKey()),
                 nullIfBlank(channel.getAlipay().getMerchantPrivateKey()),
                 normalizeCredentialMode(channel.getAlipay().getCredentialMode()),
