@@ -1624,7 +1624,7 @@
             </select>
           </label>
           <label>支付宝 AppID<input id="newChannelAppId" required placeholder="支付宝开放平台 AppID"></label>
-          <label>JSAPI小程序AppID<input id="newChannelMiniAppId" placeholder="JSAPI 收银台小程序 AppID，可与支付 AppID 不同"></label>
+          <label id="newChannelMiniAppIdField" class="hidden">JSAPI小程序AppID<input id="newChannelMiniAppId" placeholder="JSAPI 收银台小程序 AppID，可与支付 AppID 不同"></label>
           <label>密钥模式
             <select id="newChannelCredentialMode">
               <option value="PUBLIC_KEY">普通公钥模式</option>
@@ -3157,6 +3157,11 @@
       : "支付宝开放平台 RSA2 支付宝公钥";
   }
 
+  function syncMiniAppIdField(channel = null) {
+    const visible = channel ? enabledChannelProducts(channel).some(isJsapiCashierProduct) : false;
+    $("newChannelMiniAppIdField").classList.toggle("hidden", !visible);
+  }
+
   function amountField(id) {
     const value = $(id).value.trim();
     return value === "" ? null : Number(value);
@@ -3212,6 +3217,7 @@
     syncChannelCallbackUrls();
     syncDirectChannelField();
     syncCredentialModeFields();
+    syncMiniAppIdField();
   }
 
   function openCreateChannelModal() {
@@ -3258,6 +3264,7 @@
     $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
     syncDirectChannelField();
     syncCredentialModeFields();
+    syncMiniAppIdField(channel);
     showChannelModal();
     $("newChannelAppId").focus();
   }
@@ -3271,7 +3278,6 @@
       payMax: amountField("newChannelPayMax"),
       gatewayUrl: $("newChannelGatewayUrl").value,
       appId: $("newChannelAppId").value,
-      miniAppId: $("newChannelMiniAppId").value,
       credentialMode: $("newChannelCredentialMode").value,
       subMerchantId: $("newChannelSubMerchantId").value,
       appCertSn: $("newChannelAppCertSn").value.trim(),
@@ -3280,6 +3286,9 @@
       notifyUrl: $("newChannelNotifyUrl").value,
       returnUrl: $("newChannelReturnUrl").value
     });
+    if (!$("newChannelMiniAppIdField").classList.contains("hidden")) {
+      payload.miniAppId = $("newChannelMiniAppId").value.trim();
+    }
 
     if (!editing) {
       payload.provider = $("newChannelProvider").value;
@@ -3908,6 +3917,7 @@
 
   syncDirectChannelField();
   syncCredentialModeFields();
+  syncMiniAppIdField();
   syncChannelCallbackUrls();
   renderTopbarDate();
   renderDefaultComplaintTimes();
