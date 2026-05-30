@@ -3067,10 +3067,6 @@
   }
 
   function cashierUrl(channelId, product = selectedProductForChannel(channelId)) {
-    const channel = state.channels.find((item) => item.id === channelId);
-    if (isJsapiCashierProduct(product) && channel?.appId) {
-      return alipayMiniCashierUrl(channel, product);
-    }
     const params = new URLSearchParams({ channelId });
     if (product) params.set("product", product);
     return `${location.origin}/cashier.html?${params.toString()}`;
@@ -3078,20 +3074,6 @@
 
   function isJsapiCashierProduct(product) {
     return product === "ALIPAY_JSAPI" || product === "ALIPAY_DIRECT_JSAPI";
-  }
-
-  function alipayMiniCashierUrl(channel, product) {
-    const query = new URLSearchParams({
-      baseUrl: location.origin,
-      channelId: channel.id,
-      product
-    });
-    const params = new URLSearchParams({
-      appId: channel.appId,
-      page: "pages/cashier/index",
-      query: query.toString()
-    });
-    return `alipays://platformapi/startapp?${params.toString()}`;
   }
 
   function showCashierQr(channelId) {
@@ -3102,7 +3084,7 @@
     }
     const channel = state.channels.find((item) => item.id === channelId);
     if (isJsapiCashierProduct(product) && !channel?.appId) {
-      alert("JSAPI 收银台二维码需要先配置支付宝小程序 appId");
+      alert("JSAPI 收银台二维码需要先配置支付宝 appId");
       return;
     }
     rememberCashierProduct(channelId, product);

@@ -1169,6 +1169,9 @@
       writeResult({ code: "NO_PRODUCT", message: noProductMessage(), products: currentProductOptions }, "bad");
     } else {
       $("payButton").disabled = false;
+      if (oauthAuthCode && isJsapiProduct(currentProduct)) {
+        writeResult("支付宝授权已完成，请确认金额后再次点击确认支付。", "loading");
+      }
     }
   }
 
@@ -1264,13 +1267,6 @@
       if (jsapiChannel && !currentChannel) {
         payload.channelIds = [jsapiChannel.id];
       }
-      if (!window.AlipayJSBridge || !window.my?.tradePay) {
-        writeResult({
-          code: "ALIPAY_JSAPI_REQUIRES_MINI_PROGRAM",
-          message: "支付宝 JSAPI 支付必须从支付宝小程序收银台发起。普通 H5 收银台不能完成 JSAPI 支付，请在后台重新生成 JSAPI 产品二维码，二维码会打开支付宝小程序页面。"
-        }, "bad");
-        return;
-      }
       if (oauthAuthCode) {
         payload.authCode = oauthAuthCode;
       } else if (isAlipayClient()) {
@@ -1278,13 +1274,9 @@
           writeResult({ code: "ALIPAY_JSAPI_APP_ID_MISSING", message: "JSAPI支付需要当前通道配置支付宝 app_id" }, "bad");
           return;
         }
-        try {
-          writeResult("正在获取支付宝用户授权，请稍候...", "loading");
-          payload.authCode = await getAlipayJsapiAuthCode(jsapiChannel.appId);
-        } catch (error) {
-          writeResult(error, "bad");
-          return;
-        }
+        writeResult("正在跳转支付宝授权，授权完成后会返回收银台。", "loading");
+        window.location.href = alipayOauthUrl(jsapiChannel.appId);
+        return;
       } else {
         writeResult({
           code: "ALIPAY_JSAPI_AUTH_REQUIRED",

@@ -19,14 +19,10 @@ import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 @RestController
 @RequestMapping("/api/v1/channels")
 public class CashierQrController {
-
-    private static final String MINI_CASHIER_PAGE = "pages/cashier/index";
 
     private final ChannelRegistry channelRegistry;
 
@@ -46,14 +42,12 @@ public class CashierQrController {
             throw new IllegalArgumentException("Product is not enabled on channel: " + product);
         }
 
-        String cashierUrl = isJsapi(product)
-                ? miniProgramCashierUrl(channel, channelId, product, request)
-                : UriComponentsBuilder.fromUriString(RequestUrlSupport.origin(request))
-                        .path("/cashier.html")
-                        .queryParam("channelId", channelId)
-                        .queryParamIfPresent("product", java.util.Optional.ofNullable(product).map(Enum::name))
-                        .build()
-                        .toUriString();
+        String cashierUrl = UriComponentsBuilder.fromUriString(RequestUrlSupport.origin(request))
+                .path("/cashier.html")
+                .queryParam("channelId", channelId)
+                .queryParamIfPresent("product", java.util.Optional.ofNullable(product).map(Enum::name))
+                .build()
+                .toUriString();
 
         BitMatrix matrix = new QRCodeWriter().encode(cashierUrl, BarcodeFormat.QR_CODE, 320, 320);
         ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -61,33 +55,4 @@ public class CashierQrController {
         return output.toByteArray();
     }
 
-    private static boolean isJsapi(PaymentProduct product) {
-        return product == PaymentProduct.ALIPAY_JSAPI || product == PaymentProduct.ALIPAY_DIRECT_JSAPI;
-    }
-
-    private static String miniProgramCashierUrl(
-            PaymentGatewayProperties.Channel channel,
-            String channelId,
-            PaymentProduct product,
-            HttpServletRequest request
-    ) {
-        String appId = channel.getAlipay().getAppId();
-        if (appId == null || appId.isBlank()) {
-            throw new IllegalArgumentException("Alipay JSAPI cashier QR requires channel appId");
-        }
-        String query = UriComponentsBuilder.newInstance()
-                .queryParam("baseUrl", RequestUrlSupport.origin(request))
-                .queryParam("channelId", channelId)
-                .queryParam("product", product.name())
-                .build()
-                .getQuery();
-        return "alipays://platformapi/startapp"
-                + "?appId=" + encode(appId)
-                + "&page=" + encode(MINI_CASHIER_PAGE)
-                + "&query=" + encode(query == null ? "" : query);
-    }
-
-    private static String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
 }
