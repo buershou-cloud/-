@@ -457,6 +457,7 @@ public class PaymentGatewayService {
                 request.product() == PaymentProduct.ALIPAY_PREAUTH,
                 response.status()
         );
+        orderService.recordPaymentMetadata(request.outTradeNo(), request, response);
     }
 
     private void syncLocalPaymentStatus(String outTradeNo, GatewayResponse response) {

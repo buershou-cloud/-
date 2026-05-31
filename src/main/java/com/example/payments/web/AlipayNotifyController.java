@@ -3,7 +3,9 @@ package com.example.payments.web;
 import com.example.payments.channel.ChannelRegistry;
 import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.gateway.alipay.AlipayOpenApiClient;
+import com.example.payments.merchant.api.MerchantNotifyService;
 import com.example.payments.order.DemoOrderService;
+import com.example.payments.order.DemoOrderView;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -25,15 +27,18 @@ public class AlipayNotifyController {
     private final ChannelRegistry channelRegistry;
     private final AlipayOpenApiClient alipayOpenApiClient;
     private final DemoOrderService orderService;
+    private final MerchantNotifyService merchantNotifyService;
 
     public AlipayNotifyController(
             ChannelRegistry channelRegistry,
             AlipayOpenApiClient alipayOpenApiClient,
-            DemoOrderService orderService
+            DemoOrderService orderService,
+            MerchantNotifyService merchantNotifyService
     ) {
         this.channelRegistry = channelRegistry;
         this.alipayOpenApiClient = alipayOpenApiClient;
         this.orderService = orderService;
+        this.merchantNotifyService = merchantNotifyService;
     }
 
     @PostMapping(path = "/notify/{channelId}", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
@@ -52,13 +57,15 @@ public class AlipayNotifyController {
         if (outTradeNo == null || outTradeNo.isBlank()) {
             return ResponseEntity.badRequest().body("failure");
         }
-        orderService.recordAlipayNotify(
+        String tradeStatus = firstText(params.get("trade_status"), preauthTradeStatus(params.get("status")));
+        DemoOrderView order = orderService.recordAlipayNotify(
                 outTradeNo,
                 firstText(params.get("trade_no"), params.get("auth_no")),
                 channelId,
                 amount(params),
-                firstText(params.get("trade_status"), preauthTradeStatus(params.get("status")))
+                tradeStatus
         );
+        merchantNotifyService.notifyPayment(order, tradeStatus);
         return ResponseEntity.ok("success");
     }
 

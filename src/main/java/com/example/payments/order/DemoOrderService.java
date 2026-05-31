@@ -1,6 +1,10 @@
 package com.example.payments.order;
 
+import com.example.payments.domain.GatewayResponse;
+import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.EmptyResultDataAccessException;
@@ -22,6 +26,7 @@ public class DemoOrderService {
 
     private static final DateTimeFormatter SERIAL_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final Map<String, DemoOrder> orders = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
@@ -278,6 +283,36 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized void recordPaymentMetadata(
+            String outTradeNo,
+            PayCreateRequest request,
+            GatewayResponse response
+    ) {
+        if (!databaseBacked() || !hasText(outTradeNo) || request == null) {
+            return;
+        }
+        jdbcTemplate.update("""
+                UPDATE pay_order
+                SET buyer_id = ?, buyer_open_id = ?, auth_code = ?, notify_url = ?, return_url = ?,
+                    app_auth_token = ?, settle_info = ?, royalty_info = ?, extra = ?,
+                    raw_request = ?, raw_response = ?
+                WHERE out_trade_no = ?
+                """,
+                nullIfBlank(request.buyerId()),
+                nullIfBlank(request.buyerOpenId()),
+                nullIfBlank(request.authCode()),
+                nullIfBlank(request.notifyUrl()),
+                nullIfBlank(request.returnUrl()),
+                nullIfBlank(request.appAuthToken()),
+                json(request.settleInfo()),
+                json(request.royaltyInfo()),
+                json(request.extra()),
+                json(request),
+                json(response),
+                outTradeNo
+        );
+    }
+
     public synchronized DemoOrderView recordPaymentResult(
             String outTradeNo,
             String tradeNo,
@@ -294,6 +329,21 @@ public class DemoOrderService {
         order.setStatus(statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus()));
         persist(order);
         return DemoOrderView.from(order);
+    }
+
+    public synchronized void ensureMerchantOrder(String merchantId, String outTradeNo, String tradeNo) {
+        if (!hasText(merchantId)) {
+            throw new IllegalArgumentException("merchantId is required");
+        }
+        DemoOrder order = databaseBacked()
+                ? findOrderByIdentifier(outTradeNo, tradeNo)
+                : memoryOrderByIdentifier(outTradeNo, tradeNo);
+        if (order == null) {
+            throw new IllegalArgumentException("Order does not exist or does not belong to this merchant");
+        }
+        if (!merchantId.trim().equals(order.getMerchantId())) {
+            throw new IllegalArgumentException("Order does not exist or does not belong to this merchant");
+        }
     }
 
     public synchronized DemoOrderView recordAlipayNotify(
@@ -364,6 +414,41 @@ public class DemoOrderService {
         } catch (EmptyResultDataAccessException ex) {
             return null;
         }
+    }
+
+    private DemoOrder findOrderByIdentifier(String outTradeNo, String tradeNo) {
+        if (hasText(outTradeNo)) {
+            return findOrder(outTradeNo.trim());
+        }
+        if (!hasText(tradeNo)) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
+                           COALESCE(m.name, o.merchant_id) AS merchant_name,
+                           o.product, o.subject, o.amount, o.status, o.created_at,
+                           o.pre_authorization, o.supplemented, o.profit_shared
+                    FROM pay_order o
+                    LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
+                    WHERE o.trade_no = ?
+                    """, this::mapOrder, tradeNo.trim());
+        } catch (EmptyResultDataAccessException ex) {
+            return null;
+        }
+    }
+
+    private DemoOrder memoryOrderByIdentifier(String outTradeNo, String tradeNo) {
+        if (hasText(outTradeNo)) {
+            return orders.get(outTradeNo.trim());
+        }
+        if (!hasText(tradeNo)) {
+            return null;
+        }
+        return orders.values().stream()
+                .filter(order -> tradeNo.trim().equals(order.getTradeNo()))
+                .findFirst()
+                .orElse(null);
     }
 
     private DemoOrder order(String outTradeNo) {
@@ -564,6 +649,17 @@ public class DemoOrderService {
 
     private static String nullIfBlank(String value) {
         return hasText(value) ? value.trim() : null;
+    }
+
+    private static String json(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return JSON.writeValueAsString(value);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Failed to serialize order metadata", ex);
+        }
     }
 
     private static boolean hasText(String value) {

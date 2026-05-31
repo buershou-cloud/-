@@ -67,6 +67,9 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         if (path.equals("/api/v1/merchant-portal/login") || path.equals("/api/v1/merchant-portal/logout")) {
             return true;
         }
+        if (path.startsWith("/api/v1/merchant-api/")) {
+            return true;
+        }
         if (path.startsWith("/api/v1/alipay/")
                 || path.equals("/api/v1/qrcode")
                 || ("POST".equalsIgnoreCase(method) && path.equals("/api/v1/payment-code/decode"))) {

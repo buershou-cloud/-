@@ -194,6 +194,10 @@ public class DemoMerchantService {
         return new MerchantRouting(merchant.getChannelIds(), merchant.getRoutingMode());
     }
 
+    public String platformPrivateKey() {
+        return PLATFORM_RSA.privateKey();
+    }
+
     private boolean databaseBacked() {
         return jdbcTemplate != null;
     }
@@ -214,7 +218,7 @@ public class DemoMerchantService {
                 rs.getString("status"),
                 merchantAmount(rs.getString("merchant_id")),
                 rs.getString("md5_key"),
-                firstText(rs.getString("platform_public_key"), PLATFORM_RSA.publicKey()),
+                PLATFORM_RSA.publicKey(),
                 rs.getString("rsa2_public_key"),
                 rs.getString("rsa2_private_key"),
                 firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
@@ -238,7 +242,7 @@ public class DemoMerchantService {
                     rs.getString("status"),
                     merchantAmount(rs.getString("merchant_id")),
                     rs.getString("md5_key"),
-                    firstText(rs.getString("platform_public_key"), PLATFORM_RSA.publicKey()),
+                    PLATFORM_RSA.publicKey(),
                     rs.getString("rsa2_public_key"),
                     rs.getString("rsa2_private_key"),
                     firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
