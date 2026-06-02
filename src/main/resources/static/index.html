@@ -1638,9 +1638,6 @@
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
           <label class="wide public-key-field">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥"></textarea></label>
           <label class="wide">应用私钥<textarea id="newChannelMerchantPrivateKey" required placeholder="应用 RSA2 私钥"></textarea></label>
-          <label class="cert-mode-field hidden">应用公钥证书 SN<input id="newChannelAppCertSn" placeholder="可留空，系统会从证书文件自动计算"></label>
-          <label class="cert-mode-field hidden">支付宝公钥证书 SN<input id="newChannelAlipayCertSn" placeholder="可留空，通知验签会读取证书文件"></label>
-          <label class="wide cert-mode-field hidden">支付宝根证书 SN<input id="newChannelAlipayRootCertSn" placeholder="可留空，系统会从根证书自动计算"></label>
           <div class="wide cert-mode-field cert-upload-grid hidden">
             <label class="cert-upload-field">上传应用公钥证书
               <input id="newChannelAppCertFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
@@ -2846,8 +2843,6 @@
     ];
     if (channel.credentialMode === "CERTIFICATE") {
       tags.push(`<span class="mini">证书文件模式</span>`);
-      tags.push(`<span class="mini">${channel.appCertSn ? "应用SN已填" : "应用SN自动读取"}</span>`);
-      tags.push(`<span class="mini">${channel.alipayRootCertSn ? "根证书SN已填" : "根证书SN自动读取"}</span>`);
     } else {
       tags.push(`<span class="mini">${channel.hasAlipayPublicKey ? "公钥已配" : "缺公钥"}</span>`);
     }
@@ -3261,9 +3256,6 @@
     $("newChannelSubMerchantId").value = channel.subMerchantId || "";
     $("newChannelPayMin").value = channel.payMin ?? "";
     $("newChannelPayMax").value = channel.payMax ?? "";
-    $("newChannelAppCertSn").value = channel.appCertSn || "";
-    $("newChannelAlipayCertSn").value = channel.alipayCertSn || "";
-    $("newChannelAlipayRootCertSn").value = channel.alipayRootCertSn || "";
     $("newChannelGatewayUrl").value = channel.gatewayUrl || "https://openapi.alipay.com/gateway.do";
     syncChannelCallbackUrls();
     $("newChannelAlipayPublicKey").required = false;
@@ -3290,9 +3282,6 @@
       appId: $("newChannelAppId").value,
       credentialMode: $("newChannelCredentialMode").value,
       subMerchantId: $("newChannelSubMerchantId").value,
-      appCertSn: $("newChannelAppCertSn").value.trim(),
-      alipayCertSn: $("newChannelAlipayCertSn").value.trim(),
-      alipayRootCertSn: $("newChannelAlipayRootCertSn").value.trim(),
       notifyUrl: $("newChannelNotifyUrl").value,
       returnUrl: $("newChannelReturnUrl").value
     });

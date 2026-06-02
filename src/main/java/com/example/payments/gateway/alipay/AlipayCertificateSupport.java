@@ -38,21 +38,21 @@ final class AlipayCertificateSupport {
     }
 
     static String appCertSn(PaymentGatewayProperties.Alipay alipay) {
-        return firstText(alipay.getAppCertSn(), certificateSn(alipay.getAppCertContent()).orElse(null));
+        return firstText(certificateSn(alipay.getAppCertContent()).orElse(null), alipay.getAppCertSn());
     }
 
     static String appCertSn(PaymentGatewayProperties.Channel channel) {
         PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
-        return firstText(alipay.getAppCertSn(), certificateSn(appCertContent(channel), "app certificate").orElse(null));
+        return firstText(certificateSn(appCertContent(channel), "app certificate").orElse(null), alipay.getAppCertSn());
     }
 
     static String alipayRootCertSn(PaymentGatewayProperties.Alipay alipay) {
-        return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipay.getAlipayRootCertContent()).orElse(null));
+        return firstText(rootCertificateSn(alipay.getAlipayRootCertContent()).orElse(null), alipay.getAlipayRootCertSn());
     }
 
     static String alipayRootCertSn(PaymentGatewayProperties.Channel channel) {
         PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
-        return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipayRootCertContent(channel), "Alipay root certificate").orElse(null));
+        return firstText(rootCertificateSn(alipayRootCertContent(channel), "Alipay root certificate").orElse(null), alipay.getAlipayRootCertSn());
     }
 
     static String alipayPublicKey(PaymentGatewayProperties.Alipay alipay) {
