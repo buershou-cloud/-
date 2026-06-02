@@ -108,15 +108,45 @@ final class AlipayCertificateSupport {
     }
 
     private static String appCertContent(PaymentGatewayProperties.Channel channel) {
-        return firstText(channel.getAlipay().getAppCertContent(), certFile(channel, APP_CERT_FILE, APP_CERT_FILE_PATTERN));
+        return firstValidCertificateContent(
+                channel.getAlipay().getAppCertContent(),
+                certFile(channel, APP_CERT_FILE, APP_CERT_FILE_PATTERN)
+        );
     }
 
     private static String alipayCertContent(PaymentGatewayProperties.Channel channel) {
-        return firstText(channel.getAlipay().getAlipayCertContent(), certFile(channel, ALIPAY_CERT_FILE));
+        return firstValidCertificateContent(
+                channel.getAlipay().getAlipayCertContent(),
+                certFile(channel, ALIPAY_CERT_FILE)
+        );
     }
 
     private static String alipayRootCertContent(PaymentGatewayProperties.Channel channel) {
-        return firstText(channel.getAlipay().getAlipayRootCertContent(), certFile(channel, ALIPAY_ROOT_CERT_FILE));
+        return firstValidCertificateContent(
+                channel.getAlipay().getAlipayRootCertContent(),
+                certFile(channel, ALIPAY_ROOT_CERT_FILE)
+        );
+    }
+
+    private static String firstValidCertificateContent(String preferred, String fallback) {
+        if (isBlank(preferred)) {
+            return fallback;
+        }
+        if (canParseCertificateContent(preferred)) {
+            return preferred.trim();
+        }
+        if (!isBlank(fallback) && canParseCertificateContent(fallback)) {
+            return fallback;
+        }
+        return preferred.trim();
+    }
+
+    private static boolean canParseCertificateContent(String value) {
+        try {
+            return !certificates(value).isEmpty();
+        } catch (GatewayException ex) {
+            return false;
+        }
     }
 
     private static String certFile(PaymentGatewayProperties.Channel channel, String fileName, String... fallbackPatterns) {
