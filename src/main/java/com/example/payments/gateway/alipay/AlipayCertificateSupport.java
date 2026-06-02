@@ -6,6 +6,7 @@ import com.example.payments.gateway.GatewayException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -15,6 +16,7 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,6 +34,7 @@ final class AlipayCertificateSupport {
             Pattern.DOTALL
     );
     private static final String APP_CERT_FILE = "appCertPublicKey.crt";
+    private static final String APP_CERT_FILE_PATTERN = "appCertPublicKey_*.crt";
     private static final String ALIPAY_CERT_FILE = "alipayCertPublicKey_RSA2.crt";
     private static final String ALIPAY_ROOT_CERT_FILE = "alipayRootCert.crt";
 
@@ -105,7 +108,7 @@ final class AlipayCertificateSupport {
     }
 
     private static String appCertContent(PaymentGatewayProperties.Channel channel) {
-        return firstText(channel.getAlipay().getAppCertContent(), certFile(channel, APP_CERT_FILE));
+        return firstText(channel.getAlipay().getAppCertContent(), certFile(channel, APP_CERT_FILE, APP_CERT_FILE_PATTERN));
     }
 
     private static String alipayCertContent(PaymentGatewayProperties.Channel channel) {
@@ -116,11 +119,33 @@ final class AlipayCertificateSupport {
         return firstText(channel.getAlipay().getAlipayRootCertContent(), certFile(channel, ALIPAY_ROOT_CERT_FILE));
     }
 
-    private static String certFile(PaymentGatewayProperties.Channel channel, String fileName) {
+    private static String certFile(PaymentGatewayProperties.Channel channel, String fileName, String... fallbackPatterns) {
         for (Path root : certRoots()) {
             Path path = root.resolve(channel.getId()).resolve(fileName);
             if (Files.isRegularFile(path)) {
                 return readString(path);
+            }
+        }
+        for (String pattern : fallbackPatterns) {
+            for (Path root : certRoots()) {
+                Path directory = root.resolve(channel.getId());
+                if (!Files.isDirectory(directory)) {
+                    continue;
+                }
+                List<Path> matches = new ArrayList<>();
+                try (DirectoryStream<Path> stream = Files.newDirectoryStream(directory, pattern)) {
+                    for (Path path : stream) {
+                        if (Files.isRegularFile(path)) {
+                            matches.add(path);
+                        }
+                    }
+                } catch (IOException ex) {
+                    throw new GatewayException("ALIPAY_CERTIFICATE_FILE_ERROR", "Failed to list Alipay certificate directory: " + directory, ex);
+                }
+                matches.sort(Comparator.comparing(path -> path.getFileName().toString()));
+                if (!matches.isEmpty()) {
+                    return readString(matches.get(0));
+                }
             }
         }
         return null;

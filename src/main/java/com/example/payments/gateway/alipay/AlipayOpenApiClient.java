@@ -326,7 +326,7 @@ public class AlipayOpenApiClient {
             throw new GatewayException(
                     "ALIPAY_CERTIFICATE_CONFIG_MISSING",
                     "Alipay certificate mode requires certs/" + channel.getId()
-                            + "/appCertPublicKey.crt and certs/" + channel.getId()
+                            + "/appCertPublicKey.crt or appCertPublicKey_*.crt and certs/" + channel.getId()
                             + "/alipayCertPublicKey_RSA2.crt and certs/" + channel.getId()
                             + "/alipayRootCert.crt or configured SN values"
             );
