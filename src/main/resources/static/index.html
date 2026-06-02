@@ -714,36 +714,6 @@
       font-weight: 650;
     }
 
-    .cert-file-note {
-      display: flex;
-      flex-direction: column;
-      gap: 7px;
-      min-height: auto;
-      padding: 12px 14px;
-      border: 1px solid #dbeafe;
-      border-radius: 8px;
-      background: #f8fbff;
-      color: #475569;
-      font-size: 13px;
-      font-weight: 650;
-      line-height: 1.55;
-    }
-
-    .cert-file-note strong {
-      color: var(--text);
-      font-size: 14px;
-    }
-
-    .cert-file-note code {
-      color: var(--primary);
-      font-family: "Cascadia Mono", Consolas, monospace;
-      font-weight: 800;
-    }
-
-    .cert-file-note.hidden {
-      display: none;
-    }
-
     .cert-upload-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(180px, 1fr));
@@ -1671,14 +1641,6 @@
           <label class="cert-mode-field hidden">应用公钥证书 SN<input id="newChannelAppCertSn" placeholder="可留空，系统会从证书文件自动计算"></label>
           <label class="cert-mode-field hidden">支付宝公钥证书 SN<input id="newChannelAlipayCertSn" placeholder="可留空，通知验签会读取证书文件"></label>
           <label class="wide cert-mode-field hidden">支付宝根证书 SN<input id="newChannelAlipayRootCertSn" placeholder="可留空，系统会从根证书自动计算"></label>
-          <div class="wide cert-mode-field cert-file-note hidden">
-            <strong>证书文件放置方式</strong>
-            <span>把 3 个 crt 文件上传到服务器项目目录下的 <code>certs/通道编号/</code> 文件夹：</span>
-            <code>appCertPublicKey.crt 或 appCertPublicKey_应用ID.crt</code>
-            <code>alipayCertPublicKey_RSA2.crt</code>
-            <code>alipayRootCert.crt</code>
-            <span>例如通道编号是 <code>ali-main</code>，目录就是 <code>certs/ali-main/</code>。</span>
-          </div>
           <div class="wide cert-mode-field cert-upload-grid hidden">
             <label class="cert-upload-field">上传应用公钥证书
               <input id="newChannelAppCertFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
@@ -1689,7 +1651,7 @@
             <label class="cert-upload-field">上传支付宝根证书
               <input id="newChannelAlipayRootCertFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
             </label>
-            <p class="cert-upload-hint">后台上传会保存到数据库；未选择文件时，不会覆盖已保存证书，系统仍可读取服务器 certs/通道编号/ 目录。</p>
+            <p class="cert-upload-hint">证书会保存到数据库；未选择文件时，不会覆盖已保存证书。</p>
           </div>
           <input id="newChannelAppCertContent" type="hidden">
           <input id="newChannelAlipayCertContent" type="hidden">
@@ -3206,7 +3168,7 @@
       $("newChannelAlipayPublicKey").removeAttribute("required");
     }
     $("newChannelAlipayPublicKey").placeholder = certificateMode
-      ? "证书模式会读取 certs/通道编号/ 下的 3 个 crt 文件"
+      ? "证书模式请在后台上传 3 个 crt 文件"
       : "支付宝开放平台 RSA2 支付宝公钥";
   }
 
