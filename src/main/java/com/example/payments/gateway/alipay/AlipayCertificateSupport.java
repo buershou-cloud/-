@@ -173,7 +173,11 @@ final class AlipayCertificateSupport {
 
     private static String readString(Path path) {
         try {
-            return Files.readString(path, StandardCharsets.UTF_8);
+            byte[] bytes = Files.readAllBytes(path);
+            if (bytes.length > 0 && bytes[0] == 0x30) {
+                return Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.UTF_8)).encodeToString(bytes);
+            }
+            return new String(bytes, StandardCharsets.UTF_8).replace("\uFEFF", "").trim();
         } catch (IOException ex) {
             throw new GatewayException("ALIPAY_CERTIFICATE_FILE_ERROR", "Failed to read Alipay certificate file: " + path, ex);
         }
