@@ -43,7 +43,7 @@ final class AlipayCertificateSupport {
 
     static String appCertSn(PaymentGatewayProperties.Channel channel) {
         PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
-        return firstText(alipay.getAppCertSn(), certificateSn(appCertContent(channel), "应用公钥证书").orElse(null));
+        return firstText(alipay.getAppCertSn(), certificateSn(appCertContent(channel), "app certificate").orElse(null));
     }
 
     static String alipayRootCertSn(PaymentGatewayProperties.Alipay alipay) {
@@ -52,7 +52,7 @@ final class AlipayCertificateSupport {
 
     static String alipayRootCertSn(PaymentGatewayProperties.Channel channel) {
         PaymentGatewayProperties.Alipay alipay = channel.getAlipay();
-        return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipayRootCertContent(channel), "支付宝根证书").orElse(null));
+        return firstText(alipay.getAlipayRootCertSn(), rootCertificateSn(alipayRootCertContent(channel), "Alipay root certificate").orElse(null));
     }
 
     static String alipayPublicKey(PaymentGatewayProperties.Alipay alipay) {
@@ -67,11 +67,11 @@ final class AlipayCertificateSupport {
         if (!certificateMode(alipay)) {
             return alipay.getAlipayPublicKey();
         }
-        return publicKeyFromCertificate(alipayCertContent(channel), "支付宝公钥证书").orElse(alipay.getAlipayPublicKey());
+        return publicKeyFromCertificate(alipayCertContent(channel), "Alipay public certificate").orElse(alipay.getAlipayPublicKey());
     }
 
     static Optional<String> certificateSn(String certificateContent) {
-        return certificateSn(certificateContent, "证书");
+        return certificateSn(certificateContent, "certificate");
     }
 
     static Optional<String> certificateSn(String certificateContent, String label) {
@@ -79,7 +79,7 @@ final class AlipayCertificateSupport {
     }
 
     static Optional<String> publicKeyFromCertificate(String certificateContent) {
-        return publicKeyFromCertificate(certificateContent, "证书");
+        return publicKeyFromCertificate(certificateContent, "certificate");
     }
 
     static Optional<String> publicKeyFromCertificate(String certificateContent, String label) {
@@ -88,11 +88,11 @@ final class AlipayCertificateSupport {
     }
 
     private static Optional<String> rootCertificateSn(String certificateContent) {
-        return rootCertificateSn(certificateContent, "证书");
+        return rootCertificateSn(certificateContent, "certificate");
     }
 
     private static Optional<String> rootCertificateSn(String certificateContent, String label) {
-        List<X509Certificate> certificates = certificates(certificateContent, label);
+        List<X509Certificate> certificates = rootCertificates(certificateContent, label);
         String value = certificates.stream()
                 .filter(certificate -> certificate.getSigAlgName() != null)
                 .filter(certificate -> certificate.getSigAlgName().toUpperCase().contains("RSA"))
@@ -120,7 +120,7 @@ final class AlipayCertificateSupport {
     }
 
     private static List<X509Certificate> certificates(String certificateContent) {
-        return certificates(certificateContent, "证书");
+        return certificates(certificateContent, "certificate");
     }
 
     private static List<X509Certificate> certificates(String certificateContent, String label) {
@@ -148,6 +148,41 @@ final class AlipayCertificateSupport {
                 }
             }
             return certificates;
+        } catch (Exception ex) {
+            throw new GatewayException("ALIPAY_CERTIFICATE_ERROR", "Failed to parse Alipay " + label + " content", ex);
+        }
+    }
+
+    private static List<X509Certificate> rootCertificates(String certificateContent, String label) {
+        if (isBlank(certificateContent)) {
+            return List.of();
+        }
+        try {
+            CertificateFactory factory = CertificateFactory.getInstance("X.509");
+            List<X509Certificate> certificates = new ArrayList<>();
+            Matcher matcher = PEM_CERTIFICATE.matcher(certificateContent);
+            int pemBlocks = 0;
+            Exception firstFailure = null;
+            while (matcher.find()) {
+                pemBlocks++;
+                try {
+                    byte[] bytes = Base64.getMimeDecoder().decode(matcher.group(1));
+                    certificates.add((X509Certificate) factory.generateCertificate(new ByteArrayInputStream(bytes)));
+                } catch (Exception ex) {
+                    if (firstFailure == null) {
+                        firstFailure = ex;
+                    }
+                }
+            }
+            if (!certificates.isEmpty()) {
+                return certificates;
+            }
+            if (pemBlocks > 0) {
+                throw new GatewayException("ALIPAY_CERTIFICATE_ERROR", "Failed to parse Alipay " + label + " content", firstFailure);
+            }
+            return certificates(certificateContent, label);
+        } catch (GatewayException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new GatewayException("ALIPAY_CERTIFICATE_ERROR", "Failed to parse Alipay " + label + " content", ex);
         }
