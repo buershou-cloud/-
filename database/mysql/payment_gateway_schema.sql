@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS pay_order (
   product VARCHAR(64) NOT NULL,
   subject VARCHAR(255) NOT NULL,
   amount DECIMAL(18,2) NOT NULL,
-  status VARCHAR(32) NOT NULL DEFAULT 'UNPAID' COMMENT 'UNPAID、COMPLETED、REFUNDED、FROZEN、CLOSED',
+  status VARCHAR(32) NOT NULL DEFAULT 'UNPAID' COMMENT 'UNPAID、COMPLETED、PARTIALLY_REFUNDED、REFUNDED、FROZEN、CLOSED',
   pre_authorization TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否预授权订单',
   supplemented TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否手动补单',
   profit_shared TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已分账',
@@ -302,12 +302,18 @@ SELECT
   m.merchant_id,
   m.name,
   COUNT(o.out_trade_no) AS order_count,
-  COALESCE(SUM(CASE WHEN o.status = 'COMPLETED' THEN o.amount ELSE 0 END), 0) AS completed_amount,
-  COALESCE(SUM(CASE WHEN o.status = 'REFUNDED' THEN o.amount ELSE 0 END), 0) AS refunded_amount,
+  COALESCE(SUM(CASE WHEN o.status IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN o.amount ELSE 0 END), 0) AS completed_amount,
+  COALESCE(SUM(r.refunded_amount), 0) AS refunded_amount,
   COALESCE(SUM(CASE WHEN o.status = 'FROZEN' THEN o.amount ELSE 0 END), 0) AS frozen_amount,
   COALESCE(SUM(CASE WHEN o.status = 'UNPAID' THEN o.amount ELSE 0 END), 0) AS unpaid_amount
 FROM merchant m
 LEFT JOIN pay_order o ON o.merchant_id = m.merchant_id
+LEFT JOIN (
+  SELECT out_trade_no, SUM(refund_amount) AS refunded_amount
+  FROM refund_order
+  WHERE status = 'SUCCESS'
+  GROUP BY out_trade_no
+) r ON r.out_trade_no = o.out_trade_no
 GROUP BY m.merchant_id, m.name;
 
 INSERT IGNORE INTO complaint_auto_config (id, enabled, page_size, lookback_minutes)

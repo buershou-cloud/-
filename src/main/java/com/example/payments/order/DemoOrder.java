@@ -11,6 +11,7 @@ public class DemoOrder {
     private String merchantName;
     private String productName;
     private BigDecimal amount;
+    private BigDecimal refundedAmount = BigDecimal.ZERO;
     private DemoOrderStatus status;
     private String createdAt;
     private boolean preAuthorization;
@@ -75,6 +76,14 @@ public class DemoOrder {
 
     public BigDecimal getAmount() {
         return amount;
+    }
+
+    public BigDecimal getRefundedAmount() {
+        return refundedAmount == null ? BigDecimal.ZERO : refundedAmount;
+    }
+
+    public void setRefundedAmount(BigDecimal refundedAmount) {
+        this.refundedAmount = refundedAmount == null ? BigDecimal.ZERO : refundedAmount;
     }
 
     public DemoOrderStatus getStatus() {

@@ -3,6 +3,7 @@ package com.example.payments.order;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.RefundCreateRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
@@ -12,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -60,7 +62,13 @@ public class DemoOrderService {
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
-                           o.pre_authorization, o.supplemented, o.profit_shared
+                           o.pre_authorization, o.supplemented, o.profit_shared,
+                           COALESCE((
+                               SELECT SUM(r.refund_amount)
+                               FROM refund_order r
+                               WHERE r.out_trade_no = o.out_trade_no
+                                 AND r.status = 'SUCCESS'
+                           ), 0) AS refunded_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE 1 = 1
@@ -107,7 +115,13 @@ public class DemoOrderService {
                             SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                                    COALESCE(m.name, o.merchant_id) AS merchant_name,
                                    o.product, o.subject, o.amount, o.status, o.created_at,
-                                   o.pre_authorization, o.supplemented, o.profit_shared
+                                   o.pre_authorization, o.supplemented, o.profit_shared,
+                                   COALESCE((
+                                       SELECT SUM(r.refund_amount)
+                                       FROM refund_order r
+                                       WHERE r.out_trade_no = o.out_trade_no
+                                         AND r.status = 'SUCCESS'
+                                   ), 0) AS refunded_amount
                             FROM pay_order o
                             LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                             WHERE o.merchant_id = ?
@@ -134,7 +148,13 @@ public class DemoOrderService {
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
-                           o.pre_authorization, o.supplemented, o.profit_shared
+                           o.pre_authorization, o.supplemented, o.profit_shared,
+                           COALESCE((
+                               SELECT SUM(r.refund_amount)
+                               FROM refund_order r
+                               WHERE r.out_trade_no = o.out_trade_no
+                                 AND r.status = 'SUCCESS'
+                           ), 0) AS refunded_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.channel_id = ?
@@ -201,10 +221,77 @@ public class DemoOrderService {
 
     public synchronized DemoOrderView refund(String outTradeNo) {
         DemoOrder order = order(outTradeNo);
-        if (order.getStatus() != DemoOrderStatus.COMPLETED) {
+        if (!isRefundableStatus(order.getStatus())) {
             throw new IllegalStateException("鍙湁宸插畬鎴愯鍗曞彲浠ラ€€娆?");
         }
-        order.setStatus(DemoOrderStatus.REFUNDED);
+        BigDecimal remaining = refundableAmount(order);
+        if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("璁㈠崟宸叉棤鍙€€閲戦");
+        }
+        if (databaseBacked()) {
+            RefundCreateRequest request = new RefundCreateRequest(
+                    order.getOutTradeNo(),
+                    order.getTradeNo(),
+                    remaining,
+                    "LOCAL_RF_" + order.getOutTradeNo() + "_" + System.currentTimeMillis(),
+                    "后台本地退款标记",
+                    null,
+                    order.getChannelId() == null ? List.of() : List.of(order.getChannelId()),
+                    Map.of()
+            );
+            GatewayResponse response = new GatewayResponse(
+                    order.getChannelId(),
+                    PaymentStatus.SUCCESS,
+                    "LOCAL",
+                    "Local refund mark",
+                    order.getOutTradeNo(),
+                    order.getTradeNo(),
+                    null,
+                    null,
+                    Map.of("local", true),
+                    List.of()
+            );
+            recordRefundOrder(order, request, response, remaining);
+            order.setRefundedAmount(successfulRefundAmount(order.getOutTradeNo()));
+        } else {
+            order.setRefundedAmount(money(order.getRefundedAmount().add(remaining)));
+        }
+        applyRefundStatus(order);
+        persist(order);
+        return DemoOrderView.from(order);
+    }
+
+    public synchronized void ensureRefundable(String outTradeNo, String tradeNo, BigDecimal refundAmount) {
+        DemoOrder order = orderByIdentifierOrThrow(outTradeNo, tradeNo);
+        BigDecimal amount = money(refundAmount);
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Refund amount must be greater than 0");
+        }
+        if (!isRefundableStatus(order.getStatus())) {
+            throw new IllegalStateException("Only completed or partially refunded orders can be refunded");
+        }
+        BigDecimal remaining = refundableAmount(order);
+        if (amount.compareTo(remaining) > 0) {
+            throw new IllegalArgumentException("Refund amount cannot exceed remaining refundable amount " + remaining.toPlainString());
+        }
+    }
+
+    public synchronized DemoOrderView recordRefund(RefundCreateRequest request, GatewayResponse response) {
+        DemoOrder order = orderByIdentifierOrThrow(request.outTradeNo(), request.tradeNo());
+        BigDecimal refundAmount = money(request.refundAmount());
+        if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Refund amount must be greater than 0");
+        }
+        if (databaseBacked()) {
+            recordRefundOrder(order, request, response, refundAmount);
+            order.setRefundedAmount(successfulRefundAmount(order.getOutTradeNo()));
+        } else {
+            order.setRefundedAmount(money(order.getRefundedAmount().add(refundAmount)));
+        }
+        if (hasText(response.tradeNo())) {
+            order.setTradeNo(response.tradeNo().trim());
+        }
+        applyRefundStatus(order);
         persist(order);
         return DemoOrderView.from(order);
     }
@@ -277,7 +364,7 @@ public class DemoOrderService {
             if (hasText(tradeNo)) {
                 order.setTradeNo(tradeNo.trim());
             }
-            order.setStatus(initialStatus);
+            order.setStatus(preserveRefundStatus(order.getStatus(), initialStatus));
         }
         persist(order);
         return DemoOrderView.from(order);
@@ -326,7 +413,10 @@ public class DemoOrderService {
         if (hasText(tradeNo)) {
             order.setTradeNo(tradeNo.trim());
         }
-        order.setStatus(statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus()));
+        order.setStatus(preserveRefundStatus(
+                order.getStatus(),
+                statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus())
+        ));
         persist(order);
         return DemoOrderView.from(order);
     }
@@ -372,7 +462,7 @@ public class DemoOrderService {
             if (hasText(tradeNo)) {
                 order.setTradeNo(tradeNo.trim());
             }
-            order.setStatus(statusFromAlipay(tradeStatus, order.isPreAuthorization()));
+            order.setStatus(preserveRefundStatus(order.getStatus(), statusFromAlipay(tradeStatus, order.isPreAuthorization())));
         }
         persist(order);
         return DemoOrderView.from(order);
@@ -397,6 +487,7 @@ public class DemoOrderService {
         );
         order.setSupplemented(rs.getBoolean("supplemented"));
         order.setProfitShared(rs.getBoolean("profit_shared"));
+        order.setRefundedAmount(rs.getBigDecimal("refunded_amount"));
         return order;
     }
 
@@ -406,7 +497,13 @@ public class DemoOrderService {
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
-                           o.pre_authorization, o.supplemented, o.profit_shared
+                           o.pre_authorization, o.supplemented, o.profit_shared,
+                           COALESCE((
+                               SELECT SUM(r.refund_amount)
+                               FROM refund_order r
+                               WHERE r.out_trade_no = o.out_trade_no
+                                 AND r.status = 'SUCCESS'
+                           ), 0) AS refunded_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.out_trade_no = ?
@@ -428,7 +525,13 @@ public class DemoOrderService {
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
-                           o.pre_authorization, o.supplemented, o.profit_shared
+                           o.pre_authorization, o.supplemented, o.profit_shared,
+                           COALESCE((
+                               SELECT SUM(r.refund_amount)
+                               FROM refund_order r
+                               WHERE r.out_trade_no = o.out_trade_no
+                                 AND r.status = 'SUCCESS'
+                           ), 0) AS refunded_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.trade_no = ?
@@ -449,6 +552,16 @@ public class DemoOrderService {
                 .filter(order -> tradeNo.trim().equals(order.getTradeNo()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    private DemoOrder orderByIdentifierOrThrow(String outTradeNo, String tradeNo) {
+        DemoOrder order = databaseBacked()
+                ? findOrderByIdentifier(outTradeNo, tradeNo)
+                : memoryOrderByIdentifier(outTradeNo, tradeNo);
+        if (order == null) {
+            throw new IllegalArgumentException("Order does not exist: " + firstText(outTradeNo, tradeNo));
+        }
+        return order;
     }
 
     private DemoOrder order(String outTradeNo) {
@@ -507,9 +620,9 @@ public class DemoOrderService {
                 UPDATE pay_order
                 SET trade_no = ?, merchant_id = ?, channel_id = ?, product = ?, subject = ?,
                     amount = ?, status = ?, pre_authorization = ?, supplemented = ?, profit_shared = ?,
-                    paid_at = CASE WHEN ? = 'COMPLETED' THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE paid_at END,
+                    paid_at = CASE WHEN ? IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE paid_at END,
                     frozen_at = CASE WHEN ? = 'FROZEN' THEN COALESCE(frozen_at, CURRENT_TIMESTAMP) ELSE frozen_at END,
-                    refunded_at = CASE WHEN ? = 'REFUNDED' THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
+                    refunded_at = CASE WHEN ? IN ('PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
                     closed_at = CASE WHEN ? = 'CLOSED' THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE closed_at END
                 WHERE out_trade_no = ?
                 """,
@@ -649,6 +762,81 @@ public class DemoOrderService {
 
     private static String nullIfBlank(String value) {
         return hasText(value) ? value.trim() : null;
+    }
+
+    private void recordRefundOrder(
+            DemoOrder order,
+            RefundCreateRequest request,
+            GatewayResponse response,
+            BigDecimal refundAmount
+    ) {
+        jdbcTemplate.update("""
+                INSERT INTO refund_order (
+                    out_request_no, out_trade_no, trade_no, merchant_id, channel_id, refund_amount,
+                    status, refund_reason, code, message, raw_response, completed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'SUCCESS', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE
+                    trade_no = VALUES(trade_no),
+                    channel_id = VALUES(channel_id),
+                    refund_amount = VALUES(refund_amount),
+                    status = VALUES(status),
+                    refund_reason = VALUES(refund_reason),
+                    code = VALUES(code),
+                    message = VALUES(message),
+                    raw_response = VALUES(raw_response),
+                    completed_at = VALUES(completed_at)
+                """,
+                request.outRequestNo(),
+                order.getOutTradeNo(),
+                nullIfBlank(firstText(response.tradeNo(), firstText(request.tradeNo(), order.getTradeNo()))),
+                order.getMerchantId(),
+                existingChannelId(firstText(response.channelId(), order.getChannelId())),
+                refundAmount,
+                nullIfBlank(request.refundReason()),
+                nullIfBlank(response.code()),
+                nullIfBlank(response.message()),
+                json(response)
+        );
+    }
+
+    private BigDecimal successfulRefundAmount(String outTradeNo) {
+        BigDecimal amount = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(refund_amount), 0)
+                FROM refund_order
+                WHERE out_trade_no = ?
+                  AND status = 'SUCCESS'
+                """, BigDecimal.class, outTradeNo);
+        return money(amount);
+    }
+
+    private static BigDecimal refundableAmount(DemoOrder order) {
+        return money(money(order.getAmount()).subtract(money(order.getRefundedAmount())).max(BigDecimal.ZERO));
+    }
+
+    private static void applyRefundStatus(DemoOrder order) {
+        BigDecimal refunded = money(order.getRefundedAmount());
+        if (refunded.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        order.setStatus(refundableAmount(order).compareTo(BigDecimal.ZERO) <= 0
+                ? DemoOrderStatus.REFUNDED
+                : DemoOrderStatus.PARTIALLY_REFUNDED);
+    }
+
+    private static boolean isRefundableStatus(DemoOrderStatus status) {
+        return status == DemoOrderStatus.COMPLETED || status == DemoOrderStatus.PARTIALLY_REFUNDED;
+    }
+
+    private static boolean isRefundStatus(DemoOrderStatus status) {
+        return status == DemoOrderStatus.PARTIALLY_REFUNDED || status == DemoOrderStatus.REFUNDED;
+    }
+
+    private static DemoOrderStatus preserveRefundStatus(DemoOrderStatus currentStatus, DemoOrderStatus nextStatus) {
+        return isRefundStatus(currentStatus) ? currentStatus : firstStatus(nextStatus);
+    }
+
+    private static BigDecimal money(BigDecimal amount) {
+        return (amount == null ? BigDecimal.ZERO : amount).setScale(2, RoundingMode.HALF_UP);
     }
 
     private static String json(Object value) {

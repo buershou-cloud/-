@@ -450,6 +450,11 @@
       color: var(--red);
     }
 
+    .status.partial-refunded {
+      background: var(--yellow-soft);
+      color: #c98500;
+    }
+
     .status.frozen {
       background: var(--yellow-soft);
       color: #c98500;
@@ -1289,6 +1294,7 @@
                   <th>商户</th>
                   <th>类型</th>
                   <th>金额</th>
+                  <th>退款</th>
                   <th>状态</th>
                   <th>时间</th>
                   <th>操作</th>
@@ -1594,7 +1600,7 @@
       <div class="stat-row" id="merchantDetailStats" style="margin-top:16px"></div>
       <div class="table-wrap" style="margin-top:18px">
         <table>
-          <thead><tr><th>订单号</th><th>支付通道</th><th>类型</th><th>交易金额</th><th>状态</th><th>时间</th></tr></thead>
+          <thead><tr><th>订单号</th><th>支付通道</th><th>类型</th><th>交易金额</th><th>退款</th><th>状态</th><th>时间</th></tr></thead>
           <tbody id="merchantDetailOrderRows"></tbody>
         </table>
       </div>
@@ -2033,10 +2039,39 @@
     return `¥${Number(value || 0).toFixed(2)}`;
   }
 
+  function orderAmountValue(order) {
+    return Number(order?.amount || 0);
+  }
+
+  function refundedAmountValue(order) {
+    return Number(order?.refundedAmount || 0);
+  }
+
+  function refundableAmountValue(order) {
+    if (order?.refundableAmount !== undefined && order?.refundableAmount !== null && order?.refundableAmount !== "") {
+      return Math.max(Number(order.refundableAmount || 0), 0);
+    }
+    return Math.max(orderAmountValue(order) - refundedAmountValue(order), 0);
+  }
+
+  function paidOrder(order) {
+    return ["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order?.status);
+  }
+
+  function refundableOrder(order) {
+    return ["COMPLETED", "PARTIALLY_REFUNDED"].includes(order?.status) && refundableAmountValue(order) > 0;
+  }
+
   function sumAmounts(orders, predicate) {
     return orders
       .filter(predicate)
-      .reduce((total, order) => total + Number(order.amount || 0), 0);
+      .reduce((total, order) => total + orderAmountValue(order), 0);
+  }
+
+  function sumRefundedAmounts(orders, predicate = () => true) {
+    return orders
+      .filter(predicate)
+      .reduce((total, order) => total + refundedAmountValue(order), 0);
   }
 
   function localDateText(date = new Date()) {
@@ -2077,26 +2112,25 @@
   function renderDashboardMetrics() {
     const today = localDateText();
     const month = localMonthText();
-    const todayCompleted = state.orders.filter((order) => order.status === "COMPLETED" && orderDate(order) === today);
-    const monthCompleted = state.orders.filter((order) => order.status === "COMPLETED" && orderDate(order).startsWith(month));
-    const todayRefunded = state.orders.filter((order) => order.status === "REFUNDED" && orderDate(order) === today);
+    const todayCompleted = state.orders.filter((order) => paidOrder(order) && orderDate(order) === today);
+    const monthCompleted = state.orders.filter((order) => paidOrder(order) && orderDate(order).startsWith(month));
+    const todayRefunded = state.orders.filter((order) => refundedAmountValue(order) > 0 && orderDate(order) === today);
     const activeMerchants = state.merchants.filter((merchant) => merchant.status !== "停用");
 
     setText("todayTradeAmount", money(sumAmounts(todayCompleted, () => true)));
     setText("todayTradeCount", `${todayCompleted.length} 笔`);
     setText("monthTradeAmount", money(sumAmounts(monthCompleted, () => true)));
     setText("monthTradeCount", `${monthCompleted.length} 笔`);
-    setText("todayRefundAmount", money(sumAmounts(todayRefunded, () => true)));
+    setText("todayRefundAmount", money(sumRefundedAmounts(todayRefunded)));
     setText("todayRefundCount", `${todayRefunded.length} 笔`);
     setText("merchantTotal", String(state.merchants.length));
     setText("merchantActive", `${activeMerchants.length} 个活跃`);
   }
 
   function renderReports() {
-    const completedOrders = state.orders.filter((order) => order.status === "COMPLETED");
-    const refundedOrders = state.orders.filter((order) => order.status === "REFUNDED");
+    const completedOrders = state.orders.filter(paidOrder);
     const completedAmount = sumAmounts(completedOrders, () => true);
-    const refundedAmount = sumAmounts(refundedOrders, () => true);
+    const refundedAmount = sumRefundedAmounts(state.orders);
     const feeAmount = completedOrders.reduce((total, order) => total + orderFee(order), 0);
     const rowsByDate = new Map();
 
@@ -2107,12 +2141,12 @@
         rowsByDate.set(date, { date, count: 0, payAmount: 0, refundAmount: 0 });
       }
       const row = rowsByDate.get(date);
-      if (order.status === "COMPLETED") {
+      if (paidOrder(order)) {
         row.count += 1;
-        row.payAmount += Number(order.amount || 0);
+        row.payAmount += orderAmountValue(order);
       }
-      if (order.status === "REFUNDED") {
-        row.refundAmount += Number(order.amount || 0);
+      if (refundedAmountValue(order) > 0) {
+        row.refundAmount += refundedAmountValue(order);
       }
     });
 
@@ -2155,14 +2189,28 @@
 
   function statusCell(status) {
     const className = status === "COMPLETED" ? "success"
+      : status === "PARTIALLY_REFUNDED" ? "partial-refunded"
       : status === "REFUNDED" ? "refunded"
       : status === "FROZEN" ? "frozen"
       : "pending";
     const label = status === "COMPLETED" ? "已完成"
+      : status === "PARTIALLY_REFUNDED" ? "部分退款"
       : status === "REFUNDED" ? "已退款"
       : status === "FROZEN" ? "冻结中"
       : "未支付";
     return `<span class="status ${className}">${label}</span>`;
+  }
+
+  function refundCell(order) {
+    const refunded = refundedAmountValue(order);
+    const refundable = refundableAmountValue(order);
+    if (refunded <= 0) {
+      return '<span class="muted">未退款</span>';
+    }
+    return `
+      <strong>${money(refunded)}</strong>
+      <br><span class="muted">可退 ${money(refundable)}</span>
+    `;
   }
 
   function orderActionButtons(order) {
@@ -2174,6 +2222,8 @@
     if (order.status === "COMPLETED") {
       actions.push(["profit-share", "分账", "secondary"]);
       actions.push(["uncomplete", "改未完成", "secondary"]);
+    }
+    if (refundableOrder(order)) {
       actions.push(["refund", "退款", "secondary"]);
     }
     if (order.preAuthorization && order.status === "FROZEN") {
@@ -2401,12 +2451,12 @@
     const merchant = await request(`/api/v1/merchants/${encodeURIComponent(merchantId)}`);
     const allOrders = await request("/api/v1/orders/recent");
     const merchantOrders = allOrders.filter((order) => order.merchantId === merchantId);
-    const completedAmount = sumAmounts(merchantOrders, (order) => order.status === "COMPLETED");
-    const refundedAmount = sumAmounts(merchantOrders, (order) => order.status === "REFUNDED");
+    const completedAmount = sumAmounts(merchantOrders, paidOrder);
+    const refundedAmount = sumRefundedAmounts(merchantOrders);
     const frozenAmount = sumAmounts(merchantOrders, (order) => order.status === "FROZEN");
     const unpaidAmount = sumAmounts(merchantOrders, (order) => order.status === "UNPAID");
     const feeAmount = completedAmount * Number(merchant.feeRate || 0) / 100;
-    const settlementAmount = Math.max(completedAmount - feeAmount, 0);
+    const settlementAmount = Math.max(completedAmount - refundedAmount - feeAmount, 0);
 
     $("merchantDetailTitle").textContent = `商户明细 ${merchant.merchantId}`;
     $("detailMerchantId").value = merchant.merchantId || "";
@@ -2445,11 +2495,12 @@
         <td>${html(order.channelId || "-")}</td>
         <td>${productCell(order)}</td>
         <td class="amount-green">${html(order.amountText)}</td>
+        <td>${refundCell(order)}</td>
         <td>${statusCell(order.status)}</td>
         <td class="muted">${html(order.createdAt)}</td>
       </tr>
     `).join("");
-    $("merchantDetailOrderRows").innerHTML = rows || '<tr><td colspan="6" class="muted">暂无交易订单</td></tr>';
+    $("merchantDetailOrderRows").innerHTML = rows || '<tr><td colspan="7" class="muted">暂无交易订单</td></tr>';
   }
 
   function renderMerchantSettlementRows(merchant, orders) {
@@ -2461,14 +2512,14 @@
       }
       const item = grouped.get(date);
       item.count += 1;
-      if (order.status === "COMPLETED") item.completed += Number(order.amount || 0);
-      if (order.status === "REFUNDED") item.refunded += Number(order.amount || 0);
+      if (paidOrder(order)) item.completed += orderAmountValue(order);
+      item.refunded += refundedAmountValue(order);
     });
     const dates = Array.from(grouped.values()).sort((left, right) => right.date.localeCompare(left.date));
     const latestDate = dates[0]?.date || "";
     const rows = dates.map((item) => {
       const fee = item.completed * Number(merchant.feeRate || 0) / 100;
-      const settlement = Math.max(item.completed - fee, 0);
+      const settlement = Math.max(item.completed - item.refunded - fee, 0);
       const status = merchant.settlementStatus === "已结算" || item.date < latestDate ? "已结算" : "待结算";
       return `
         <tr>
@@ -2515,27 +2566,38 @@
     if (!order) {
       throw { message: `订单不存在: ${outTradeNo}` };
     }
-    if (order.status !== "COMPLETED") {
-      throw { message: "只有已完成订单可以发起支付宝退款" };
+    if (!refundableOrder(order)) {
+      throw { message: "只有已完成或部分退款且仍有可退金额的订单可以发起支付宝退款" };
     }
-    if (!window.confirm(`确定向支付宝发起退款 ${order.amountText || order.amount} 吗？`)) {
+    const remaining = refundableAmountValue(order);
+    const input = window.prompt(`请输入退款金额，最多可退 ${money(remaining)}`, remaining.toFixed(2));
+    if (input === null) {
       return;
     }
+    const refundAmount = Number(input);
+    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
+      throw { message: "退款金额必须大于 0" };
+    }
+    if (refundAmount > remaining) {
+      throw { message: `退款金额不能超过剩余可退金额 ${money(remaining)}` };
+    }
+    const refundAmountText = refundAmount.toFixed(2);
+    if (!window.confirm(`确定向支付宝发起退款 ${money(refundAmount)} 吗？`)) return;
     const data = await request("/api/v1/payments/refund", {
       method: "POST",
       body: JSON.stringify(compact({
         outTradeNo: order.outTradeNo,
         tradeNo: order.tradeNo,
-        refundAmount: order.amount,
+        refundAmount: refundAmountText,
         outRequestNo: `RF_${order.outTradeNo}_${Date.now()}`,
-        refundReason: "后台订单退款",
+        refundReason: `后台订单退款 ${money(refundAmount)}`,
         channelIds: order.channelId ? [order.channelId] : []
       }))
     });
     if (gatewayFailed(data)) {
       throw gatewayFailure("支付宝退款", data);
     }
-    setDashboardResult({ message: `支付宝退款已提交: ${order.outTradeNo}`, response: data });
+    setDashboardResult({ message: `支付宝退款已提交: ${order.outTradeNo}，金额 ${money(refundAmount)}`, response: data });
     await loadOrders();
   }
 
@@ -2645,6 +2707,7 @@
         <td>${html(order.merchantName)}</td>
         <td>${productCell(order)}</td>
         <td class="amount-green">${html(order.amountText)}</td>
+        <td>${refundCell(order)}</td>
         <td>${statusCell(order.status)}</td>
         <td class="muted">${html(order.createdAt)}</td>
         <td>${orderActionCell(order)}</td>

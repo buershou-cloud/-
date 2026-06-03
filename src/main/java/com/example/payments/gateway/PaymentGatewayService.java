@@ -92,9 +92,10 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse refund(RefundCreateRequest request) {
-        GatewayResponse response = execute(null, request.channelIds(), request.refundAmount(), null, channel -> provider(channel).refund(channel, request));
-        if (response.status() != PaymentStatus.FAILED && hasText(request.outTradeNo())) {
-            markLocalRefunded(request.outTradeNo());
+        orderService.ensureRefundable(request.outTradeNo(), request.tradeNo(), request.refundAmount());
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).refund(channel, request));
+        if (response.status() == PaymentStatus.SUCCESS) {
+            orderService.recordRefund(request, response);
         }
         return response;
     }
@@ -512,14 +513,6 @@ public class PaymentGatewayService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
-    }
-
-    private void markLocalRefunded(String outTradeNo) {
-        try {
-            orderService.refund(outTradeNo);
-        } catch (RuntimeException ignored) {
-            // The Alipay refund response is authoritative; local order sync should not mask it.
-        }
     }
 
     private MerchantRouting merchantRouting(PayCreateRequest request) {
