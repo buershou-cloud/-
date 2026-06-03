@@ -920,6 +920,10 @@
       width: min(1120px, 100%);
     }
 
+    .refund-dialog {
+      width: min(540px, 100%);
+    }
+
     .channel-modal-head {
       display: flex;
       align-items: center;
@@ -948,6 +952,95 @@
 
     .channel-form-grid .wide {
       grid-column: 1 / -1;
+    }
+
+    .refund-form {
+      display: grid;
+      gap: 16px;
+    }
+
+    .refund-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f8fbff;
+    }
+
+    .refund-summary-item {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .refund-summary-item span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .refund-summary-item strong {
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 900;
+      word-break: break-word;
+    }
+
+    .refund-amount-wrap {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      min-height: 54px;
+      border: 1px solid #cfd8e3;
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    .refund-amount-wrap:focus-within {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
+    }
+
+    .refund-currency {
+      padding-left: 14px;
+      color: var(--muted);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    .refund-amount-wrap input {
+      min-height: 52px;
+      border: 0;
+      box-shadow: none;
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .refund-amount-wrap input:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    .refund-tools {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .refund-tip {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .refund-error {
+      margin-top: 0;
+      border-color: #fecaca;
+      background: #fff1f2;
+      color: var(--red);
     }
 
     .add-channel-form input:disabled,
@@ -1548,6 +1641,62 @@
   </section>
 </div>
 
+<div id="refundModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog refund-dialog" role="dialog" aria-modal="true" aria-labelledby="refundModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="refundModalTitle">订单退款</h3>
+      <button class="btn secondary small" id="closeRefundModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="refundForm" class="refund-form">
+        <div class="refund-summary">
+          <div class="refund-summary-item">
+            <span>订单号</span>
+            <strong id="refundOrderNo">-</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>支付通道</span>
+            <strong id="refundChannelName">-</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>订单金额</span>
+            <strong id="refundOrderAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>已退金额</span>
+            <strong id="refundAlreadyAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>本次最多可退</span>
+            <strong id="refundMaxAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>退款后状态</span>
+            <strong id="refundAfterStatus">部分退款</strong>
+          </div>
+        </div>
+
+        <label>退款金额
+          <div class="refund-amount-wrap">
+            <span class="refund-currency">¥</span>
+            <input id="refundAmountInput" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+          </div>
+        </label>
+
+        <div class="refund-tools">
+          <button class="btn secondary small" id="refundFillAllBtn" type="button">退全部剩余</button>
+          <span class="refund-tip">支持同一订单多次部分退款，累计退款不能超过订单金额。</span>
+        </div>
+        <pre id="refundModalError" class="operation-result refund-error hidden"></pre>
+        <div class="form-actions">
+          <button class="btn secondary" id="cancelRefundModalBtn" type="button">取消</button>
+          <button class="btn danger" type="submit">确认退款</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
 <div id="merchantModal" class="channel-modal hidden" aria-hidden="true">
   <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantModalTitle">
     <div class="channel-modal-head">
@@ -1733,7 +1882,9 @@
     complaintRecords: [],
     editingChannelId: null,
     editingMerchantId: null,
-    productEditorChannelId: null
+    productEditorChannelId: null,
+    refundModalOrder: null,
+    refundModalResolve: null
   };
 
   const channelCheckTargets = [
@@ -2561,6 +2712,86 @@
     return query ? `?${query}` : "";
   }
 
+  function clearRefundModalError() {
+    const element = $("refundModalError");
+    element.textContent = "";
+    element.classList.add("hidden");
+  }
+
+  function showRefundModalError(message) {
+    const element = $("refundModalError");
+    element.textContent = message;
+    element.classList.remove("hidden");
+  }
+
+  function updateRefundAfterStatus() {
+    const order = state.refundModalOrder;
+    if (!order) return;
+    const remaining = refundableAmountValue(order);
+    const amount = Number($("refundAmountInput").value || 0);
+    setText("refundAfterStatus", amount >= remaining ? "已退款" : "部分退款");
+  }
+
+  function openRefundModal(order) {
+    const remaining = refundableAmountValue(order);
+    state.refundModalOrder = order;
+    setText("refundOrderNo", order.outTradeNo || "-");
+    setText("refundChannelName", order.channelId || "-");
+    setText("refundOrderAmount", order.amountText || money(order.amount));
+    setText("refundAlreadyAmount", order.refundedAmountText || money(refundedAmountValue(order)));
+    setText("refundMaxAmount", money(remaining));
+    const input = $("refundAmountInput");
+    input.value = remaining.toFixed(2);
+    input.max = remaining.toFixed(2);
+    input.min = "0.01";
+    clearRefundModalError();
+    updateRefundAfterStatus();
+    $("refundModal").classList.remove("hidden");
+    $("refundModal").setAttribute("aria-hidden", "false");
+    window.setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    return new Promise((resolve) => {
+      state.refundModalResolve = resolve;
+    });
+  }
+
+  function closeRefundModal(result = null) {
+    $("refundModal").classList.add("hidden");
+    $("refundModal").setAttribute("aria-hidden", "true");
+    const resolve = state.refundModalResolve;
+    state.refundModalResolve = null;
+    state.refundModalOrder = null;
+    $("refundForm").reset();
+    clearRefundModalError();
+    if (resolve) resolve(result);
+  }
+
+  function submitRefundModal() {
+    const order = state.refundModalOrder;
+    if (!order) {
+      closeRefundModal(null);
+      return;
+    }
+    const remaining = refundableAmountValue(order);
+    const raw = $("refundAmountInput").value;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showRefundModalError("退款金额必须大于 0。");
+      return;
+    }
+    if (Math.round(amount * 100) / 100 !== amount) {
+      showRefundModalError("退款金额最多保留 2 位小数。");
+      return;
+    }
+    if (amount > remaining) {
+      showRefundModalError(`退款金额不能超过剩余可退金额 ${money(remaining)}。`);
+      return;
+    }
+    closeRefundModal({ amount: amount.toFixed(2) });
+  }
+
   async function refundPaidOrder(outTradeNo) {
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
     if (!order) {
@@ -2569,26 +2800,15 @@
     if (!refundableOrder(order)) {
       throw { message: "只有已完成或部分退款且仍有可退金额的订单可以发起支付宝退款" };
     }
-    const remaining = refundableAmountValue(order);
-    const input = window.prompt(`请输入退款金额，最多可退 ${money(remaining)}`, remaining.toFixed(2));
-    if (input === null) {
-      return;
-    }
-    const refundAmount = Number(input);
-    if (!Number.isFinite(refundAmount) || refundAmount <= 0) {
-      throw { message: "退款金额必须大于 0" };
-    }
-    if (refundAmount > remaining) {
-      throw { message: `退款金额不能超过剩余可退金额 ${money(remaining)}` };
-    }
-    const refundAmountText = refundAmount.toFixed(2);
-    if (!window.confirm(`确定向支付宝发起退款 ${money(refundAmount)} 吗？`)) return;
+    const refund = await openRefundModal(order);
+    if (!refund) return;
+    const refundAmount = Number(refund.amount);
     const data = await request("/api/v1/payments/refund", {
       method: "POST",
       body: JSON.stringify(compact({
         outTradeNo: order.outTradeNo,
         tradeNo: order.tradeNo,
-        refundAmount: refundAmountText,
+        refundAmount: refund.amount,
         outRequestNo: `RF_${order.outTradeNo}_${Date.now()}`,
         refundReason: `后台订单退款 ${money(refundAmount)}`,
         channelIds: order.channelId ? [order.channelId] : []
@@ -3665,6 +3885,33 @@
     } catch (error) {
       $("passwordResult").textContent = json(error);
     }
+  });
+
+  $("closeRefundModalBtn").addEventListener("click", () => closeRefundModal(null));
+
+  $("cancelRefundModalBtn").addEventListener("click", () => closeRefundModal(null));
+
+  $("refundModal").addEventListener("click", (event) => {
+    if (event.target.id === "refundModal") closeRefundModal(null);
+  });
+
+  $("refundFillAllBtn").addEventListener("click", () => {
+    const order = state.refundModalOrder;
+    if (!order) return;
+    $("refundAmountInput").value = refundableAmountValue(order).toFixed(2);
+    clearRefundModalError();
+    updateRefundAfterStatus();
+    $("refundAmountInput").focus();
+  });
+
+  $("refundAmountInput").addEventListener("input", () => {
+    clearRefundModalError();
+    updateRefundAfterStatus();
+  });
+
+  $("refundForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitRefundModal();
   });
 
   $("recentOrders").addEventListener("click", async (event) => {
