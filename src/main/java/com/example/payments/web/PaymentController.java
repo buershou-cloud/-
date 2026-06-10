@@ -20,6 +20,7 @@ import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.onboarding.OnboardingRecordService;
+import com.example.payments.sharing.ProfitSharingRelationService;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -97,6 +98,13 @@ public class PaymentController {
     @PostMapping("/profit-sharing/relations/query")
     public GatewayResponse queryProfitSharingRelations(@RequestBody ProfitSharingRelationQueryRequest request) {
         return paymentGatewayService.queryProfitSharingRelations(request);
+    }
+
+    @GetMapping("/profit-sharing/relations")
+    public List<ProfitSharingRelationService.ProfitSharingRelationView> profitSharingRelations(
+            @RequestParam(required = false) String channelId
+    ) {
+        return paymentGatewayService.profitSharingRelations(channelId);
     }
 
     @PostMapping("/complaints/query")

@@ -1456,13 +1456,14 @@
                       <option value="">请选择通道</option>
                     </select>
                   </label>
-                  <label>收入方账号<input id="profitShareTransIn" placeholder="支付宝登录号或 2088 用户号"></label>
-                  <label>收入方账号类型
-                    <select id="profitShareTransInType">
-                      <option value="loginName">支付宝登录号</option>
-                      <option value="userId">支付宝用户号</option>
-                      <option value="cardAliasNo">支付宝绑卡编号</option>
+                  <label>收入方账号
+                    <select id="profitShareTransIn">
+                      <option value="">请先选择支付通道</option>
                     </select>
+                  </label>
+                  <label>收入方账号类型
+                    <input id="profitShareTransInTypeLabel" value="-" readonly>
+                    <input id="profitShareTransInType" type="hidden" value="loginName">
                   </label>
                   <label>分账金额<input id="profitShareAmount" type="number" min="0" step="0.01" placeholder="单笔必填；批量留空按订单金额"></label>
                   <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS"></label>
@@ -1472,6 +1473,7 @@
                   <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
                 </div>
                 <div class="form-actions">
+                  <button class="btn secondary" id="refreshProfitRelationsBtn" type="button">刷新已绑定关系</button>
                   <button class="btn" id="shareSingleBtn" type="button">单笔订单分账</button>
                   <button class="btn secondary" id="shareChannelBtn" type="button">通道批量分账</button>
                 </div>
@@ -1956,6 +1958,7 @@
     onboardingRecords: [],
     complaintAuto: null,
     complaintRecords: [],
+    profitSharingRelations: [],
     editingChannelId: null,
     editingMerchantId: null,
     productEditorChannelId: null,
@@ -3134,8 +3137,9 @@
       $("profitShareChannel").value = order.channelId || "";
       $("profitShareAmount").value = order.amount ?? "";
       $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
+      loadProfitSharingRelations(order.channelId, true).catch((error) => setProfitShareResult(error));
     }
-    setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请填写收入方账号后提交单笔分账` });
+    setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请选择已绑定分帐关系后提交单笔分账` });
     $("profitShareTransIn").focus();
   }
 
@@ -3154,14 +3158,80 @@
     `).join("");
   }
 
+  function receiverTypeText(type) {
+    const labels = {
+      loginName: "支付宝登录号",
+      userId: "支付宝用户号",
+      cardAliasNo: "支付宝绑卡编号"
+    };
+    return labels[type] || type || "-";
+  }
+
+  function relationOptionText(relation) {
+    const name = relation.receiverName ? ` - ${relation.receiverName}` : "";
+    return `${relation.receiverAccount}${name}（${receiverTypeText(relation.receiverType)}）`;
+  }
+
+  function selectedProfitShareRelation() {
+    const select = $("profitShareTransIn");
+    const option = select?.selectedOptions?.[0];
+    return {
+      account: option?.dataset?.account || "",
+      type: option?.dataset?.type || "loginName"
+    };
+  }
+
+  function syncProfitShareRelationType() {
+    const relation = selectedProfitShareRelation();
+    $("profitShareTransInType").value = relation.account ? relation.type : "loginName";
+    $("profitShareTransInTypeLabel").value = relation.account ? receiverTypeText(relation.type) : "-";
+  }
+
+  function renderProfitShareRelationOptions() {
+    const select = $("profitShareTransIn");
+    if (!select) return;
+    const selected = select.value;
+    const placeholder = $("profitShareChannel").value ? "请选择已绑定分帐关系" : "请先选择支付通道";
+    select.innerHTML = `<option value="">${placeholder}</option>` + state.profitSharingRelations.map((relation) => {
+      const key = `${relation.receiverType || "loginName"}|${relation.receiverAccount}`;
+      return `
+        <option value="${html(key)}"
+                data-account="${html(relation.receiverAccount)}"
+                data-type="${html(relation.receiverType || "loginName")}">
+          ${html(relationOptionText(relation))}
+        </option>
+      `;
+    }).join("");
+    select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
+    syncProfitShareRelationType();
+  }
+
+  async function loadProfitSharingRelations(channelId = $("profitShareChannel").value, silent = false) {
+    const safeChannelId = (channelId || "").trim();
+    if (!safeChannelId) {
+      state.profitSharingRelations = [];
+      renderProfitShareRelationOptions();
+      if (!silent) setProfitShareResult({ message: "请先选择支付通道，再刷新已绑定分帐关系" });
+      return [];
+    }
+    const data = await request(`/api/v1/payments/profit-sharing/relations?channelId=${encodeURIComponent(safeChannelId)}`);
+    state.profitSharingRelations = Array.isArray(data) ? data : [];
+    renderProfitShareRelationOptions();
+    if (!silent) {
+      setProfitShareResult({ message: `已加载 ${state.profitSharingRelations.length} 个已绑定分帐关系` });
+    }
+    return state.profitSharingRelations;
+  }
+
   function profitShareRoyaltyParameter(amount) {
-    const transIn = $("profitShareTransIn").value.trim();
+    const relation = selectedProfitShareRelation();
+    const transIn = relation.account.trim();
     if (!transIn) {
-      throw { message: "请填写分账收入方账号" };
+      throw { message: "请选择已绑定分帐关系中的收入方账号" };
     }
     return compact({
       royalty_type: "transfer",
-      trans_in_type: $("profitShareTransInType").value,
+      trans_in_type: relation.type,
       trans_in: transIn,
       amount,
       desc: $("profitShareDesc").value.trim()
@@ -3188,10 +3258,14 @@
   }
 
   function profitShareBatchPayload() {
+    const relation = selectedProfitShareRelation();
+    if (!relation.account) {
+      throw { message: "请选择已绑定分帐关系中的收入方账号" };
+    }
     return compact({
       channelId: $("profitShareChannel").value,
-      transIn: $("profitShareTransIn").value.trim(),
-      transInType: $("profitShareTransInType").value,
+      transIn: relation.account.trim(),
+      transInType: relation.type,
       amount: amountField("profitShareAmount"),
       desc: $("profitShareDesc").value.trim(),
       outRequestNoPrefix: $("profitShareOutRequestPrefix").value,
@@ -3260,6 +3334,9 @@
       throw gatewayFailure("添加分帐关系", data);
     }
     setProfitRelationResult({ message: "分帐关系已提交添加", response: data });
+    if ($("profitShareChannel").value === $("profitRelationChannel").value) {
+      await loadProfitSharingRelations($("profitRelationChannel").value, true);
+    }
   }
 
   async function queryProfitRelation() {
@@ -3274,6 +3351,9 @@
       throw gatewayFailure("查询分帐关系", data);
     }
     setProfitRelationResult({ message: "分帐关系查询完成", response: data });
+    if ($("profitShareChannel").value === $("profitRelationChannel").value) {
+      await loadProfitSharingRelations($("profitRelationChannel").value, true);
+    }
   }
 
   function renderTopbarDate() {
@@ -3328,6 +3408,7 @@
     renderChannelSelect("orderChannelFilter", "全部通道");
     renderChannelSelect("profitShareChannel", "请选择通道");
     renderChannelSelect("profitRelationChannel", "请选择通道");
+    renderProfitShareRelationOptions();
   }
 
   function renderChannelSelect(id, placeholder) {
@@ -4194,6 +4275,24 @@
 
   $("profitShareForm").addEventListener("submit", (event) => {
     event.preventDefault();
+  });
+
+  $("profitShareChannel").addEventListener("change", async () => {
+    try {
+      await loadProfitSharingRelations($("profitShareChannel").value);
+    } catch (error) {
+      setProfitShareResult(error);
+    }
+  });
+
+  $("profitShareTransIn").addEventListener("change", syncProfitShareRelationType);
+
+  $("refreshProfitRelationsBtn").addEventListener("click", async () => {
+    try {
+      await loadProfitSharingRelations($("profitShareChannel").value);
+    } catch (error) {
+      setProfitShareResult(error);
+    }
   });
 
   $("shareSingleBtn").addEventListener("click", async () => {

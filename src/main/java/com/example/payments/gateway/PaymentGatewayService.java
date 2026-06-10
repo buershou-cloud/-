@@ -27,6 +27,7 @@ import com.example.payments.order.DemoOrderView;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.MerchantRouting;
 import com.example.payments.onboarding.OnboardingRecordService;
+import com.example.payments.sharing.ProfitSharingRelationService;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -49,6 +50,7 @@ public class PaymentGatewayService {
     private final DemoMerchantService merchantService;
     private final OnboardingRecordService onboardingRecordService;
     private final ComplaintRecordService complaintRecordService;
+    private final ProfitSharingRelationService profitSharingRelationService;
 
     public PaymentGatewayService(
             PaymentGatewayProperties properties,
@@ -57,7 +59,8 @@ public class PaymentGatewayService {
             DemoOrderService orderService,
             DemoMerchantService merchantService,
             OnboardingRecordService onboardingRecordService,
-            ComplaintRecordService complaintRecordService
+            ComplaintRecordService complaintRecordService,
+            ProfitSharingRelationService profitSharingRelationService
     ) {
         this.properties = properties;
         this.channelSelector = channelSelector;
@@ -66,6 +69,7 @@ public class PaymentGatewayService {
         this.merchantService = merchantService;
         this.onboardingRecordService = onboardingRecordService;
         this.complaintRecordService = complaintRecordService;
+        this.profitSharingRelationService = profitSharingRelationService;
     }
 
     public GatewayResponse pay(PayCreateRequest request) {
@@ -117,7 +121,10 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse profitSharing(ProfitSharingRequest request) {
-        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).profitSharing(channel, request));
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> {
+            validateProfitSharingRelations(channel.getId(), request.royaltyParameters());
+            return provider(channel).profitSharing(channel, request);
+        });
         if (response.status() != PaymentStatus.FAILED && hasText(request.outTradeNo())) {
             orderService.markProfitShared(request.outTradeNo());
         }
@@ -125,11 +132,19 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse bindProfitSharingRelation(ProfitSharingRelationBindRequest request) {
-        return execute(null, request.channelIds(), null, null, channel -> provider(channel).bindProfitSharingRelation(channel, request));
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).bindProfitSharingRelation(channel, request));
+        profitSharingRelationService.recordBind(request, response);
+        return response;
     }
 
     public GatewayResponse queryProfitSharingRelations(ProfitSharingRelationQueryRequest request) {
-        return execute(null, request.channelIds(), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
+        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
+        profitSharingRelationService.recordQuery(request, response);
+        return response;
+    }
+
+    public List<ProfitSharingRelationService.ProfitSharingRelationView> profitSharingRelations(String channelId) {
+        return profitSharingRelationService.list(channelId);
     }
 
     public ProfitSharingBatchResult profitSharingByChannel(ProfitSharingBatchRequest request) {
@@ -502,6 +517,30 @@ public class PaymentGatewayService {
         parameter.put("amount", amount(firstAmount(request.amount(), order.amount())));
         parameter.put("desc", firstText(request.desc(), "通道批量分账 " + order.outTradeNo()));
         return parameter;
+    }
+
+    private void validateProfitSharingRelations(String channelId, List<Map<String, Object>> royaltyParameters) {
+        if (royaltyParameters == null || royaltyParameters.isEmpty()) {
+            return;
+        }
+        for (Map<String, Object> parameter : royaltyParameters) {
+            String transIn = mapText(parameter, "trans_in");
+            if (!hasText(transIn)) {
+                continue;
+            }
+            String transInType = firstText(mapText(parameter, "trans_in_type"), "loginName");
+            if (!profitSharingRelationService.isBound(channelId, transInType, transIn)) {
+                throw new IllegalArgumentException("收入方账号未绑定分帐关系，请先在“分帐关系”中添加：" + transIn);
+            }
+        }
+    }
+
+    private static String mapText(Map<String, Object> value, String key) {
+        if (value == null) {
+            return null;
+        }
+        Object raw = value.get(key);
+        return raw == null ? null : String.valueOf(raw);
     }
 
     private static String outRequestNo(ProfitSharingBatchRequest request, DemoOrderView order) {
