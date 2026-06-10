@@ -10,6 +10,8 @@ import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.domain.ProfitSharingRelationBindRequest;
+import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.GatewayException;
@@ -35,6 +37,8 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_REFUND = "alipay.trade.refund";
     private static final String METHOD_TRADE_PAY = "alipay.trade.pay";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
+    private static final String METHOD_ROYALTY_RELATION_BIND = "alipay.trade.royalty.relation.bind";
+    private static final String METHOD_ROYALTY_RELATION_QUERY = "alipay.trade.royalty.relation.batchquery";
     private static final String METHOD_OAUTH_TOKEN = "alipay.system.oauth.token";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_PREAUTH_VOUCHER_CREATE = "alipay.fund.auth.order.voucher.create";
@@ -145,6 +149,40 @@ public class AlipayPaymentProvider implements PaymentProvider {
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_ORDER_SETTLE, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse bindProfitSharingRelation(PaymentGatewayProperties.Channel channel, ProfitSharingRelationBindRequest request) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        bizContent.put("out_request_no", request.outRequestNo());
+        bizContent.put("receiver_list", List.of(relationReceiver(
+                request.receiverType(),
+                request.receiverAccount(),
+                request.receiverName(),
+                request.memo()
+        )));
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(channel, METHOD_ROYALTY_RELATION_BIND, bizContent, options(request.appAuthToken(), null, null));
+        return apiResponse(channel.getId(), response, null, null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse queryProfitSharingRelations(PaymentGatewayProperties.Channel channel, ProfitSharingRelationQueryRequest request) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        putIfText(bizContent, "out_request_no", request.outRequestNo());
+        if (hasText(request.receiverAccount())) {
+            bizContent.put("receiver_list", List.of(relationReceiver(
+                    request.receiverType(),
+                    request.receiverAccount(),
+                    null,
+                    null
+            )));
+        }
+        putIfPresent(bizContent, "page_num", request.pageNum());
+        putIfPresent(bizContent, "page_size", request.pageSize());
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(channel, METHOD_ROYALTY_RELATION_QUERY, bizContent, options(request.appAuthToken(), null, null));
+        return apiResponse(channel.getId(), response, null, null, bizContent);
     }
 
     @Override
@@ -510,6 +548,15 @@ public class AlipayPaymentProvider implements PaymentProvider {
         if (extra != null) {
             target.putAll(extra);
         }
+    }
+
+    private static Map<String, Object> relationReceiver(String type, String account, String name, String memo) {
+        Map<String, Object> receiver = new LinkedHashMap<>();
+        receiver.put("type", firstText(type, "loginName"));
+        receiver.put("account", account);
+        putIfText(receiver, "name", name);
+        putIfText(receiver, "memo", memo);
+        return receiver;
     }
 
     private static void putIfText(Map<String, Object> map, String key, String value) {

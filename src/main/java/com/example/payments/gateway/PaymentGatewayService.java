@@ -17,6 +17,8 @@ import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingBatchItem;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
+import com.example.payments.domain.ProfitSharingRelationBindRequest;
+import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.domain.RoutingMode;
@@ -120,6 +122,14 @@ public class PaymentGatewayService {
             orderService.markProfitShared(request.outTradeNo());
         }
         return response;
+    }
+
+    public GatewayResponse bindProfitSharingRelation(ProfitSharingRelationBindRequest request) {
+        return execute(null, request.channelIds(), null, null, channel -> provider(channel).bindProfitSharingRelation(channel, request));
+    }
+
+    public GatewayResponse queryProfitSharingRelations(ProfitSharingRelationQueryRequest request) {
+        return execute(null, request.channelIds(), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
     }
 
     public ProfitSharingBatchResult profitSharingByChannel(ProfitSharingBatchRequest request) {

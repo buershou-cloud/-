@@ -94,7 +94,8 @@
       font-weight: 700;
     }
 
-    .nav-btn {
+    .nav-btn,
+    .nav-group-toggle {
       display: grid;
       grid-template-columns: 28px minmax(0, 1fr);
       align-items: center;
@@ -110,14 +111,46 @@
       font-weight: 700;
     }
 
-    .nav-btn:hover {
+    .nav-btn:hover,
+    .nav-group-toggle:hover {
       background: rgba(255, 255, 255, 0.06);
       color: #fff;
     }
 
-    .nav-btn.active {
+    .nav-btn.active,
+    .nav-group-toggle.active {
       background: var(--primary);
       color: #fff;
+    }
+
+    .nav-group-toggle {
+      grid-template-columns: 28px minmax(0, 1fr) auto;
+    }
+
+    .nav-caret {
+      font-size: 13px;
+      transition: transform 0.16s ease;
+    }
+
+    .nav-group.open .nav-caret {
+      transform: rotate(90deg);
+    }
+
+    .nav-children {
+      display: none;
+      padding: 4px 0 6px;
+      background: rgba(0, 0, 0, 0.12);
+    }
+
+    .nav-group.open .nav-children {
+      display: grid;
+    }
+
+    .nav-child {
+      grid-template-columns: minmax(0, 1fr);
+      min-height: 40px;
+      padding-left: 44px;
+      font-size: 14px;
     }
 
     .nav-icon {
@@ -1295,7 +1328,15 @@
     <nav class="nav" aria-label="主导航">
       <div class="nav-title">概览</div>
       <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">▦</span><span>订单管理</span></button>
-      <button class="nav-btn" data-page="sharing"><span class="nav-icon">$</span><span>分账处理</span></button>
+      <div class="nav-group" data-nav-group="sharing">
+        <button class="nav-group-toggle" type="button" data-nav-toggle="sharing" aria-expanded="false">
+          <span class="nav-icon">$</span><span>分帐</span><span class="nav-caret">›</span>
+        </button>
+        <div class="nav-children">
+          <button class="nav-btn nav-child" data-page="sharing"><span>分帐处理</span></button>
+          <button class="nav-btn nav-child" data-page="sharing-relations"><span>分帐关系</span></button>
+        </div>
+      </div>
       <button class="nav-btn" data-page="complaints"><span class="nav-icon"></span><span>投诉查询</span></button>
       <div class="nav-title">直付通</div>
       <button class="nav-btn" data-page="onboard"><span class="nav-icon">♧</span><span>子商户进件</span></button>
@@ -1405,7 +1446,7 @@
       <section id="page-sharing" class="page">
         <div class="work-grid">
           <section class="panel">
-            <div class="panel-head"><h2 class="panel-title">分账处理</h2></div>
+            <div class="panel-head"><h2 class="panel-title">分帐处理</h2></div>
             <div class="panel-body">
               <form id="profitShareForm">
                 <div class="form-grid">
@@ -1450,6 +1491,41 @@
             </div>
           </section>
         </div>
+      </section>
+
+      <section id="page-sharing-relations" class="page">
+        <section class="panel">
+          <div class="panel-head"><h2 class="panel-title">分帐关系</h2></div>
+          <div class="panel-body">
+            <form id="profitRelationForm">
+              <div class="form-grid">
+                <label>支付通道
+                  <select id="profitRelationChannel">
+                    <option value="">请选择通道</option>
+                  </select>
+                </label>
+                <label>收入方账号<input id="profitRelationAccount" placeholder="支付宝登录号或 2088 用户号"></label>
+                <label>收入方账号类型
+                  <select id="profitRelationType">
+                    <option value="loginName">支付宝登录号</option>
+                    <option value="userId">支付宝用户号</option>
+                    <option value="cardAliasNo">支付宝绑卡编号</option>
+                  </select>
+                </label>
+                <label>收入方名称<input id="profitRelationName" placeholder="可选，建议填写真实名称"></label>
+                <label>请求号<input id="profitRelationOutRequestNo" placeholder="留空自动生成"></label>
+                <label>App Auth Token<input id="profitRelationAppAuthToken" placeholder="服务商代商户分帐时填写"></label>
+                <label class="wide">关系说明<input id="profitRelationMemo" value="订单分帐收入方"></label>
+                <label class="wide">扩展参数 JSON<textarea id="profitRelationExtra">{}</textarea></label>
+              </div>
+              <div class="form-actions">
+                <button class="btn" id="bindProfitRelationBtn" type="button">添加分帐关系</button>
+                <button class="btn secondary" id="queryProfitRelationBtn" type="button">查询分帐关系</button>
+              </div>
+            </form>
+            <pre id="profitRelationResult" class="operation-result">等待分帐关系操作</pre>
+          </div>
+        </section>
       </section>
 
       <section id="page-onboard" class="page">
@@ -2102,6 +2178,16 @@
     if (value && typeof value === "object" && value.message) {
       const detail = value.response ? value.response : value.items;
       element.textContent = value.message + (detail ? `\n${json(detail)}` : "");
+      return;
+    }
+    element.textContent = typeof value === "string" ? value : json(value);
+  }
+
+  function setProfitRelationResult(value) {
+    const element = $("profitRelationResult");
+    if (!element) return;
+    if (value && typeof value === "object" && value.message) {
+      element.textContent = value.message + (value.response ? `\n${json(value.response)}` : "");
       return;
     }
     element.textContent = typeof value === "string" ? value : json(value);
@@ -3142,6 +3228,54 @@
     await loadOrders();
   }
 
+  function profitRelationPayload(requireAccount = true, includePaging = false) {
+    const account = $("profitRelationAccount").value.trim();
+    if (requireAccount && !account) {
+      throw { message: "请填写收入方账号" };
+    }
+    const channelId = $("profitRelationChannel").value;
+    if (!channelId) {
+      throw { message: "请选择支付通道" };
+    }
+    return compact({
+      receiverAccount: account,
+      receiverType: $("profitRelationType").value,
+      receiverName: $("profitRelationName").value.trim(),
+      memo: $("profitRelationMemo").value.trim(),
+      outRequestNo: $("profitRelationOutRequestNo").value.trim() || `PR_${Date.now()}`,
+      pageNum: includePaging ? 1 : undefined,
+      pageSize: includePaging ? 20 : undefined,
+      appAuthToken: $("profitRelationAppAuthToken").value.trim(),
+      channelIds: [channelId],
+      extra: parseJson("profitRelationExtra", {})
+    });
+  }
+
+  async function bindProfitRelation() {
+    const data = await request("/api/v1/payments/profit-sharing/relations/bind", {
+      method: "POST",
+      body: JSON.stringify(profitRelationPayload(true))
+    });
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("添加分帐关系", data);
+    }
+    setProfitRelationResult({ message: "分帐关系已提交添加", response: data });
+  }
+
+  async function queryProfitRelation() {
+    const payload = profitRelationPayload(false, true);
+    delete payload.receiverName;
+    delete payload.memo;
+    const data = await request("/api/v1/payments/profit-sharing/relations/query", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("查询分帐关系", data);
+    }
+    setProfitRelationResult({ message: "分帐关系查询完成", response: data });
+  }
+
   function renderTopbarDate() {
     setText("serverDateText", topbarDateText());
   }
@@ -3193,6 +3327,7 @@
   function renderOrderChannelOptions() {
     renderChannelSelect("orderChannelFilter", "全部通道");
     renderChannelSelect("profitShareChannel", "请选择通道");
+    renderChannelSelect("profitRelationChannel", "请选择通道");
   }
 
   function renderChannelSelect(id, placeholder) {
@@ -3930,7 +4065,7 @@
   }
 
   function switchPage(page) {
-    document.querySelectorAll(".nav-btn").forEach((button) => {
+    document.querySelectorAll(".nav-btn[data-page]").forEach((button) => {
       button.classList.toggle("active", button.dataset.page === page);
     });
     document.querySelectorAll(".page").forEach((section) => {
@@ -3938,10 +4073,28 @@
     });
     const button = document.querySelector(`.nav-btn[data-page="${page}"]`);
     $("pageTitle").textContent = button ? button.innerText.trim() : "支付平台管理";
+    document.querySelectorAll(".nav-group").forEach((group) => {
+      const hasActiveChild = Boolean(group.querySelector(`.nav-btn[data-page="${page}"]`));
+      group.classList.toggle("open", hasActiveChild);
+      const toggle = group.querySelector("[data-nav-toggle]");
+      if (toggle) {
+        toggle.classList.toggle("active", hasActiveChild);
+        toggle.setAttribute("aria-expanded", hasActiveChild ? "true" : "false");
+      }
+    });
   }
 
-  document.querySelectorAll(".nav-btn").forEach((button) => {
+  document.querySelectorAll(".nav-btn[data-page]").forEach((button) => {
     button.addEventListener("click", () => switchPage(button.dataset.page));
+  });
+
+  document.querySelectorAll("[data-nav-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = button.closest(".nav-group");
+      const open = !group.classList.contains("open");
+      group.classList.toggle("open", open);
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+    });
   });
 
   document.querySelectorAll("[data-jump]").forEach((button) => {
@@ -4056,6 +4209,26 @@
       await submitChannelProfitShare();
     } catch (error) {
       setProfitShareResult(error);
+    }
+  });
+
+  $("profitRelationForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+  });
+
+  $("bindProfitRelationBtn").addEventListener("click", async () => {
+    try {
+      await bindProfitRelation();
+    } catch (error) {
+      setProfitRelationResult(error);
+    }
+  });
+
+  $("queryProfitRelationBtn").addEventListener("click", async () => {
+    try {
+      await queryProfitRelation();
+    } catch (error) {
+      setProfitRelationResult(error);
     }
   });
 

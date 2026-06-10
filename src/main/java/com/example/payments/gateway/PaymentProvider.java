@@ -9,6 +9,8 @@ import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.domain.ProfitSharingRelationBindRequest;
+import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 
@@ -29,6 +31,10 @@ public interface PaymentProvider {
     GatewayResponse preauthCapture(PaymentGatewayProperties.Channel channel, PreauthCaptureRequest request);
 
     GatewayResponse profitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingRequest request);
+
+    GatewayResponse bindProfitSharingRelation(PaymentGatewayProperties.Channel channel, ProfitSharingRelationBindRequest request);
+
+    GatewayResponse queryProfitSharingRelations(PaymentGatewayProperties.Channel channel, ProfitSharingRelationQueryRequest request);
 
     GatewayResponse queryComplaints(PaymentGatewayProperties.Channel channel, ComplaintQueryRequest request);
 

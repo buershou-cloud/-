@@ -14,6 +14,8 @@ import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
+import com.example.payments.domain.ProfitSharingRelationBindRequest;
+import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
@@ -85,6 +87,16 @@ public class PaymentController {
     @PostMapping("/profit-sharing/channel")
     public ProfitSharingBatchResult profitSharingByChannel(@Valid @RequestBody ProfitSharingBatchRequest request) {
         return paymentGatewayService.profitSharingByChannel(request);
+    }
+
+    @PostMapping("/profit-sharing/relations/bind")
+    public GatewayResponse bindProfitSharingRelation(@Valid @RequestBody ProfitSharingRelationBindRequest request) {
+        return paymentGatewayService.bindProfitSharingRelation(request);
+    }
+
+    @PostMapping("/profit-sharing/relations/query")
+    public GatewayResponse queryProfitSharingRelations(@RequestBody ProfitSharingRelationQueryRequest request) {
+        return paymentGatewayService.queryProfitSharingRelations(request);
     }
 
     @PostMapping("/complaints/query")
