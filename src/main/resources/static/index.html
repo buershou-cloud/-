@@ -349,11 +349,56 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
       margin-top: 14px;
       padding: 12px 0 2px;
       color: var(--muted);
       font-size: 13px;
       font-weight: 750;
+    }
+
+    .pagination-summary {
+      min-width: 190px;
+      color: var(--muted);
+    }
+
+    .pagination-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .pagination-size,
+    .pagination-jump {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .pagination-size select,
+    .pagination-jump input {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .pagination-size select {
+      min-width: 74px;
+      padding: 0 8px;
+    }
+
+    .pagination-jump input {
+      width: 74px;
+      padding: 0 10px;
+      text-align: center;
     }
 
     .page-buttons {
@@ -366,6 +411,7 @@
     .page-btn {
       min-width: 34px;
       height: 34px;
+      padding: 0 10px;
       border: 1px solid var(--line);
       border-radius: 7px;
       background: #fff;
@@ -385,6 +431,15 @@
     .page-btn:disabled {
       cursor: not-allowed;
       opacity: 0.45;
+    }
+
+    .page-ellipsis {
+      display: inline-grid;
+      place-items: center;
+      min-width: 24px;
+      height: 34px;
+      color: var(--muted);
+      font-weight: 900;
     }
 
     table {
@@ -3111,6 +3166,25 @@
     renderOrderPagination(totalPages, start, pageOrders.length);
   }
 
+  function compactPageItems(currentPage, totalPages) {
+    const pages = new Set([1, totalPages]);
+    const windowSize = 2;
+    for (let page = currentPage - windowSize; page <= currentPage + windowSize; page += 1) {
+      if (page >= 1 && page <= totalPages) {
+        pages.add(page);
+      }
+    }
+    const sorted = Array.from(pages).sort((a, b) => a - b);
+    const items = [];
+    sorted.forEach((page, index) => {
+      if (index > 0 && page - sorted[index - 1] > 1) {
+        items.push(`ellipsis-${sorted[index - 1]}-${page}`);
+      }
+      items.push(page);
+    });
+    return items;
+  }
+
   function renderOrderPagination(totalPages, start, pageCount) {
     const container = $("orderPagination");
     if (!container) return;
@@ -3118,14 +3192,32 @@
       container.innerHTML = '<span>暂无订单</span>';
       return;
     }
-    const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+    const pageItems = compactPageItems(state.orderPage, totalPages);
+    const pageSizeOptions = [10, 20, 30, 50, 100];
     const end = start + pageCount;
     container.innerHTML = `
-      <span>共 ${state.orders.length} 笔订单，当前 ${start + 1}-${end} 笔</span>
-      <div class="page-buttons">
-        <button class="page-btn" type="button" data-order-page="${state.orderPage - 1}" ${state.orderPage <= 1 ? "disabled" : ""}>上一页</button>
-        ${pages.map((page) => `<button class="page-btn ${page === state.orderPage ? "active" : ""}" type="button" data-order-page="${page}">${page}</button>`).join("")}
-        <button class="page-btn" type="button" data-order-page="${state.orderPage + 1}" ${state.orderPage >= totalPages ? "disabled" : ""}>下一页</button>
+      <span class="pagination-summary">共 ${state.orders.length} 笔订单，当前 ${start + 1}-${end} 笔，共 ${totalPages} 页</span>
+      <div class="pagination-controls">
+        <label class="pagination-size">每页
+          <select data-order-page-size>
+            ${pageSizeOptions.map((size) => `<option value="${size}" ${size === state.orderPageSize ? "selected" : ""}>${size}</option>`).join("")}
+          </select>
+          条
+        </label>
+        <div class="page-buttons">
+          <button class="page-btn" type="button" data-order-page="${state.orderPage - 1}" ${state.orderPage <= 1 ? "disabled" : ""}>上一页</button>
+          ${pageItems.map((item) => typeof item === "number"
+            ? `<button class="page-btn ${item === state.orderPage ? "active" : ""}" type="button" data-order-page="${item}">${item}</button>`
+            : '<span class="page-ellipsis">...</span>'
+          ).join("")}
+          <button class="page-btn" type="button" data-order-page="${state.orderPage + 1}" ${state.orderPage >= totalPages ? "disabled" : ""}>下一页</button>
+        </div>
+        <form class="pagination-jump" data-order-page-jump-form>
+          <span>跳到</span>
+          <input data-order-page-jump type="number" min="1" max="${totalPages}" value="${state.orderPage}">
+          <span>页</span>
+          <button class="page-btn" type="submit">跳转</button>
+        </form>
       </div>
     `;
   }
@@ -4257,6 +4349,28 @@
     const page = Number(button.dataset.orderPage);
     const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
     state.orderPage = Math.min(Math.max(page, 1), totalPages);
+    closeOrderMenus("");
+    renderOrders();
+  });
+
+  $("orderPagination").addEventListener("change", (event) => {
+    const select = event.target.closest("[data-order-page-size]");
+    if (!select) return;
+    const previousStart = (state.orderPage - 1) * state.orderPageSize;
+    state.orderPageSize = Number(select.value) || 10;
+    state.orderPage = Math.floor(previousStart / state.orderPageSize) + 1;
+    closeOrderMenus("");
+    renderOrders();
+  });
+
+  $("orderPagination").addEventListener("submit", (event) => {
+    const form = event.target.closest("[data-order-page-jump-form]");
+    if (!form) return;
+    event.preventDefault();
+    const input = form.querySelector("[data-order-page-jump]");
+    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    const page = Number(input?.value);
+    state.orderPage = Math.min(Math.max(Number.isFinite(page) ? page : state.orderPage, 1), totalPages);
     closeOrderMenus("");
     renderOrders();
   });
