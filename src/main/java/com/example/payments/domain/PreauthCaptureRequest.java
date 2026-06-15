@@ -11,7 +11,7 @@ import java.util.Map;
 public record PreauthCaptureRequest(
         String preauthOutTradeNo,
         @NotBlank String outTradeNo,
-        @NotBlank String authNo,
+        String authNo,
         @NotBlank String subject,
         @NotNull @DecimalMin("0.01") BigDecimal totalAmount,
         String buyerId,
@@ -26,6 +26,22 @@ public record PreauthCaptureRequest(
                 value,
                 outTradeNo,
                 authNo,
+                subject,
+                totalAmount,
+                buyerId,
+                sellerId,
+                authConfirmMode,
+                appAuthToken,
+                channelIds,
+                extra
+        );
+    }
+
+    public PreauthCaptureRequest withAuthNo(String value) {
+        return new PreauthCaptureRequest(
+                preauthOutTradeNo,
+                outTradeNo,
+                value,
                 subject,
                 totalAmount,
                 buyerId,

@@ -207,6 +207,10 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized DemoOrderView view(String outTradeNo) {
+        return DemoOrderView.from(order(outTradeNo));
+    }
+
     public synchronized DemoOrderView complete(String outTradeNo) {
         DemoOrder order = order(outTradeNo);
         if (order.isPreAuthorization()) {
@@ -493,6 +497,18 @@ public class DemoOrderService {
                 order.getStatus(),
                 statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus())
         ));
+        persist(order);
+        return DemoOrderView.from(order);
+    }
+
+    public synchronized DemoOrderView recordPreauthAuthNo(String outTradeNo, String authNo, String channelId) {
+        DemoOrder order = order(outTradeNo);
+        if (hasText(authNo)) {
+            order.setTradeNo(authNo.trim());
+        }
+        if (hasText(channelId)) {
+            order.setChannelId(channelId.trim());
+        }
         persist(order);
         return DemoOrderView.from(order);
     }

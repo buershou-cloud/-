@@ -3218,9 +3218,6 @@
       throw { message: "只有冻结中的预授权订单可以转支付。" };
     }
     const authNo = (order.tradeNo || "").trim();
-    if (!authNo) {
-      throw { message: "订单缺少预授权号，无法转支付。" };
-    }
     const captureAmount = preauthUnfreezeRemainingAmountValue(order) || orderAmountValue(order);
     if (captureAmount <= 0) {
       throw { message: "订单已无可转支付金额。" };
@@ -3254,9 +3251,6 @@
       throw { message: "只有冻结中的预授权订单可以解冻。" };
     }
     const authNo = (order.tradeNo || "").trim();
-    if (!authNo) {
-      throw { message: "订单缺少预授权号，无法解冻。" };
-    }
     const remaining = preauthUnfreezeRemainingAmountValue(order);
     if (remaining <= 0) {
       throw { message: "订单已无可解冻金额。" };

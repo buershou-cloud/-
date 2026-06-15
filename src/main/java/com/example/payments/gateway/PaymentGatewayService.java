@@ -108,30 +108,44 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse preauthCapture(PreauthCaptureRequest request) {
+        PreauthCaptureRequest prepared = request.withAuthNo(resolvePreauthAuthNo(
+                request.authNo(),
+                request.preauthOutTradeNo(),
+                request.channelIds(),
+                request.appAuthToken(),
+                request.extra()
+        ));
         GatewayResponse response = execute(
                 null,
-                request.channelIds(),
-                request.totalAmount(),
+                prepared.channelIds(),
+                prepared.totalAmount(),
                 null,
-                channel -> provider(channel).preauthCapture(channel, request)
+                channel -> provider(channel).preauthCapture(channel, prepared)
         );
-        if (response.status() != PaymentStatus.FAILED && hasText(request.preauthOutTradeNo())) {
-            orderService.convertPreauthToPay(request.preauthOutTradeNo(), firstText(response.tradeNo(), request.outTradeNo()));
+        if (response.status() != PaymentStatus.FAILED && hasText(prepared.preauthOutTradeNo())) {
+            orderService.convertPreauthToPay(prepared.preauthOutTradeNo(), firstText(response.tradeNo(), prepared.outTradeNo()));
         }
         return response;
     }
 
     public GatewayResponse preauthUnfreeze(PreauthUnfreezeRequest request) {
-        orderService.ensurePreauthUnfreezable(request.preauthOutTradeNo(), request.authNo(), request.amount());
+        PreauthUnfreezeRequest prepared = request.withAuthNo(resolvePreauthAuthNo(
+                request.authNo(),
+                request.preauthOutTradeNo(),
+                request.channelIds(),
+                request.appAuthToken(),
+                request.extra()
+        ));
+        orderService.ensurePreauthUnfreezable(prepared.preauthOutTradeNo(), prepared.authNo(), prepared.amount());
         GatewayResponse response = execute(
                 null,
-                request.channelIds(),
-                request.amount(),
+                prepared.channelIds(),
+                prepared.amount(),
                 null,
-                channel -> provider(channel).preauthUnfreeze(channel, request)
+                channel -> provider(channel).preauthUnfreeze(channel, prepared)
         );
-        if (response.status() == PaymentStatus.SUCCESS && hasText(request.preauthOutTradeNo())) {
-            orderService.recordPreauthUnfreeze(request, response);
+        if (response.status() == PaymentStatus.SUCCESS && hasText(prepared.preauthOutTradeNo())) {
+            orderService.recordPreauthUnfreeze(prepared, response);
         }
         return response;
     }
@@ -482,6 +496,83 @@ public class PaymentGatewayService {
             throw new GatewayException("UNSUPPORTED_PROVIDER", "Unsupported provider: " + channel.getProvider());
         }
         return provider;
+    }
+
+    private String resolvePreauthAuthNo(
+            String currentAuthNo,
+            String preauthOutTradeNo,
+            Collection<String> channelIds,
+            String appAuthToken,
+            Map<String, Object> extra
+    ) {
+        if (hasText(currentAuthNo)) {
+            return currentAuthNo.trim();
+        }
+        if (!hasText(preauthOutTradeNo)) {
+            throw new IllegalArgumentException("预授权订单号不能为空，无法查询支付宝授权号");
+        }
+        DemoOrderView order = orderService.view(preauthOutTradeNo.trim());
+        if (hasText(order.tradeNo())) {
+            return order.tradeNo().trim();
+        }
+        String lastMessage = null;
+        for (String outRequestNo : preauthOutRequestNoCandidates(preauthOutTradeNo.trim(), order, extra)) {
+            Map<String, Object> queryExtra = new LinkedHashMap<>();
+            queryExtra.put("out_request_no", outRequestNo);
+            queryExtra.put("operation_type", "FREEZE");
+            String operationId = mapText(extra, "operation_id");
+            if (hasText(operationId)) {
+                queryExtra.put("operation_id", operationId.trim());
+            }
+            GatewayResponse response = execute(
+                    null,
+                    channelIds,
+                    null,
+                    null,
+                    channel -> provider(channel).preauthQuery(
+                            channel,
+                            new PaymentQueryRequest(preauthOutTradeNo.trim(), null, appAuthToken, null, queryExtra)
+                    )
+            );
+            lastMessage = firstText(response.message(), lastMessage);
+            if (response.status() != PaymentStatus.FAILED && hasText(response.tradeNo())) {
+                orderService.recordPreauthAuthNo(preauthOutTradeNo.trim(), response.tradeNo(), response.channelId());
+                return response.tradeNo().trim();
+            }
+        }
+        throw new IllegalArgumentException(firstText(
+                lastMessage,
+                "支付宝预授权号为空，无法转支付或解冻；请确认用户已经完成预授权，再查询订单后重试"
+        ));
+    }
+
+    private static List<String> preauthOutRequestNoCandidates(
+            String outTradeNo,
+            DemoOrderView order,
+            Map<String, Object> extra
+    ) {
+        List<String> candidates = new ArrayList<>();
+        addCandidate(candidates, mapText(extra, "out_request_no"));
+        addCandidate(candidates, mapText(extra, "auth_out_request_no"));
+        if (order != null && hasText(order.productName()) && order.productName().toUpperCase().contains("H5")) {
+            addCandidate(candidates, outTradeNo + "_h5");
+            addCandidate(candidates, outTradeNo + "_voucher");
+        } else {
+            addCandidate(candidates, outTradeNo + "_voucher");
+            addCandidate(candidates, outTradeNo + "_h5");
+        }
+        addCandidate(candidates, outTradeNo);
+        return candidates;
+    }
+
+    private static void addCandidate(List<String> candidates, String value) {
+        if (!hasText(value)) {
+            return;
+        }
+        String text = value.trim();
+        if (!candidates.contains(text)) {
+            candidates.add(text);
+        }
     }
 
     private void recordOrder(PayCreateRequest request, GatewayResponse response) {

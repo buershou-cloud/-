@@ -8,6 +8,7 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.gateway.GatewayException;
@@ -636,6 +637,34 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void preauthQueryUsesOfficialFundAuthOperationDetailQuery() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.preauthQuery(
+                standardChannel(),
+                new PaymentQueryRequest(
+                        "PREAUTH-H5-001",
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(
+                                "out_request_no", "PREAUTH-H5-001_h5",
+                                "operation_type", "FREEZE"
+                        )
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.fund.auth.operation.detail.query");
+        assertThat(client.bizContent)
+                .containsEntry("out_order_no", "PREAUTH-H5-001")
+                .containsEntry("out_request_no", "PREAUTH-H5-001_h5")
+                .containsEntry("operation_type", "FREEZE")
+                .doesNotContainKeys("out_trade_no", "trade_no");
+        assertThat(response.tradeNo()).isEqualTo("2026052900000000000000000001");
+    }
+
+    @Test
     void preauthUnfreezeUsesOfficialUnfreezeFields() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
@@ -848,6 +877,11 @@ class AlipayPaymentProviderOnboardingTest {
             if ("alipay.fund.auth.order.voucher.create".equals(method)) {
                 response.put("out_order_no", asString(bizContent.get("out_order_no")));
                 response.put("code_value", "https://qr.alipay.test/" + bizContent.get("out_order_no"));
+            }
+            if ("alipay.fund.auth.operation.detail.query".equals(method)) {
+                response.put("out_order_no", asString(bizContent.get("out_order_no")));
+                response.put("auth_no", "2026052900000000000000000001");
+                response.put("status", "SUCCESS");
             }
             return new AlipayGatewayResponse(
                     method,

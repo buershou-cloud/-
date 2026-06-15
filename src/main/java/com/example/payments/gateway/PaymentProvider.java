@@ -29,6 +29,8 @@ public interface PaymentProvider {
 
     GatewayResponse refund(PaymentGatewayProperties.Channel channel, RefundCreateRequest request);
 
+    GatewayResponse preauthQuery(PaymentGatewayProperties.Channel channel, PaymentQueryRequest request);
+
     GatewayResponse preauthCapture(PaymentGatewayProperties.Channel channel, PreauthCaptureRequest request);
 
     GatewayResponse preauthUnfreeze(PaymentGatewayProperties.Channel channel, PreauthUnfreezeRequest request);

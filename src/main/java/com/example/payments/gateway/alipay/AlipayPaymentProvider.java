@@ -43,6 +43,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_OAUTH_TOKEN = "alipay.system.oauth.token";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
     private static final String METHOD_PREAUTH_VOUCHER_CREATE = "alipay.fund.auth.order.voucher.create";
+    private static final String METHOD_PREAUTH_OPERATION_QUERY = "alipay.fund.auth.operation.detail.query";
     private static final String METHOD_PREAUTH_UNFREEZE = "alipay.fund.auth.order.unfreeze";
     private static final String METHOD_DIRECT_ZFT_SIMPLE_CREATE = "ant.merchant.expand.indirect.zft.simplecreate";
     private static final String METHOD_DIRECT_ZFT_ORDER_QUERY = "ant.merchant.expand.indirect.zftorder.query";
@@ -121,6 +122,21 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "refund_reason", request.refundReason());
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_REFUND, bizContent, options(request.appAuthToken(), null, null));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse preauthQuery(PaymentGatewayProperties.Channel channel, PaymentQueryRequest request) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        putIfText(bizContent, "auth_no", request.tradeNo());
+        putIfText(bizContent, "out_order_no", request.outTradeNo());
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(
+                channel,
+                METHOD_PREAUTH_OPERATION_QUERY,
+                bizContent,
+                options(request.appAuthToken(), null, null)
+        );
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
 

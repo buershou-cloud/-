@@ -59,6 +59,10 @@ public class DemoOrder {
         return channelId;
     }
 
+    public void setChannelId(String channelId) {
+        this.channelId = channelId;
+    }
+
     public String getMerchantId() {
         return merchantId;
     }

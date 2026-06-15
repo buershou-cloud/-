@@ -10,7 +10,7 @@ import java.util.Map;
 
 public record PreauthUnfreezeRequest(
         String preauthOutTradeNo,
-        @NotBlank String authNo,
+        String authNo,
         @NotBlank String outRequestNo,
         @NotNull @DecimalMin("0.01") BigDecimal amount,
         String remark,
@@ -22,6 +22,19 @@ public record PreauthUnfreezeRequest(
         return new PreauthUnfreezeRequest(
                 value,
                 authNo,
+                outRequestNo,
+                amount,
+                remark,
+                appAuthToken,
+                channelIds,
+                extra
+        );
+    }
+
+    public PreauthUnfreezeRequest withAuthNo(String value) {
+        return new PreauthUnfreezeRequest(
+                preauthOutTradeNo,
+                value,
                 outRequestNo,
                 amount,
                 remark,
