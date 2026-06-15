@@ -62,11 +62,12 @@ public class OrderController {
     }
 
     @PostMapping("/{outTradeNo}/convert-to-pay")
-    public GatewayResponse convertPreauthToPay(
+    public PreauthConversionResponse convertPreauthToPay(
             @PathVariable String outTradeNo,
             @Valid @RequestBody PreauthCaptureRequest request
     ) {
-        return paymentGatewayService.preauthCapture(request.withPreauthOutTradeNo(outTradeNo));
+        GatewayResponse gateway = paymentGatewayService.preauthCapture(request.withPreauthOutTradeNo(outTradeNo));
+        return new PreauthConversionResponse(gateway, orderService.view(outTradeNo));
     }
 
     @PostMapping("/{outTradeNo}/unfreeze")
@@ -80,5 +81,8 @@ public class OrderController {
     @DeleteMapping("/{outTradeNo}")
     public DemoOrderView delete(@PathVariable String outTradeNo) {
         return orderService.delete(outTradeNo);
+    }
+
+    public record PreauthConversionResponse(GatewayResponse gateway, DemoOrderView order) {
     }
 }

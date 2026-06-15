@@ -2722,6 +2722,19 @@
     return state.orders.find((item) => item.outTradeNo === outTradeNo);
   }
 
+  function mergeOrderIntoState(order) {
+    if (!order?.outTradeNo) return;
+    const index = state.orders.findIndex((item) => item.outTradeNo === order.outTradeNo);
+    if (index >= 0) {
+      state.orders.splice(index, 1, order);
+    } else {
+      state.orders.unshift(order);
+    }
+    renderOrders();
+    renderProfitShareOrders();
+    refreshSummaryViews();
+  }
+
   async function refreshOrdersAfterMutation(outTradeNo, isFresh = () => true) {
     let latest = null;
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -3259,10 +3272,12 @@
         channelIds: order.channelId ? [order.channelId] : []
       }))
     });
-    if (gatewayFailed(data)) {
-      throw gatewayFailure("支付宝预授权转支付", data);
+    const gateway = data.gateway || data;
+    if (gatewayFailed(gateway)) {
+      throw gatewayFailure("支付宝预授权转支付", gateway);
     }
-    setDashboardResult({ message: `预授权转支付已提交：${order.outTradeNo}，金额 ${money(captureAmount)}`, response: data });
+    mergeOrderIntoState(data.order);
+    setDashboardResult({ message: `预授权转支付已完成：${order.outTradeNo}，金额 ${money(captureAmount)}`, response: gateway });
     await refreshOrdersAfterMutation(order.outTradeNo, (latest) => !latest.preAuthorization || latest.status !== "FROZEN");
   }
 
