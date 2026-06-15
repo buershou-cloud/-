@@ -2356,6 +2356,7 @@
   async function request(path, options = {}) {
     const response = await fetch(path, {
       headers: { "Content-Type": "application/json; charset=utf-8" },
+      cache: "no-store",
       ...options
     });
     if (response.status === 401) {
@@ -2702,8 +2703,8 @@
     `;
   }
 
-  async function loadOrders(resetPage = false) {
-    const query = orderQueryString();
+  async function loadOrders(resetPage = false, forceFresh = false) {
+    const query = orderQueryString(forceFresh);
     state.orders = await request(`/api/v1/orders/recent${query}`);
     if (resetPage) {
       state.orderPage = 1;
@@ -2711,6 +2712,27 @@
     renderOrders();
     renderProfitShareOrders();
     refreshSummaryViews();
+  }
+
+  function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function orderFromState(outTradeNo) {
+    return state.orders.find((item) => item.outTradeNo === outTradeNo);
+  }
+
+  async function refreshOrdersAfterMutation(outTradeNo, isFresh = () => true) {
+    let latest = null;
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await loadOrders(false, true);
+      latest = orderFromState(outTradeNo);
+      if (!latest || isFresh(latest)) {
+        return latest;
+      }
+      await sleep(700);
+    }
+    return latest;
   }
 
   async function loadMerchants() {
@@ -3003,7 +3025,7 @@
     window.location.href = `/merchant.html?merchantId=${encodeURIComponent(merchantId)}&demoLogin=1`;
   }
 
-  function orderQueryString() {
+  function orderQueryString(forceFresh = false) {
     const params = new URLSearchParams();
     const values = {
       beginTime: $("orderBeginTime")?.value,
@@ -3015,6 +3037,9 @@
     Object.entries(values).forEach(([key, value]) => {
       if (value && value.trim()) params.set(key, value.trim());
     });
+    if (forceFresh) {
+      params.set("_", String(Date.now()));
+    }
     const query = params.toString();
     return query ? `?${query}` : "";
   }
@@ -3206,7 +3231,8 @@
       throw gatewayFailure("支付宝退款", data);
     }
     setDashboardResult({ message: refundResultText(order, refundAmount, outRequestNo, data) });
-    await loadOrders();
+    await refreshOrdersAfterMutation(order.outTradeNo, (latest) => refundableAmountValue(latest) < refundableAmountValue(order)
+      || latest.status !== order.status);
   }
 
   async function capturePreauthOrder(outTradeNo) {
@@ -3237,7 +3263,7 @@
       throw gatewayFailure("支付宝预授权转支付", data);
     }
     setDashboardResult({ message: `预授权转支付已提交：${order.outTradeNo}，金额 ${money(captureAmount)}`, response: data });
-    await loadOrders();
+    await refreshOrdersAfterMutation(order.outTradeNo, (latest) => !latest.preAuthorization || latest.status !== "FROZEN");
   }
 
   async function unfreezePreauthOrder(outTradeNo) {
@@ -3270,7 +3296,8 @@
       throw gatewayFailure("支付宝预授权解冻", data);
     }
     setDashboardResult({ message: `预授权解冻已提交：${order.outTradeNo}，金额 ${money(amount)}`, response: data });
-    await loadOrders();
+    await refreshOrdersAfterMutation(order.outTradeNo, (latest) => preauthUnfreezeRemainingAmountValue(latest) < remaining
+      || latest.status !== order.status);
   }
 
   async function handleOrderAction(outTradeNo, action) {
@@ -3317,7 +3344,7 @@
     try {
       const data = await request(endpoint.path, { method: endpoint.method });
       setDashboardResult({ message: `${endpoint.title}: ${data.outTradeNo}` });
-      await loadOrders();
+      await loadOrders(false, true);
     } catch (error) {
       setDashboardResult(error);
     }
