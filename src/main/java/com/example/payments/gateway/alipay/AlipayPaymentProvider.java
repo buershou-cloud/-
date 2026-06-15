@@ -533,7 +533,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     ) {
         Map<String, Object> data = response.response();
         String outTradeNo = firstText(asString(data.get("out_trade_no")), fallbackOutTradeNo);
-        String tradeNo = firstText(asString(data.get("trade_no")), extractAuthNo(data));
+        String tradeNo = preauthQueryTradeNo(response.method(), data);
         PaymentStatus status = status(response);
         String message = firstText(response.subMessage(), response.message());
         return new GatewayResponse(
@@ -548,6 +548,13 @@ public class AlipayPaymentProvider implements PaymentProvider {
                 responseRaw(response, requestBizContent),
                 List.of()
         );
+    }
+
+    private static String preauthQueryTradeNo(String method, Map<String, Object> data) {
+        if (METHOD_PREAUTH_OPERATION_QUERY.equals(method)) {
+            return firstText(extractAuthNo(data), asString(data.get("trade_no")));
+        }
+        return firstText(asString(data.get("trade_no")), extractAuthNo(data));
     }
 
     private static PaymentStatus status(AlipayGatewayResponse response) {

@@ -58,9 +58,12 @@ public class AlipayNotifyController {
             return ResponseEntity.badRequest().body("failure");
         }
         String tradeStatus = firstText(params.get("trade_status"), preauthTradeStatus(params.get("status")));
+        String gatewayTradeNo = isPreauthNotify(params)
+                ? firstText(params.get("auth_no"), params.get("trade_no"))
+                : firstText(params.get("trade_no"), params.get("auth_no"));
         DemoOrderView order = orderService.recordAlipayNotify(
                 outTradeNo,
-                firstText(params.get("trade_no"), params.get("auth_no")),
+                gatewayTradeNo,
                 channelId,
                 amount(params),
                 tradeStatus
@@ -149,8 +152,16 @@ public class AlipayNotifyController {
         return status;
     }
 
+    private static boolean isPreauthNotify(Map<String, String> params) {
+        return hasText(params.get("out_order_no")) || hasText(params.get("status"));
+    }
+
     private static String firstText(String preferred, String fallback) {
         return preferred == null || preferred.isBlank() ? fallback : preferred;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static String escape(String value) {

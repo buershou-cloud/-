@@ -783,6 +783,26 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void preauthQueryPrefersAuthNoOverTradeNoWhenBothExist() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        client.operationDetailIncludesTradeNo = true;
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.preauthQuery(
+                standardChannel(),
+                new PaymentQueryRequest(
+                        "PREAUTH-H5-001",
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("out_request_no", "PREAUTH-H5-001_h5")
+                )
+        );
+
+        assertThat(response.tradeNo()).isEqualTo("2026052900000000000000000001");
+    }
+
+    @Test
     void preauthUnfreezeUsesOfficialUnfreezeFields() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
@@ -915,6 +935,7 @@ class AlipayPaymentProviderOnboardingTest {
         private Map<String, String> businessParams;
         private final List<String> methods = new ArrayList<>();
         private boolean operationDetailAuthNoNested;
+        private boolean operationDetailIncludesTradeNo;
 
         private CapturingAlipayClient() {
             super(new ObjectMapper());
@@ -999,6 +1020,9 @@ class AlipayPaymentProviderOnboardingTest {
             }
             if ("alipay.fund.auth.operation.detail.query".equals(method)) {
                 response.put("out_order_no", asString(bizContent.get("out_order_no")));
+                if (operationDetailIncludesTradeNo) {
+                    response.put("trade_no", "2026061500000000000000009999");
+                }
                 if (operationDetailAuthNoNested) {
                     response.put("operation_detail", Map.of("auth_no", "2026052900000000000000000001"));
                 } else {
