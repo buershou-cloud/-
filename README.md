@@ -5,7 +5,8 @@ Spring Boot payment gateway skeleton for these Alipay flows:
 - 手机网站支付: `alipay.trade.wap.pay` with `QUICK_WAP_WAY`
 - APP支付: `alipay.trade.app.pay` with `QUICK_MSECURITY_PAY`; returns the signed order string for the Alipay App SDK
 - 当面付: `alipay.trade.precreate` with `FACE_TO_FACE_PAYMENT`, no buyer `auth_code` required
-- 预授权扫码: `alipay.fund.auth.order.voucher.create` with `PRE_AUTH`; transfer/capture uses `alipay.trade.pay` with `product_code=PRE_AUTH`, `auth_no`, `buyer_id`, and `seller_id`
+- 线下预授权扫码: `alipay.fund.auth.order.voucher.create` with `PRE_AUTH`; transfer/capture uses `alipay.trade.pay` with `product_code=PRE_AUTH`, `auth_no`, `buyer_id`, and `seller_id`
+- H5 预授权: `alipay.fund.auth.order.app.freeze` with `PRE_AUTH_ONLINE`; returns a signed order string for Alipay H5 `tradePay`
 - 电脑网站支付: `alipay.trade.page.pay` with `FAST_INSTANT_TRADE_PAY`
 - 订单码: `alipay.trade.precreate` with `QR_CODE_OFFLINE`, then poll `alipay.trade.query`; unpaid timeout can call `alipay.trade.cancel`
 - JSAPI 支付: `alipay.trade.create` with `JSAPI_PAY`, requires `buyerId` or `buyerOpenId`

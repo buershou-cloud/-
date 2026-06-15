@@ -5,7 +5,8 @@ public enum PaymentProduct {
     ALIPAY_APP("APP支付"),
     ALIPAY_F2F("当面付"),
     ALIPAY_PAYMENT_CODE("付款码"),
-    ALIPAY_PREAUTH("预授权"),
+    ALIPAY_PREAUTH("线下预授权"),
+    ALIPAY_PREAUTH_H5("H5预授权"),
     ALIPAY_PAGE("电脑网站支付"),
     ALIPAY_ORDER_CODE("订单码"),
     ALIPAY_JSAPI("JSAPI支付"),
@@ -46,6 +47,7 @@ public enum PaymentProduct {
                  ALIPAY_F2F,
                  ALIPAY_PAYMENT_CODE,
                  ALIPAY_PREAUTH,
+                 ALIPAY_PREAUTH_H5,
                  ALIPAY_PAGE,
                  ALIPAY_ORDER_CODE,
                  ALIPAY_JSAPI -> true;

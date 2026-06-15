@@ -78,6 +78,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
             case ALIPAY_ORDER_CODE -> orderCodePay(channel, request);
             case ALIPAY_JSAPI -> jsapi(channel, request);
             case ALIPAY_PREAUTH -> preauth(channel, request);
+            case ALIPAY_PREAUTH_H5 -> preauthH5(channel, request);
             case ALIPAY_DIRECT -> directPay(channel, request);
             case ALIPAY_DIRECT_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
             case ALIPAY_DIRECT_APP -> appPay(channel, request);
@@ -342,12 +343,42 @@ public class AlipayPaymentProvider implements PaymentProvider {
     }
 
     private GatewayResponse preauth(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        Map<String, Object> bizContent = preauthBiz(request, "PRE_AUTH", "_voucher");
+        String method = asString(valueFromExtra(request.extra(), "preauth_method", METHOD_PREAUTH_VOUCHER_CREATE));
+        bizContent.remove("preauth_method");
+        AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
+        String qrCode = firstText(asString(response.response().get("code_value")), asString(response.response().get("code_url")));
+        return apiResponse(channel.getId(), response, request.outTradeNo(), qrCode, bizContent);
+    }
+
+    private GatewayResponse preauthH5(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        Map<String, Object> bizContent = preauthBiz(request, "PRE_AUTH_ONLINE", "_h5");
+        bizContent.remove("preauth_method");
+        String orderString = client.orderString(channel, METHOD_PREAUTH_FREEZE, bizContent, options(request));
+        Map<String, Object> raw = requestRaw(METHOD_PREAUTH_FREEZE, asString(bizContent.get("product_code")));
+        raw.put("order_string", orderString);
+        return new GatewayResponse(
+                channel.getId(),
+                PaymentStatus.CREATED,
+                "PREAUTH_H5_ORDER_CREATED",
+                "Alipay H5 preauth order string created",
+                request.outTradeNo(),
+                null,
+                null,
+                null,
+                orderString,
+                raw,
+                List.of()
+        );
+    }
+
+    private Map<String, Object> preauthBiz(PayCreateRequest request, String defaultProductCode, String requestSuffix) {
         Map<String, Object> bizContent = new LinkedHashMap<>();
         bizContent.put("out_order_no", request.outTradeNo());
-        bizContent.put("out_request_no", valueFromExtra(request.extra(), "out_request_no", request.outTradeNo() + "_voucher"));
+        bizContent.put("out_request_no", valueFromExtra(request.extra(), "out_request_no", request.outTradeNo() + requestSuffix));
         bizContent.put("order_title", request.subject());
         bizContent.put("amount", amount(request.totalAmount()));
-        String productCode = asString(valueFromExtra(request.extra(), "product_code", "PRE_AUTH"));
+        String productCode = asString(valueFromExtra(request.extra(), "product_code", defaultProductCode));
         bizContent.put("product_code", productCode);
         putIfText(bizContent, "timeout_express", request.timeoutExpress());
         putIfText(bizContent, "payee_user_id", asString(valueFromExtra(request.extra(), "payee_user_id", null)));
@@ -356,11 +387,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfPresent(bizContent, "extra_param", valueFromExtra(request.extra(), "extra_param", null));
         merge(bizContent, request.extra());
         removeInternalExtras(bizContent);
-        String method = asString(valueFromExtra(request.extra(), "preauth_method", METHOD_PREAUTH_VOUCHER_CREATE));
-        bizContent.remove("preauth_method");
-        AlipayGatewayResponse response = client.execute(channel, method, bizContent, options(request));
-        String qrCode = firstText(asString(response.response().get("code_value")), asString(response.response().get("code_url")));
-        return apiResponse(channel.getId(), response, request.outTradeNo(), qrCode, bizContent);
+        return bizContent;
     }
 
     private GatewayResponse directPay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {

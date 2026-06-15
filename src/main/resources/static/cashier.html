@@ -418,7 +418,8 @@
     ALIPAY_WAP: "WAP手机",
     ALIPAY_PAGE: "PC网页",
     ALIPAY_JSAPI: "JSAPI",
-    ALIPAY_PREAUTH: "预授权",
+    ALIPAY_PREAUTH: "线下预授权",
+    ALIPAY_PREAUTH_H5: "H5预授权",
     ALIPAY_DIRECT_WAP: "直付通WAP手机",
     ALIPAY_DIRECT_F2F: "直付通当面付",
     ALIPAY_DIRECT_APP: "直付通APP支付",
@@ -433,6 +434,7 @@
     "ALIPAY_F2F",
     "ALIPAY_DIRECT_F2F",
     "ALIPAY_PREAUTH",
+    "ALIPAY_PREAUTH_H5",
     "ALIPAY_APP",
     "ALIPAY_DIRECT_APP",
     "ALIPAY_WAP",
@@ -695,6 +697,10 @@
 
   function isPaymentCodeProduct(product) {
     return product === "ALIPAY_PAYMENT_CODE";
+  }
+
+  function isH5PreauthProduct(product) {
+    return product === "ALIPAY_PREAUTH_H5";
   }
 
   function isPagePayProduct(product) {
@@ -1103,6 +1109,24 @@
     return lastResult || {};
   }
 
+  async function alipayH5PreauthTradePay(orderString) {
+    const bridge = await waitAlipayBridge();
+    const attempts = [
+      { orderStr: orderString },
+      { orderString },
+      { tradeNO: orderString }
+    ];
+    let lastResult;
+    for (const options of attempts) {
+      const result = await callAlipayTradePay(bridge, options);
+      lastResult = result;
+      if (!isInvalidBridgeParams(result)) {
+        return result;
+      }
+    }
+    return lastResult || {};
+  }
+
   function callAlipayTradePay(bridge, options) {
     return new Promise((resolve) => {
       bridge.call("tradePay", options, (result) => resolve(result || {}));
@@ -1337,6 +1361,29 @@
       }
       const orderString = appOrderString(data);
       if (orderString) {
+        if (isH5PreauthProduct(currentProduct)) {
+          if (!isAlipayClient()) {
+            writeResult({ code: "ALIPAY_PREAUTH_H5_CLIENT_REQUIRED", message: "H5预授权需要在支付宝内打开收银台后发起。" }, "bad");
+            return;
+          }
+          writeResult("正在唤起支付宝 H5 预授权...", "loading");
+          const freezeResult = await alipayH5PreauthTradePay(orderString);
+          const resultCode = tradePayResultCode(freezeResult);
+          if (resultCode === "9000") {
+            writeResult("预授权已提交，请稍后在后台订单列表查看冻结结果。", "ok");
+            return;
+          }
+          if (resultCode === "8000") {
+            writeResult("预授权处理中，请稍后在后台订单列表查看冻结结果。", "loading");
+            return;
+          }
+          writeResult({
+            code: resultCode || "ALIPAY_PREAUTH_H5_FAILED",
+            message: tradePayErrorMessage(freezeResult),
+            raw: freezeResult
+          }, "bad");
+          return;
+        }
         const appPayUrl = appPayLaunchUrl(orderString);
         startAppPaymentPolling(data, payload);
         if (isMobilePayClient()) {

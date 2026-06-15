@@ -48,6 +48,7 @@ payment:
         - ALIPAY_F2F
         - ALIPAY_PAYMENT_CODE
         - ALIPAY_PREAUTH
+        - ALIPAY_PREAUTH_H5
         - ALIPAY_PAGE
         - ALIPAY_ORDER_CODE
         - ALIPAY_JSAPI

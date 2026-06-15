@@ -480,7 +480,8 @@ public class PaymentGatewayService {
                 extraText(request.extra(), "merchantName", "默认商户"),
                 request.product().label(),
                 request.totalAmount(),
-                request.product() == PaymentProduct.ALIPAY_PREAUTH,
+                request.product() == PaymentProduct.ALIPAY_PREAUTH
+                        || request.product() == PaymentProduct.ALIPAY_PREAUTH_H5,
                 response.status()
         );
         orderService.recordPaymentMetadata(request.outTradeNo(), request, response);

@@ -560,6 +560,45 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void h5PreauthProductCreatesFreezeOrderString() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PREAUTH_H5,
+                        "PREAUTH-H5-001",
+                        "h5 preauth",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "30m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.fund.auth.order.app.freeze");
+        assertThat(client.bizContent)
+                .containsEntry("out_order_no", "PREAUTH-H5-001")
+                .containsEntry("out_request_no", "PREAUTH-H5-001_h5")
+                .containsEntry("product_code", "PRE_AUTH_ONLINE")
+                .containsEntry("timeout_express", "30m")
+                .doesNotContainKeys("pay_timeout", "preauth_method");
+        assertThat(response.raw()).containsEntry("request_method", "alipay.fund.auth.order.app.freeze");
+        assertThat(response.raw()).containsKey("order_string");
+    }
+
+    @Test
     void preauthCaptureUsesOfficialTradePayFields() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
