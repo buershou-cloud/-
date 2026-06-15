@@ -692,17 +692,6 @@
     }, 1000);
   }
 
-  function h5PreauthAlipayUrl() {
-    const url = new URL(location.origin + location.pathname);
-    if (normalizedChannelId) url.searchParams.set("channelId", normalizedChannelId);
-    if (normalizedMerchantId) url.searchParams.set("merchantId", normalizedMerchantId);
-    url.searchParams.set("product", "ALIPAY_PREAUTH_H5");
-    url.searchParams.set("autoPay", "1");
-    if ($("amount")?.value) url.searchParams.set("amount", $("amount").value);
-    if ($("subject")?.value) url.searchParams.set("subject", $("subject").value);
-    return alipayStartAppUrl(url.toString());
-  }
-
   function isOrderCodeProduct(product) {
     return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
   }
@@ -1301,10 +1290,6 @@
       }
       payload.authCode = paymentCode;
     }
-    if (isH5PreauthProduct(currentProduct) && !isAlipayClient()) {
-      window.location.href = h5PreauthAlipayUrl();
-      return;
-    }
     if (isJsapiProduct(currentProduct)) {
       const jsapiChannel = channelsForCurrentProduct()[0];
       if (jsapiChannel && !currentChannel) {
@@ -1381,11 +1366,20 @@
       const orderString = appOrderString(data);
       if (orderString) {
         if (isH5PreauthProduct(currentProduct)) {
+          const h5PreauthUrl = appPayLaunchUrl(orderString);
+          writeResult("正在唤起支付宝 H5 预授权...", "loading");
           if (!isAlipayClient()) {
-            writeResult({ code: "ALIPAY_PREAUTH_H5_CLIENT_REQUIRED", message: "H5预授权需要在支付宝内打开收银台后发起。" }, "bad");
+            if (isMobilePayClient()) {
+              openAlipayQr(h5PreauthUrl, "正在打开支付宝官方预授权页面...");
+              return;
+            }
+            showPaymentQr(
+              h5PreauthUrl,
+              "H5预授权二维码",
+              "请使用支付宝扫码确认预授权；本二维码会直接打开支付宝官方授权页。"
+            );
             return;
           }
-          writeResult("正在唤起支付宝 H5 预授权...", "loading");
           const freezeResult = await alipayH5PreauthTradePay(orderString);
           const resultCode = tradePayResultCode(freezeResult);
           if (resultCode === "9000") {
