@@ -512,9 +512,6 @@ public class PaymentGatewayService {
             throw new IllegalArgumentException("预授权订单号不能为空，无法查询支付宝授权号");
         }
         DemoOrderView order = orderService.view(preauthOutTradeNo.trim());
-        if (hasUsableText(order.tradeNo())) {
-            return order.tradeNo().trim();
-        }
         String lastMessage = null;
         for (String outRequestNo : preauthOutRequestNoCandidates(preauthOutTradeNo.trim(), order, extra)) {
             Map<String, Object> queryExtra = new LinkedHashMap<>();
@@ -539,6 +536,9 @@ public class PaymentGatewayService {
                 orderService.recordPreauthAuthNo(preauthOutTradeNo.trim(), response.tradeNo(), response.channelId());
                 return response.tradeNo().trim();
             }
+        }
+        if (hasUsableText(order.tradeNo())) {
+            return order.tradeNo().trim();
         }
         throw new IllegalArgumentException(firstText(
                 lastMessage,

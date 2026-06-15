@@ -148,17 +148,18 @@ public class AlipayPaymentProvider implements PaymentProvider {
                     "预授权转支付缺少支付宝授权号，请确认用户已完成预授权冻结后重新查询订单再操作"
             );
         }
+        String authNo = request.authNo().trim();
         Map<String, Object> bizContent = new LinkedHashMap<>();
+        merge(bizContent, request.extra());
+        putIfText(bizContent, "buyer_id", request.buyerId());
+        putIfText(bizContent, "seller_id", request.sellerId());
         bizContent.put("out_trade_no", request.outTradeNo());
         bizContent.put("scene", "bar_code");
         bizContent.put("product_code", "PRE_AUTH");
-        bizContent.put("auth_no", request.authNo().trim());
+        bizContent.put("auth_no", authNo);
         bizContent.put("subject", request.subject());
         bizContent.put("total_amount", amount(request.totalAmount()));
-        putIfText(bizContent, "buyer_id", request.buyerId());
-        putIfText(bizContent, "seller_id", request.sellerId());
         bizContent.put("auth_confirm_mode", firstText(request.authConfirmMode(), "COMPLETE"));
-        merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_PAY, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }

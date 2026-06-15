@@ -663,6 +663,39 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void preauthCaptureKeepsAuthNoWhenExtraContainsBlankAuthNo() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.preauthCapture(
+                standardChannel(),
+                new PreauthCaptureRequest(
+                        "PREAUTH-001",
+                        "PREAUTH-001-PAY",
+                        "2026052900000000000000000001",
+                        "preauth capture",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(
+                                "auth_no", "",
+                                "product_code", "",
+                                "out_trade_no", ""
+                        )
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.pay");
+        assertThat(client.bizContent)
+                .containsEntry("auth_no", "2026052900000000000000000001")
+                .containsEntry("out_trade_no", "PREAUTH-001-PAY")
+                .containsEntry("product_code", "PRE_AUTH");
+    }
+
+    @Test
     void preauthQueryUsesOfficialFundAuthOperationDetailQuery() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
