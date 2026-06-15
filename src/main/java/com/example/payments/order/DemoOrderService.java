@@ -106,7 +106,7 @@ public class DemoOrderService {
                 args.add(normalizeTime(endTime));
             }
             sql.append(" ORDER BY o.created_at DESC, o.out_trade_no DESC");
-            return collapsePreauthCaptureOrders(jdbcTemplate.query(sql.toString(), this::mapOrder, args.toArray())).stream()
+            return jdbcTemplate.query(sql.toString(), this::mapOrder, args.toArray()).stream()
                     .map(DemoOrderView::from)
                     .toList();
         }
@@ -117,14 +117,14 @@ public class DemoOrderService {
                 .filter(order -> !hasText(beginTime) || compareTime(order.getCreatedAt(), beginTime) >= 0)
                 .filter(order -> !hasText(endTime) || compareTime(order.getCreatedAt(), endTime) <= 0)
                 .toList();
-        return collapsePreauthCaptureOrders(filtered).stream()
+        return filtered.stream()
                 .map(DemoOrderView::from)
                 .toList();
     }
 
     public synchronized List<DemoOrderView> byMerchant(String merchantId) {
         if (databaseBacked()) {
-            return collapsePreauthCaptureOrders(jdbcTemplate.query("""
+            return jdbcTemplate.query("""
                             SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                                    COALESCE(m.name, o.merchant_id) AS merchant_name,
                                    o.product, o.subject, o.amount, o.status, o.created_at,
@@ -147,14 +147,13 @@ public class DemoOrderService {
                             ORDER BY o.created_at DESC, o.out_trade_no DESC
                             """,
                             this::mapOrder,
-                            merchantId))
+                            merchantId)
                     .stream()
                     .map(DemoOrderView::from)
                     .toList();
         }
-        return collapsePreauthCaptureOrders(orders.values().stream()
+        return orders.values().stream()
                 .filter(order -> Objects.equals(order.getMerchantId(), merchantId))
-                .toList()).stream()
                 .map(DemoOrderView::from)
                 .toList();
     }
@@ -189,17 +188,16 @@ public class DemoOrderService {
                       AND (? = 1 OR o.profit_shared = 0)
                     ORDER BY o.created_at DESC, o.out_trade_no DESC
                     """;
-            return collapsePreauthCaptureOrders(jdbcTemplate.query(sql, this::mapOrder, channelId.trim(), includeProfitShared ? 1 : 0))
+            return jdbcTemplate.query(sql, this::mapOrder, channelId.trim(), includeProfitShared ? 1 : 0)
                     .stream()
                     .map(DemoOrderView::from)
                     .toList();
         }
-        return collapsePreauthCaptureOrders(orders.values().stream()
+        return orders.values().stream()
                 .filter(order -> Objects.equals(order.getChannelId(), channelId.trim()))
                 .filter(order -> order.getStatus() == DemoOrderStatus.COMPLETED)
                 .filter(order -> hasText(order.getTradeNo()))
                 .filter(order -> includeProfitShared || !order.isProfitShared())
-                .toList()).stream()
                 .map(DemoOrderView::from)
                 .toList();
     }
@@ -765,35 +763,6 @@ public class DemoOrderService {
                 insertOrder(order);
             }
         }
-    }
-
-    private List<DemoOrder> collapsePreauthCaptureOrders(List<DemoOrder> rows) {
-        if (rows == null || rows.isEmpty()) {
-            return List.of();
-        }
-        Map<String, DemoOrder> byOutTradeNo = new LinkedHashMap<>();
-        for (DemoOrder row : rows) {
-            byOutTradeNo.put(row.getOutTradeNo(), row);
-        }
-        List<DemoOrder> result = new ArrayList<>();
-        for (DemoOrder row : rows) {
-            String parentOutTradeNo = preauthCaptureParentOutTradeNo(row.getOutTradeNo());
-            if (!hasText(parentOutTradeNo)) {
-                result.add(row);
-                continue;
-            }
-            DemoOrder parent = byOutTradeNo.get(parentOutTradeNo);
-            if (parent == null && databaseBacked()) {
-                parent = findOrder(parentOutTradeNo);
-            }
-            if (parent == null) {
-                result.add(row);
-                continue;
-            }
-            applyPreauthCaptureResult(parent, row.getTradeNo(), row.getChannelId(), row.getStatus());
-            persist(parent);
-        }
-        return result;
     }
 
     private static void applyPreauthCaptureResult(

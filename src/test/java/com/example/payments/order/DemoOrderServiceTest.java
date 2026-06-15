@@ -124,7 +124,7 @@ class DemoOrderServiceTest {
     }
 
     @Test
-    void orderListCollapsesExistingPreauthCaptureChildOrder() {
+    void orderListKeepsExistingPreauthCaptureChildOrderVisible() {
         DemoOrderService service = new DemoOrderService();
         service.recordPaymentCreated(
                 "PREAUTH-OLD-001",
@@ -153,10 +153,12 @@ class DemoOrderServiceTest {
 
         assertThat(orders)
                 .extracting(DemoOrderView::outTradeNo)
-                .containsExactly("PREAUTH-OLD-001");
-        assertThat(orders.get(0).tradeNo()).isEqualTo("TRADE-CAPTURE-OLD-001");
-        assertThat(orders.get(0).status()).isEqualTo(DemoOrderStatus.COMPLETED);
-        assertThat(orders.get(0).preAuthorization()).isFalse();
+                .containsExactly("PREAUTH-OLD-001", "PREAUTH-OLD-001_PAY_1781530011597");
+        assertThat(orders.get(0).tradeNo()).isEqualTo("AUTH-OLD-001");
+        assertThat(orders.get(0).status()).isEqualTo(DemoOrderStatus.FROZEN);
+        assertThat(orders.get(0).preAuthorization()).isTrue();
+        assertThat(orders.get(1).tradeNo()).isEqualTo("TRADE-CAPTURE-OLD-001");
+        assertThat(orders.get(1).status()).isEqualTo(DemoOrderStatus.COMPLETED);
     }
 
     @Test
