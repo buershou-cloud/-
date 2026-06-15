@@ -149,17 +149,19 @@ public class AlipayPaymentProvider implements PaymentProvider {
             );
         }
         String authNo = request.authNo().trim();
+        String productCode = preauthCaptureProductCode(request.extra());
         Map<String, Object> bizContent = new LinkedHashMap<>();
         merge(bizContent, request.extra());
         putIfText(bizContent, "buyer_id", request.buyerId());
         putIfText(bizContent, "seller_id", request.sellerId());
         bizContent.put("out_trade_no", request.outTradeNo());
         bizContent.put("scene", "bar_code");
-        bizContent.put("product_code", "PRE_AUTH");
+        bizContent.put("product_code", productCode);
         bizContent.put("auth_no", authNo);
         bizContent.put("subject", request.subject());
         bizContent.put("total_amount", amount(request.totalAmount()));
         bizContent.put("auth_confirm_mode", firstText(request.authConfirmMode(), "COMPLETE"));
+        removeInternalExtras(bizContent);
         AlipayGatewayResponse response = client.execute(channel, METHOD_TRADE_PAY, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
@@ -167,11 +169,11 @@ public class AlipayPaymentProvider implements PaymentProvider {
     @Override
     public GatewayResponse preauthUnfreeze(PaymentGatewayProperties.Channel channel, PreauthUnfreezeRequest request) {
         Map<String, Object> bizContent = new LinkedHashMap<>();
+        merge(bizContent, request.extra());
         bizContent.put("auth_no", request.authNo());
         bizContent.put("out_request_no", request.outRequestNo());
         bizContent.put("amount", amount(request.amount()));
         putIfText(bizContent, "remark", request.remark());
-        merge(bizContent, request.extra());
         removeInternalExtras(bizContent);
         AlipayGatewayResponse response = client.execute(channel, METHOD_PREAUTH_UNFREEZE, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.preauthOutTradeNo(), null, bizContent);
@@ -390,7 +392,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     }
 
     private GatewayResponse preauthH5(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
-        Map<String, Object> bizContent = preauthBiz(request, "PRE_AUTH_ONLINE", "_h5");
+        Map<String, Object> bizContent = preauthBiz(request, "PREAUTH_PAY", "_h5");
         bizContent.remove("preauth_method");
         String orderString = client.orderString(channel, METHOD_PREAUTH_FREEZE, bizContent, options(request));
         Map<String, Object> raw = requestRaw(METHOD_PREAUTH_FREEZE, asString(bizContent.get("product_code")));
@@ -460,6 +462,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.remove("cashierOriginalProduct");
         bizContent.remove("merchantId");
         bizContent.remove("merchantName");
+        bizContent.remove("preauth_product_code");
+        bizContent.remove("auth_out_request_no");
+        bizContent.remove("operation_id");
     }
 
     private static void putDirectSubMerchant(PaymentGatewayProperties.Channel channel, Map<String, Object> bizContent) {
@@ -528,7 +533,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     ) {
         Map<String, Object> data = response.response();
         String outTradeNo = firstText(asString(data.get("out_trade_no")), fallbackOutTradeNo);
-        String tradeNo = firstText(asString(data.get("trade_no")), asString(data.get("auth_no")));
+        String tradeNo = firstText(asString(data.get("trade_no")), extractAuthNo(data));
         PaymentStatus status = status(response);
         String message = firstText(response.subMessage(), response.message());
         return new GatewayResponse(
@@ -589,6 +594,50 @@ public class AlipayPaymentProvider implements PaymentProvider {
         raw.put("request_method", method);
         raw.put("request_product_code", productCode);
         return raw;
+    }
+
+    private static String preauthCaptureProductCode(Map<String, Object> extra) {
+        String value = firstText(
+                asString(valueFromExtra(extra, "preauth_product_code", null)),
+                asString(valueFromExtra(extra, "product_code", null))
+        );
+        return hasUsableText(value) ? value.trim() : "PRE_AUTH";
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String extractAuthNo(Map<String, Object> data) {
+        String direct = asString(data.get("auth_no"));
+        if (hasUsableText(direct)) {
+            return direct.trim();
+        }
+        Object operationDetail = data.get("operation_detail");
+        if (operationDetail instanceof Map<?, ?> map) {
+            String authNo = asString(((Map<String, Object>) map).get("auth_no"));
+            if (hasUsableText(authNo)) {
+                return authNo.trim();
+            }
+        }
+        Object detailList = firstPresent(data.get("operation_detail_list"), data.get("operation_details"), data.get("detail_list"));
+        if (detailList instanceof List<?> list) {
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) {
+                    String authNo = asString(((Map<String, Object>) map).get("auth_no"));
+                    if (hasUsableText(authNo)) {
+                        return authNo.trim();
+                    }
+                }
+            }
+        }
+        return direct;
+    }
+
+    private static Object firstPresent(Object... values) {
+        for (Object value : values) {
+            if (value != null) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private static Map<String, Object> responseRaw(AlipayGatewayResponse response, Map<String, Object> requestBizContent) {

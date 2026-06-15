@@ -108,13 +108,14 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse preauthCapture(PreauthCaptureRequest request) {
+        String preauthProductCode = preauthProductCode(request.preauthOutTradeNo(), request.extra());
         PreauthCaptureRequest prepared = request.withAuthNo(resolvePreauthAuthNo(
                 request.authNo(),
                 request.preauthOutTradeNo(),
                 request.channelIds(),
                 request.appAuthToken(),
                 request.extra()
-        ));
+        )).withExtra(withPreauthProductCode(request.extra(), preauthProductCode));
         GatewayResponse response = execute(
                 null,
                 prepared.channelIds(),
@@ -544,6 +545,30 @@ public class PaymentGatewayService {
                 lastMessage,
                 "支付宝预授权号为空，无法转支付或解冻；请确认用户已经完成预授权，再查询订单后重试"
         ));
+    }
+
+    private String preauthProductCode(String preauthOutTradeNo, Map<String, Object> extra) {
+        String requested = firstText(mapText(extra, "preauth_product_code"), mapText(extra, "product_code"));
+        if (hasUsableText(requested)) {
+            return requested.trim();
+        }
+        if (hasText(preauthOutTradeNo)) {
+            String storedProductCode = orderService.paymentRequestProductCode(preauthOutTradeNo.trim());
+            if (hasUsableText(storedProductCode)) {
+                return storedProductCode.trim();
+            }
+            DemoOrderView order = orderService.view(preauthOutTradeNo.trim());
+            if (order != null && hasText(order.productName()) && order.productName().toUpperCase().contains("H5")) {
+                return "PREAUTH_PAY";
+            }
+        }
+        return "PRE_AUTH";
+    }
+
+    private static Map<String, Object> withPreauthProductCode(Map<String, Object> extra, String productCode) {
+        Map<String, Object> result = new LinkedHashMap<>(extra == null ? Map.of() : extra);
+        result.put("preauth_product_code", firstText(productCode, "PRE_AUTH"));
+        return result;
     }
 
     private static List<String> preauthOutRequestNoCandidates(

@@ -52,4 +52,20 @@ public record PreauthCaptureRequest(
                 extra
         );
     }
+
+    public PreauthCaptureRequest withExtra(Map<String, Object> value) {
+        return new PreauthCaptureRequest(
+                preauthOutTradeNo,
+                outTradeNo,
+                authNo,
+                subject,
+                totalAmount,
+                buyerId,
+                sellerId,
+                authConfirmMode,
+                appAuthToken,
+                channelIds,
+                value
+        );
+    }
 }

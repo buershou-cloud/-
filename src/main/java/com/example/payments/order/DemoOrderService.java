@@ -513,6 +513,24 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized String paymentRequestProductCode(String outTradeNo) {
+        if (!databaseBacked() || !hasText(outTradeNo)) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject("""
+                    SELECT COALESCE(
+                        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(raw_response, '$.raw.request_product_code')), 'null'),
+                        NULLIF(JSON_UNQUOTE(JSON_EXTRACT(raw_request, '$.extra.product_code')), 'null')
+                    )
+                    FROM pay_order
+                    WHERE out_trade_no = ?
+                    """, String.class, outTradeNo);
+        } catch (DataAccessException ignored) {
+            return null;
+        }
+    }
+
     public synchronized void ensureMerchantOrder(String merchantId, String outTradeNo, String tradeNo) {
         if (!hasText(merchantId)) {
             throw new IllegalArgumentException("merchantId is required");

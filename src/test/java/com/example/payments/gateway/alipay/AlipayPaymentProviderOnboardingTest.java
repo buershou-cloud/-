@@ -593,7 +593,7 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.bizContent)
                 .containsEntry("out_order_no", "PREAUTH-H5-001")
                 .containsEntry("out_request_no", "PREAUTH-H5-001_h5")
-                .containsEntry("product_code", "PRE_AUTH_ONLINE")
+                .containsEntry("product_code", "PREAUTH_PAY")
                 .containsEntry("timeout_express", "30m")
                 .doesNotContainKeys("pay_timeout", "preauth_method");
         assertThat(response.raw()).containsEntry("request_method", "alipay.fund.auth.order.app.freeze");
@@ -683,6 +683,7 @@ class AlipayPaymentProviderOnboardingTest {
                         Map.of(
                                 "auth_no", "",
                                 "product_code", "",
+                                "preauth_product_code", "PREAUTH_PAY",
                                 "out_trade_no", ""
                         )
                 )
@@ -692,7 +693,8 @@ class AlipayPaymentProviderOnboardingTest {
         assertThat(client.bizContent)
                 .containsEntry("auth_no", "2026052900000000000000000001")
                 .containsEntry("out_trade_no", "PREAUTH-001-PAY")
-                .containsEntry("product_code", "PRE_AUTH");
+                .containsEntry("product_code", "PREAUTH_PAY")
+                .doesNotContainKey("preauth_product_code");
     }
 
     @Test
@@ -724,6 +726,26 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void preauthQueryReadsNestedAuthNoFromOperationDetail() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        client.operationDetailAuthNoNested = true;
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        GatewayResponse response = provider.preauthQuery(
+                standardChannel(),
+                new PaymentQueryRequest(
+                        "PREAUTH-H5-001",
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of("out_request_no", "PREAUTH-H5-001_h5")
+                )
+        );
+
+        assertThat(response.tradeNo()).isEqualTo("2026052900000000000000000001");
+    }
+
+    @Test
     void preauthUnfreezeUsesOfficialUnfreezeFields() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
@@ -738,7 +760,7 @@ class AlipayPaymentProviderOnboardingTest {
                         "partial unfreeze",
                         null,
                         List.of("ali-main"),
-                        Map.of()
+                        Map.of("auth_no", "")
                 )
         );
 
@@ -855,6 +877,7 @@ class AlipayPaymentProviderOnboardingTest {
         private Map<String, Object> bizContent;
         private Map<String, String> businessParams;
         private final List<String> methods = new ArrayList<>();
+        private boolean operationDetailAuthNoNested;
 
         private CapturingAlipayClient() {
             super(new ObjectMapper());
@@ -939,7 +962,11 @@ class AlipayPaymentProviderOnboardingTest {
             }
             if ("alipay.fund.auth.operation.detail.query".equals(method)) {
                 response.put("out_order_no", asString(bizContent.get("out_order_no")));
-                response.put("auth_no", "2026052900000000000000000001");
+                if (operationDetailAuthNoNested) {
+                    response.put("operation_detail", Map.of("auth_no", "2026052900000000000000000001"));
+                } else {
+                    response.put("auth_no", "2026052900000000000000000001");
+                }
                 response.put("status", "SUCCESS");
             }
             return new AlipayGatewayResponse(
