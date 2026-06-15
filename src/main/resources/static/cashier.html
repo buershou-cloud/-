@@ -1278,6 +1278,10 @@
       : `merchantId=${encodeURIComponent(currentMerchant.merchantId)}`;
     payload.returnUrl = `${location.origin}/cashier.html?${backQuery}`;
     payload.quitUrl = payload.returnUrl;
+    if (isPagePayProduct(currentProduct) && isMobilePayClient()) {
+      extra.integration_type = "ALIAPP";
+      extra.request_from_url = payload.returnUrl;
+    }
     if (currentChannel) {
       payload.channelIds = [currentChannel.id];
       payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;

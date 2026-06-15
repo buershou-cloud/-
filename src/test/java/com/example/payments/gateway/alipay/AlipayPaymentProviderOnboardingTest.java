@@ -175,6 +175,43 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void pageProductKeepsAlipayWalletIntegrationType() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.pay(
+                standardChannel(),
+                new PayCreateRequest(
+                        PaymentProduct.ALIPAY_PAGE,
+                        "PAGE-MOBILE-001",
+                        "page pay mobile",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        "10m",
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of(
+                                "integration_type", "ALIAPP",
+                                "request_from_url", "https://example.com/cashier.html"
+                        ),
+                        null,
+                        null
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.trade.page.pay");
+        assertThat(client.bizContent).containsEntry("product_code", "FAST_INSTANT_TRADE_PAY");
+        assertThat(client.bizContent).containsEntry("integration_type", "ALIAPP");
+        assertThat(client.bizContent).containsEntry("request_from_url", "https://example.com/cashier.html");
+    }
+
+    @Test
     void appProductUsesOfficialAppPayOrderString() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
