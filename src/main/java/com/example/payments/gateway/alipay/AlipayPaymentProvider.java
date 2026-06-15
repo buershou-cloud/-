@@ -155,7 +155,6 @@ public class AlipayPaymentProvider implements PaymentProvider {
         putIfText(bizContent, "buyer_id", request.buyerId());
         putIfText(bizContent, "seller_id", request.sellerId());
         bizContent.put("out_trade_no", request.outTradeNo());
-        bizContent.put("scene", "bar_code");
         bizContent.put("product_code", productCode);
         bizContent.put("auth_no", authNo);
         bizContent.put("subject", request.subject());

@@ -664,13 +664,12 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("out_trade_no", "PREAUTH-001-PAY")
                 .containsEntry("product_code", "PRE_AUTH")
                 .containsEntry("auth_no", "2026052900000000000000000001")
-                .containsEntry("scene", "bar_code")
                 .containsEntry("subject", "preauth capture")
                 .containsEntry("total_amount", "1.00")
                 .containsEntry("buyer_id", "2088102146225135")
                 .containsEntry("seller_id", "2088102146225136")
                 .containsEntry("auth_confirm_mode", "COMPLETE")
-                .doesNotContainKey("auth_code");
+                .doesNotContainKeys("auth_code", "scene");
     }
 
     @Test
@@ -731,7 +730,7 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("auth_no", "2026052900000000000000000001")
                 .containsEntry("out_trade_no", "PREAUTH-001-PAY")
                 .containsEntry("product_code", "PREAUTH_PAY")
-                .doesNotContainKey("preauth_product_code");
+                .doesNotContainKeys("preauth_product_code", "scene");
     }
 
     @Test
