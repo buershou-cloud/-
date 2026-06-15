@@ -92,6 +92,74 @@ class DemoOrderServiceTest {
     }
 
     @Test
+    void preauthCaptureNotifyUpdatesOriginalOrderInsteadOfCreatingCaptureOrder() {
+        DemoOrderService service = new DemoOrderService();
+        service.recordPaymentCreated(
+                "PREAUTH-001",
+                "AUTH-001",
+                "ali-main",
+                "M10001",
+                "merchant",
+                "H5 preauth",
+                new BigDecimal("1.00"),
+                true,
+                PaymentStatus.SUCCESS
+        );
+
+        DemoOrderView captured = service.recordAlipayNotify(
+                "PREAUTH-001_PAY_1781530011597",
+                "TRADE-CAPTURE-001",
+                "ali-main",
+                new BigDecimal("1.00"),
+                "TRADE_SUCCESS"
+        );
+
+        assertThat(captured.outTradeNo()).isEqualTo("PREAUTH-001");
+        assertThat(captured.tradeNo()).isEqualTo("TRADE-CAPTURE-001");
+        assertThat(captured.status()).isEqualTo(DemoOrderStatus.COMPLETED);
+        assertThat(captured.preAuthorization()).isFalse();
+        assertThat(service.recent())
+                .extracting(DemoOrderView::outTradeNo)
+                .containsExactly("PREAUTH-001");
+    }
+
+    @Test
+    void orderListCollapsesExistingPreauthCaptureChildOrder() {
+        DemoOrderService service = new DemoOrderService();
+        service.recordPaymentCreated(
+                "PREAUTH-OLD-001",
+                "AUTH-OLD-001",
+                "ali-main",
+                "M10001",
+                "merchant",
+                "H5 preauth",
+                new BigDecimal("1.00"),
+                true,
+                PaymentStatus.SUCCESS
+        );
+        service.recordPaymentCreated(
+                "PREAUTH-OLD-001_PAY_1781530011597",
+                "TRADE-CAPTURE-OLD-001",
+                "ali-main",
+                "M10001",
+                "merchant",
+                "preauth capture",
+                new BigDecimal("1.00"),
+                false,
+                PaymentStatus.SUCCESS
+        );
+
+        List<DemoOrderView> orders = service.recent();
+
+        assertThat(orders)
+                .extracting(DemoOrderView::outTradeNo)
+                .containsExactly("PREAUTH-OLD-001");
+        assertThat(orders.get(0).tradeNo()).isEqualTo("TRADE-CAPTURE-OLD-001");
+        assertThat(orders.get(0).status()).isEqualTo(DemoOrderStatus.COMPLETED);
+        assertThat(orders.get(0).preAuthorization()).isFalse();
+    }
+
+    @Test
     void rejectsRefundsAboveRemainingAmount() {
         DemoOrderService service = new DemoOrderService();
         service.recordPaymentCreated(
