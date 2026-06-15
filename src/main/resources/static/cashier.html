@@ -408,6 +408,7 @@
   const merchantId = params.get("merchantId");
   const preferredProduct = paramValue("product");
   const oauthAuthCode = params.get("auth_code") || params.get("authCode");
+  const autoPayRequested = paramValue("autoPay") === "1";
   const normalizedChannelId = safeDecode(paramValue("channelId"));
   const normalizedMerchantId = safeDecode(paramValue("merchantId"));
   const productLabels = {
@@ -689,6 +690,17 @@
         fallback();
       }
     }, 1000);
+  }
+
+  function h5PreauthAlipayUrl() {
+    const url = new URL(location.origin + location.pathname);
+    if (normalizedChannelId) url.searchParams.set("channelId", normalizedChannelId);
+    if (normalizedMerchantId) url.searchParams.set("merchantId", normalizedMerchantId);
+    url.searchParams.set("product", "ALIPAY_PREAUTH_H5");
+    url.searchParams.set("autoPay", "1");
+    if ($("amount")?.value) url.searchParams.set("amount", $("amount").value);
+    if ($("subject")?.value) url.searchParams.set("subject", $("subject").value);
+    return alipayStartAppUrl(url.toString());
   }
 
   function isOrderCodeProduct(product) {
@@ -1195,6 +1207,9 @@
       $("payButton").disabled = false;
       if (oauthAuthCode && isJsapiProduct(currentProduct)) {
         writeResult("支付宝授权已完成，请确认金额后再次点击确认支付。", "loading");
+      } else if (autoPayRequested && isH5PreauthProduct(currentProduct) && isAlipayClient()) {
+        writeResult("正在自动发起 H5 预授权...", "loading");
+        setTimeout(() => $("cashierForm").requestSubmit(), 300);
       }
     }
   }
@@ -1285,6 +1300,10 @@
         return;
       }
       payload.authCode = paymentCode;
+    }
+    if (isH5PreauthProduct(currentProduct) && !isAlipayClient()) {
+      window.location.href = h5PreauthAlipayUrl();
+      return;
     }
     if (isJsapiProduct(currentProduct)) {
       const jsapiChannel = channelsForCurrentProduct()[0];
