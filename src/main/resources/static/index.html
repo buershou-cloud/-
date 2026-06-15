@@ -4047,6 +4047,7 @@
   function syncCredentialModeFields() {
     const certificateMode = $("newChannelCredentialMode").value === "CERTIFICATE";
     const editing = Boolean(state.editingChannelId);
+    const channel = editing ? state.channels.find((item) => item.id === state.editingChannelId) : null;
     document.querySelectorAll(".cert-mode-field").forEach((field) => {
       field.classList.toggle("hidden", !certificateMode);
     });
@@ -4061,7 +4062,12 @@
     }
     $("newChannelAlipayPublicKey").placeholder = certificateMode
       ? "证书模式请在后台上传 3 个 crt 文件"
-      : "支付宝开放平台 RSA2 支付宝公钥";
+      : editing && channel?.hasAlipayPublicKey
+        ? "已保存，留空不修改支付宝公钥"
+        : "支付宝开放平台 RSA2 支付宝公钥";
+    $("newChannelMerchantPrivateKey").placeholder = editing && channel?.hasMerchantPrivateKey
+      ? "已保存，留空不修改应用私钥"
+      : "应用 RSA2 私钥";
   }
 
   function amountField(id) {
@@ -4146,8 +4152,8 @@
     $("newChannelProvider").disabled = true;
     $("newChannelProvider").setAttribute("disabled", "");
     $("newChannelAppId").value = channel.appId || "";
-    $("newChannelAlipayPublicKey").value = channel.alipayPublicKey || "";
-    $("newChannelMerchantPrivateKey").value = channel.merchantPrivateKey || "";
+    $("newChannelAlipayPublicKey").value = "";
+    $("newChannelMerchantPrivateKey").value = "";
     $("newChannelAppAuthToken").value = channel.appAuthToken || "";
     $("newChannelCredentialMode").value = channel.credentialMode || "PUBLIC_KEY";
     $("newChannelSubMerchantId").value = channel.subMerchantId || "";
@@ -4159,8 +4165,12 @@
     $("newChannelAlipayPublicKey").removeAttribute("required");
     $("newChannelMerchantPrivateKey").required = false;
     $("newChannelMerchantPrivateKey").removeAttribute("required");
-    $("newChannelAlipayPublicKey").placeholder = "支付宝开放平台 RSA2 支付宝公钥";
-    $("newChannelMerchantPrivateKey").placeholder = "应用 RSA2 私钥";
+    $("newChannelAlipayPublicKey").placeholder = channel.hasAlipayPublicKey
+      ? "已保存，留空不修改支付宝公钥"
+      : "支付宝开放平台 RSA2 支付宝公钥";
+    $("newChannelMerchantPrivateKey").placeholder = channel.hasMerchantPrivateKey
+      ? "已保存，留空不修改应用私钥"
+      : "应用 RSA2 私钥";
     $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
     syncDirectChannelField();
     syncCredentialModeFields();
