@@ -142,11 +142,17 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     @Override
     public GatewayResponse preauthCapture(PaymentGatewayProperties.Channel channel, PreauthCaptureRequest request) {
+        if (!hasUsableText(request.authNo())) {
+            throw new GatewayException(
+                    "PREAUTH_AUTH_NO_MISSING",
+                    "预授权转支付缺少支付宝授权号，请确认用户已完成预授权冻结后重新查询订单再操作"
+            );
+        }
         Map<String, Object> bizContent = new LinkedHashMap<>();
         bizContent.put("out_trade_no", request.outTradeNo());
         bizContent.put("scene", "bar_code");
         bizContent.put("product_code", "PRE_AUTH");
-        bizContent.put("auth_no", request.authNo());
+        bizContent.put("auth_no", request.authNo().trim());
         bizContent.put("subject", request.subject());
         bizContent.put("total_amount", amount(request.totalAmount()));
         putIfText(bizContent, "buyer_id", request.buyerId());
@@ -651,5 +657,15 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean hasUsableText(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        String text = value.trim();
+        return !"-".equals(text)
+                && !"null".equalsIgnoreCase(text)
+                && !"undefined".equalsIgnoreCase(text);
     }
 }

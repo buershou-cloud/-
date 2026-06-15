@@ -637,6 +637,32 @@ class AlipayPaymentProviderOnboardingTest {
     }
 
     @Test
+    void preauthCaptureRejectsBlankAuthNoBeforeCallingAlipay() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        assertThatThrownBy(() -> provider.preauthCapture(
+                standardChannel(),
+                new PreauthCaptureRequest(
+                        "PREAUTH-001",
+                        "PREAUTH-001-PAY",
+                        "",
+                        "preauth capture",
+                        new BigDecimal("1.00"),
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of("ali-main"),
+                        Map.of()
+                )
+        ))
+                .isInstanceOf(GatewayException.class)
+                .hasMessageContaining("预授权转支付缺少支付宝授权号");
+        assertThat(client.method).isNull();
+    }
+
+    @Test
     void preauthQueryUsesOfficialFundAuthOperationDetailQuery() {
         CapturingAlipayClient client = new CapturingAlipayClient();
         AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);

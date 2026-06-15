@@ -505,14 +505,14 @@ public class PaymentGatewayService {
             String appAuthToken,
             Map<String, Object> extra
     ) {
-        if (hasText(currentAuthNo)) {
+        if (hasUsableText(currentAuthNo)) {
             return currentAuthNo.trim();
         }
         if (!hasText(preauthOutTradeNo)) {
             throw new IllegalArgumentException("预授权订单号不能为空，无法查询支付宝授权号");
         }
         DemoOrderView order = orderService.view(preauthOutTradeNo.trim());
-        if (hasText(order.tradeNo())) {
+        if (hasUsableText(order.tradeNo())) {
             return order.tradeNo().trim();
         }
         String lastMessage = null;
@@ -535,7 +535,7 @@ public class PaymentGatewayService {
                     )
             );
             lastMessage = firstText(response.message(), lastMessage);
-            if (response.status() != PaymentStatus.FAILED && hasText(response.tradeNo())) {
+            if (response.status() != PaymentStatus.FAILED && hasUsableText(response.tradeNo())) {
                 orderService.recordPreauthAuthNo(preauthOutTradeNo.trim(), response.tradeNo(), response.channelId());
                 return response.tradeNo().trim();
             }
@@ -670,6 +670,16 @@ public class PaymentGatewayService {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static boolean hasUsableText(String value) {
+        if (!hasText(value)) {
+            return false;
+        }
+        String text = value.trim();
+        return !"-".equals(text)
+                && !"null".equalsIgnoreCase(text)
+                && !"undefined".equalsIgnoreCase(text);
     }
 
     private MerchantRouting merchantRouting(PayCreateRequest request) {

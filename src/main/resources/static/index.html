@@ -2439,6 +2439,14 @@
     }));
   }
 
+  function usableAuthNo(value) {
+    const text = String(value || "").trim();
+    if (!text || text === "-" || text.toLowerCase() === "null" || text.toLowerCase() === "undefined") {
+      return "";
+    }
+    return text;
+  }
+
   function bytesToBase64(bytes) {
     let binary = "";
     const chunkSize = 0x8000;
@@ -3217,7 +3225,7 @@
     if (!order.preAuthorization || order.status !== "FROZEN") {
       throw { message: "只有冻结中的预授权订单可以转支付。" };
     }
-    const authNo = (order.tradeNo || "").trim();
+    const authNo = usableAuthNo(order.tradeNo);
     const captureAmount = preauthUnfreezeRemainingAmountValue(order) || orderAmountValue(order);
     if (captureAmount <= 0) {
       throw { message: "订单已无可转支付金额。" };
