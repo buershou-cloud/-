@@ -3,11 +3,13 @@ package com.example.payments.order;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,9 @@ public class DemoOrderService {
 
     private DemoOrderService(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        if (jdbcTemplate != null) {
+            ensurePreauthUnfreezeTable();
+        }
     }
 
     public synchronized List<DemoOrderView> recent() {
@@ -63,12 +68,18 @@ public class DemoOrderService {
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
-                           COALESCE((
-                               SELECT SUM(r.refund_amount)
-                               FROM refund_order r
-                               WHERE r.out_trade_no = o.out_trade_no
-                                 AND r.status = 'SUCCESS'
-                           ), 0) AS refunded_amount
+                            COALESCE((
+                                SELECT SUM(r.refund_amount)
+                                FROM refund_order r
+                                WHERE r.out_trade_no = o.out_trade_no
+                                  AND r.status = 'SUCCESS'
+                            ), 0) AS refunded_amount,
+                            COALESCE((
+                                SELECT SUM(u.amount)
+                                FROM preauth_unfreeze_order u
+                                WHERE u.out_trade_no = o.out_trade_no
+                                  AND u.status = 'SUCCESS'
+                            ), 0) AS preauth_unfrozen_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE 1 = 1
@@ -116,12 +127,18 @@ public class DemoOrderService {
                                    COALESCE(m.name, o.merchant_id) AS merchant_name,
                                    o.product, o.subject, o.amount, o.status, o.created_at,
                                    o.pre_authorization, o.supplemented, o.profit_shared,
-                                   COALESCE((
-                                       SELECT SUM(r.refund_amount)
-                                       FROM refund_order r
-                                       WHERE r.out_trade_no = o.out_trade_no
-                                         AND r.status = 'SUCCESS'
-                                   ), 0) AS refunded_amount
+                                    COALESCE((
+                                        SELECT SUM(r.refund_amount)
+                                        FROM refund_order r
+                                        WHERE r.out_trade_no = o.out_trade_no
+                                          AND r.status = 'SUCCESS'
+                                    ), 0) AS refunded_amount,
+                                    COALESCE((
+                                        SELECT SUM(u.amount)
+                                        FROM preauth_unfreeze_order u
+                                        WHERE u.out_trade_no = o.out_trade_no
+                                          AND u.status = 'SUCCESS'
+                                    ), 0) AS preauth_unfrozen_amount
                             FROM pay_order o
                             LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                             WHERE o.merchant_id = ?
@@ -149,12 +166,18 @@ public class DemoOrderService {
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
                            o.product, o.subject, o.amount, o.status, o.created_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
-                           COALESCE((
-                               SELECT SUM(r.refund_amount)
-                               FROM refund_order r
-                               WHERE r.out_trade_no = o.out_trade_no
-                                 AND r.status = 'SUCCESS'
-                           ), 0) AS refunded_amount
+                            COALESCE((
+                                SELECT SUM(r.refund_amount)
+                                FROM refund_order r
+                                WHERE r.out_trade_no = o.out_trade_no
+                                  AND r.status = 'SUCCESS'
+                            ), 0) AS refunded_amount,
+                            COALESCE((
+                                SELECT SUM(u.amount)
+                                FROM preauth_unfreeze_order u
+                                WHERE u.out_trade_no = o.out_trade_no
+                                  AND u.status = 'SUCCESS'
+                            ), 0) AS preauth_unfrozen_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.channel_id = ?
@@ -315,6 +338,59 @@ public class DemoOrderService {
             order.setTradeNo(captureTradeNo.trim());
         } else {
             ensureTradeNo(order, "CAPTURE");
+        }
+        persist(order);
+        return DemoOrderView.from(order);
+    }
+
+    public synchronized void ensurePreauthUnfreezable(String outTradeNo, String authNo, BigDecimal amount) {
+        if (!hasText(outTradeNo)) {
+            throw new IllegalArgumentException("订单号不能为空");
+        }
+        DemoOrder order = order(outTradeNo);
+        if (!order.isPreAuthorization()) {
+            throw new IllegalStateException("只有预授权订单可以解冻");
+        }
+        if (order.getStatus() != DemoOrderStatus.FROZEN) {
+            throw new IllegalStateException("只有冻结中的预授权订单可以解冻");
+        }
+        if (!hasText(authNo)) {
+            throw new IllegalArgumentException("订单缺少预授权号，无法解冻");
+        }
+        BigDecimal unfreezeAmount = money(amount);
+        if (unfreezeAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("解冻金额必须大于 0");
+        }
+        BigDecimal remaining = preauthUnfreezeRemainingAmount(order);
+        if (remaining.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("订单已无可解冻金额");
+        }
+        if (unfreezeAmount.compareTo(remaining) > 0) {
+            throw new IllegalArgumentException("解冻金额不能超过剩余可解冻金额");
+        }
+    }
+
+    public synchronized DemoOrderView recordPreauthUnfreeze(PreauthUnfreezeRequest request, GatewayResponse response) {
+        DemoOrder order = order(request.preauthOutTradeNo());
+        BigDecimal unfreezeAmount = money(request.amount());
+        if (databaseBacked()) {
+            recordPreauthUnfreezeOrder(order, request, response, unfreezeAmount);
+            order.setPreauthUnfrozenAmount(successfulPreauthUnfrozenAmount(order.getOutTradeNo()));
+        } else {
+            order.setPreauthUnfrozenAmount(money(order.getPreauthUnfrozenAmount().add(unfreezeAmount)));
+        }
+        if (preauthUnfreezeRemainingAmount(order).compareTo(BigDecimal.ZERO) <= 0) {
+            order.setStatus(DemoOrderStatus.UNFROZEN);
+            order.setPreAuthorization(false);
+            order.setProductName("预授权已解冻");
+        } else {
+            order.setStatus(DemoOrderStatus.FROZEN);
+            order.setPreAuthorization(true);
+        }
+        if (hasText(response.tradeNo())) {
+            order.setTradeNo(response.tradeNo().trim());
+        } else if (hasText(request.authNo())) {
+            order.setTradeNo(request.authNo().trim());
         }
         persist(order);
         return DemoOrderView.from(order);
@@ -488,7 +564,43 @@ public class DemoOrderService {
         order.setSupplemented(rs.getBoolean("supplemented"));
         order.setProfitShared(rs.getBoolean("profit_shared"));
         order.setRefundedAmount(rs.getBigDecimal("refunded_amount"));
+        order.setPreauthUnfrozenAmount(rs.getBigDecimal("preauth_unfrozen_amount"));
         return order;
+    }
+
+    private void ensurePreauthUnfreezeTable() {
+        try {
+            jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS preauth_unfreeze_order (
+                      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                      out_request_no VARCHAR(96) NOT NULL,
+                      out_trade_no VARCHAR(96) NOT NULL,
+                      auth_no VARCHAR(128) NOT NULL,
+                      channel_id VARCHAR(64) NULL,
+                      amount DECIMAL(18,2) NOT NULL,
+                      status VARCHAR(32) NOT NULL DEFAULT 'PENDING',
+                      remark VARCHAR(255) NULL,
+                      code VARCHAR(64) NULL,
+                      message VARCHAR(512) NULL,
+                      raw_response JSON NULL,
+                      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                      completed_at DATETIME NULL,
+                      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                      PRIMARY KEY (id),
+                      UNIQUE KEY uk_preauth_unfreeze_request (out_request_no),
+                      KEY idx_preauth_unfreeze_order (out_trade_no),
+                      KEY idx_preauth_unfreeze_channel_time (channel_id, created_at),
+                      CONSTRAINT fk_preauth_unfreeze_order
+                        FOREIGN KEY (out_trade_no) REFERENCES pay_order(out_trade_no)
+                        ON DELETE CASCADE,
+                      CONSTRAINT fk_preauth_unfreeze_channel
+                        FOREIGN KEY (channel_id) REFERENCES pay_channel(id)
+                        ON DELETE SET NULL
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='预授权解冻记录'
+                    """);
+        } catch (DataAccessException ignored) {
+            // The startup path should stay available; explicit unfreeze writes will surface DB permission issues.
+        }
     }
 
     private DemoOrder findOrder(String outTradeNo) {
@@ -503,7 +615,13 @@ public class DemoOrderService {
                                FROM refund_order r
                                WHERE r.out_trade_no = o.out_trade_no
                                  AND r.status = 'SUCCESS'
-                           ), 0) AS refunded_amount
+                           ), 0) AS refunded_amount,
+                           COALESCE((
+                               SELECT SUM(u.amount)
+                               FROM preauth_unfreeze_order u
+                               WHERE u.out_trade_no = o.out_trade_no
+                                 AND u.status = 'SUCCESS'
+                           ), 0) AS preauth_unfrozen_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.out_trade_no = ?
@@ -531,7 +649,13 @@ public class DemoOrderService {
                                FROM refund_order r
                                WHERE r.out_trade_no = o.out_trade_no
                                  AND r.status = 'SUCCESS'
-                           ), 0) AS refunded_amount
+                           ), 0) AS refunded_amount,
+                           COALESCE((
+                               SELECT SUM(u.amount)
+                               FROM preauth_unfreeze_order u
+                               WHERE u.out_trade_no = o.out_trade_no
+                                 AND u.status = 'SUCCESS'
+                           ), 0) AS preauth_unfrozen_amount
                     FROM pay_order o
                     LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
                     WHERE o.trade_no = ?
@@ -623,7 +747,7 @@ public class DemoOrderService {
                     paid_at = CASE WHEN ? IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE paid_at END,
                     frozen_at = CASE WHEN ? = 'FROZEN' THEN COALESCE(frozen_at, CURRENT_TIMESTAMP) ELSE frozen_at END,
                     refunded_at = CASE WHEN ? IN ('PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
-                    closed_at = CASE WHEN ? = 'CLOSED' THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE closed_at END
+                    closed_at = CASE WHEN ? IN ('CLOSED', 'UNFROZEN') THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE closed_at END
                 WHERE out_trade_no = ?
                 """,
                 nullIfBlank(order.getTradeNo()),
@@ -809,8 +933,58 @@ public class DemoOrderService {
         return money(amount);
     }
 
+    private void recordPreauthUnfreezeOrder(
+            DemoOrder order,
+            PreauthUnfreezeRequest request,
+            GatewayResponse response,
+            BigDecimal amount
+    ) {
+        ensurePreauthUnfreezeTable();
+        jdbcTemplate.update("""
+                INSERT INTO preauth_unfreeze_order (
+                    out_request_no, out_trade_no, auth_no, channel_id, amount,
+                    status, remark, code, message, raw_response, completed_at
+                ) VALUES (?, ?, ?, ?, ?, 'SUCCESS', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON DUPLICATE KEY UPDATE
+                    auth_no = VALUES(auth_no),
+                    channel_id = VALUES(channel_id),
+                    amount = VALUES(amount),
+                    status = VALUES(status),
+                    remark = VALUES(remark),
+                    code = VALUES(code),
+                    message = VALUES(message),
+                    raw_response = VALUES(raw_response),
+                    completed_at = VALUES(completed_at)
+                """,
+                request.outRequestNo(),
+                order.getOutTradeNo(),
+                request.authNo(),
+                existingChannelId(firstText(response.channelId(), order.getChannelId())),
+                amount,
+                nullIfBlank(request.remark()),
+                nullIfBlank(response.code()),
+                nullIfBlank(response.message()),
+                json(response)
+        );
+    }
+
+    private BigDecimal successfulPreauthUnfrozenAmount(String outTradeNo) {
+        ensurePreauthUnfreezeTable();
+        BigDecimal amount = jdbcTemplate.queryForObject("""
+                SELECT COALESCE(SUM(amount), 0)
+                FROM preauth_unfreeze_order
+                WHERE out_trade_no = ?
+                  AND status = 'SUCCESS'
+                """, BigDecimal.class, outTradeNo);
+        return money(amount);
+    }
+
     private static BigDecimal refundableAmount(DemoOrder order) {
         return money(money(order.getAmount()).subtract(money(order.getRefundedAmount())).max(BigDecimal.ZERO));
+    }
+
+    private static BigDecimal preauthUnfreezeRemainingAmount(DemoOrder order) {
+        return money(money(order.getAmount()).subtract(money(order.getPreauthUnfrozenAmount())).max(BigDecimal.ZERO));
     }
 
     private static void applyRefundStatus(DemoOrder order) {

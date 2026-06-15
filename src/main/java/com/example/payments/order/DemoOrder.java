@@ -12,6 +12,7 @@ public class DemoOrder {
     private String productName;
     private BigDecimal amount;
     private BigDecimal refundedAmount = BigDecimal.ZERO;
+    private BigDecimal preauthUnfrozenAmount = BigDecimal.ZERO;
     private DemoOrderStatus status;
     private String createdAt;
     private boolean preAuthorization;
@@ -84,6 +85,14 @@ public class DemoOrder {
 
     public void setRefundedAmount(BigDecimal refundedAmount) {
         this.refundedAmount = refundedAmount == null ? BigDecimal.ZERO : refundedAmount;
+    }
+
+    public BigDecimal getPreauthUnfrozenAmount() {
+        return preauthUnfrozenAmount == null ? BigDecimal.ZERO : preauthUnfrozenAmount;
+    }
+
+    public void setPreauthUnfrozenAmount(BigDecimal preauthUnfrozenAmount) {
+        this.preauthUnfrozenAmount = preauthUnfrozenAmount == null ? BigDecimal.ZERO : preauthUnfrozenAmount;
     }
 
     public DemoOrderStatus getStatus() {

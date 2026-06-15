@@ -9,6 +9,7 @@ import com.example.payments.domain.PaymentCancelRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -632,6 +633,34 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("seller_id", "2088102146225136")
                 .containsEntry("auth_confirm_mode", "COMPLETE")
                 .doesNotContainKey("auth_code");
+    }
+
+    @Test
+    void preauthUnfreezeUsesOfficialUnfreezeFields() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+
+        provider.preauthUnfreeze(
+                standardChannel(),
+                new PreauthUnfreezeRequest(
+                        "PREAUTH-001",
+                        "2026052900000000000000000001",
+                        "PREAUTH-001-UF-1",
+                        new BigDecimal("1.00"),
+                        "partial unfreeze",
+                        null,
+                        List.of("ali-main"),
+                        Map.of()
+                )
+        );
+
+        assertThat(client.method).isEqualTo("alipay.fund.auth.order.unfreeze");
+        assertThat(client.bizContent)
+                .containsEntry("auth_no", "2026052900000000000000000001")
+                .containsEntry("out_request_no", "PREAUTH-001-UF-1")
+                .containsEntry("amount", "1.00")
+                .containsEntry("remark", "partial unfreeze")
+                .doesNotContainKey("out_trade_no");
     }
 
     @Test

@@ -1830,6 +1830,62 @@
   </section>
 </div>
 
+<div id="preauthUnfreezeModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog refund-dialog" role="dialog" aria-modal="true" aria-labelledby="preauthUnfreezeModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="preauthUnfreezeModalTitle">预授权解冻</h3>
+      <button class="btn secondary small" id="closePreauthUnfreezeModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="preauthUnfreezeForm" class="refund-form">
+        <div class="refund-summary">
+          <div class="refund-summary-item">
+            <span>订单号</span>
+            <strong id="preauthUnfreezeOrderNo">-</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>支付通道</span>
+            <strong id="preauthUnfreezeChannelName">-</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>授权金额</span>
+            <strong id="preauthUnfreezeOrderAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>已解冻金额</span>
+            <strong id="preauthUnfreezeAlreadyAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>本次最多可解冻</span>
+            <strong id="preauthUnfreezeMaxAmount">¥0.00</strong>
+          </div>
+          <div class="refund-summary-item">
+            <span>解冻后状态</span>
+            <strong id="preauthUnfreezeAfterStatus">冻结中</strong>
+          </div>
+        </div>
+
+        <label>解冻金额
+          <div class="refund-amount-wrap">
+            <span class="refund-currency">¥</span>
+            <input id="preauthUnfreezeAmountInput" type="number" min="0.01" step="0.01" inputmode="decimal" required>
+          </div>
+        </label>
+
+        <div class="refund-tools">
+          <button class="btn secondary small" id="preauthUnfreezeFillAllBtn" type="button">解冻全部剩余</button>
+          <span class="refund-tip">可多次部分解冻；累计解冻达到订单金额后，订单会显示为已解冻。</span>
+        </div>
+        <pre id="preauthUnfreezeModalError" class="operation-result refund-error hidden"></pre>
+        <div class="form-actions">
+          <button class="btn secondary" id="cancelPreauthUnfreezeModalBtn" type="button">取消</button>
+          <button class="btn danger" type="submit">确认解冻</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
 <div id="merchantModal" class="channel-modal hidden" aria-hidden="true">
   <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="merchantModalTitle">
     <div class="channel-modal-head">
@@ -2018,7 +2074,9 @@
     editingMerchantId: null,
     productEditorChannelId: null,
     refundModalOrder: null,
-    refundModalResolve: null
+    refundModalResolve: null,
+    preauthUnfreezeModalOrder: null,
+    preauthUnfreezeModalResolve: null
   };
 
   const channelCheckTargets = [
@@ -2436,6 +2494,19 @@
     return Math.max(orderAmountValue(order) - refundedAmountValue(order), 0);
   }
 
+  function preauthUnfrozenAmountValue(order) {
+    return Math.max(Number(order?.preauthUnfrozenAmount || 0), 0);
+  }
+
+  function preauthUnfreezeRemainingAmountValue(order) {
+    if (order?.preauthUnfreezeRemainingAmount !== undefined
+      && order?.preauthUnfreezeRemainingAmount !== null
+      && order?.preauthUnfreezeRemainingAmount !== "") {
+      return Math.max(Number(order.preauthUnfreezeRemainingAmount || 0), 0);
+    }
+    return Math.max(orderAmountValue(order) - preauthUnfrozenAmountValue(order), 0);
+  }
+
   function paidOrder(order) {
     return ["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order?.status);
   }
@@ -2574,11 +2645,13 @@
       : status === "PARTIALLY_REFUNDED" ? "partial-refunded"
       : status === "REFUNDED" ? "refunded"
       : status === "FROZEN" ? "frozen"
+      : status === "UNFROZEN" ? "refunded"
       : "pending";
     const label = status === "COMPLETED" ? "已完成"
       : status === "PARTIALLY_REFUNDED" ? "部分退款"
       : status === "REFUNDED" ? "已退款"
       : status === "FROZEN" ? "冻结中"
+      : status === "UNFROZEN" ? "已解冻"
       : "未支付";
     return `<span class="status ${className}">${label}</span>`;
   }
@@ -2610,6 +2683,9 @@
     }
     if (order.preAuthorization && order.status === "FROZEN") {
       actions.push(["convert-to-pay", "转支付", "secondary"]);
+      if (preauthUnfreezeRemainingAmountValue(order) > 0) {
+        actions.push(["preauth-unfreeze", "解冻", "secondary"]);
+      }
     }
     actions.push(["delete", "删除订单", "danger"]);
     return actions.map(([action, label, kind]) => `
@@ -3023,6 +3099,86 @@
     closeRefundModal({ amount: amount.toFixed(2) });
   }
 
+  function clearPreauthUnfreezeModalError() {
+    const element = $("preauthUnfreezeModalError");
+    element.textContent = "";
+    element.classList.add("hidden");
+  }
+
+  function showPreauthUnfreezeModalError(message) {
+    const element = $("preauthUnfreezeModalError");
+    element.textContent = message;
+    element.classList.remove("hidden");
+  }
+
+  function updatePreauthUnfreezeAfterStatus() {
+    const order = state.preauthUnfreezeModalOrder;
+    if (!order) return;
+    const remaining = preauthUnfreezeRemainingAmountValue(order);
+    const amount = Number($("preauthUnfreezeAmountInput").value || 0);
+    setText("preauthUnfreezeAfterStatus", amount >= remaining ? "已解冻" : "冻结中");
+  }
+
+  function openPreauthUnfreezeModal(order) {
+    const remaining = preauthUnfreezeRemainingAmountValue(order);
+    state.preauthUnfreezeModalOrder = order;
+    setText("preauthUnfreezeOrderNo", order.outTradeNo || "-");
+    setText("preauthUnfreezeChannelName", order.channelId || "-");
+    setText("preauthUnfreezeOrderAmount", order.amountText || money(order.amount));
+    setText("preauthUnfreezeAlreadyAmount", order.preauthUnfrozenAmountText || money(preauthUnfrozenAmountValue(order)));
+    setText("preauthUnfreezeMaxAmount", money(remaining));
+    const input = $("preauthUnfreezeAmountInput");
+    input.value = remaining.toFixed(2);
+    input.max = remaining.toFixed(2);
+    input.min = "0.01";
+    clearPreauthUnfreezeModalError();
+    updatePreauthUnfreezeAfterStatus();
+    $("preauthUnfreezeModal").classList.remove("hidden");
+    $("preauthUnfreezeModal").setAttribute("aria-hidden", "false");
+    window.setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 0);
+    return new Promise((resolve) => {
+      state.preauthUnfreezeModalResolve = resolve;
+    });
+  }
+
+  function closePreauthUnfreezeModal(result = null) {
+    $("preauthUnfreezeModal").classList.add("hidden");
+    $("preauthUnfreezeModal").setAttribute("aria-hidden", "true");
+    const resolve = state.preauthUnfreezeModalResolve;
+    state.preauthUnfreezeModalResolve = null;
+    state.preauthUnfreezeModalOrder = null;
+    $("preauthUnfreezeForm").reset();
+    clearPreauthUnfreezeModalError();
+    if (resolve) resolve(result);
+  }
+
+  function submitPreauthUnfreezeModal() {
+    const order = state.preauthUnfreezeModalOrder;
+    if (!order) {
+      closePreauthUnfreezeModal(null);
+      return;
+    }
+    const remaining = preauthUnfreezeRemainingAmountValue(order);
+    const raw = $("preauthUnfreezeAmountInput").value;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showPreauthUnfreezeModalError("解冻金额必须大于 0。");
+      return;
+    }
+    if (Math.round(amount * 100) / 100 !== amount) {
+      showPreauthUnfreezeModalError("解冻金额最多保留 2 位小数。");
+      return;
+    }
+    if (amount > remaining) {
+      showPreauthUnfreezeModalError(`解冻金额不能超过剩余可解冻金额 ${money(remaining)}。`);
+      return;
+    }
+    closePreauthUnfreezeModal({ amount: amount.toFixed(2) });
+  }
+
   async function refundPaidOrder(outTradeNo) {
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
     if (!order) {
@@ -3056,37 +3212,74 @@
   async function capturePreauthOrder(outTradeNo) {
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
     if (!order) {
-      throw { message: `Order not found: ${outTradeNo}` };
+      throw { message: `订单不存在: ${outTradeNo}` };
     }
     if (!order.preAuthorization || order.status !== "FROZEN") {
-      throw { message: "Only frozen pre-authorization orders can be captured." };
+      throw { message: "只有冻结中的预授权订单可以转支付。" };
     }
-    const authNo = window.prompt("auth_no", order.tradeNo || "");
-    if (!authNo) return;
-    const buyerId = window.prompt("buyer_id / payer_user_id", "");
-    if (!buyerId) return;
-    const sellerId = window.prompt("seller_id / payee_user_id", "");
-    if (!sellerId) return;
-    const captureOutTradeNo = window.prompt("capture out_trade_no", `${order.outTradeNo}_PAY_${Date.now()}`);
-    if (!captureOutTradeNo) return;
+    const authNo = (order.tradeNo || "").trim();
+    if (!authNo) {
+      throw { message: "订单缺少预授权号，无法转支付。" };
+    }
+    const captureAmount = preauthUnfreezeRemainingAmountValue(order) || orderAmountValue(order);
+    if (captureAmount <= 0) {
+      throw { message: "订单已无可转支付金额。" };
+    }
+    const captureOutTradeNo = `${order.outTradeNo}_PAY_${Date.now()}`;
     const data = await request(`/api/v1/orders/${encodeURIComponent(outTradeNo)}/convert-to-pay`, {
       method: "POST",
       body: JSON.stringify(compact({
         preauthOutTradeNo: order.outTradeNo,
         outTradeNo: captureOutTradeNo,
         authNo,
-        subject: `${order.productName || "Preauth"} capture`,
-        totalAmount: order.amount,
-        buyerId,
-        sellerId,
+        subject: `${order.productName || "预授权"}转支付`,
+        totalAmount: captureAmount.toFixed(2),
         authConfirmMode: "COMPLETE",
         channelIds: order.channelId ? [order.channelId] : []
       }))
     });
     if (gatewayFailed(data)) {
-      throw gatewayFailure("Alipay preauth capture", data);
+      throw gatewayFailure("支付宝预授权转支付", data);
     }
-    setDashboardResult({ message: `Preauth capture submitted: ${order.outTradeNo}`, response: data });
+    setDashboardResult({ message: `预授权转支付已提交：${order.outTradeNo}，金额 ${money(captureAmount)}`, response: data });
+    await loadOrders();
+  }
+
+  async function unfreezePreauthOrder(outTradeNo) {
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    if (!order) {
+      throw { message: `订单不存在: ${outTradeNo}` };
+    }
+    if (!order.preAuthorization || order.status !== "FROZEN") {
+      throw { message: "只有冻结中的预授权订单可以解冻。" };
+    }
+    const authNo = (order.tradeNo || "").trim();
+    if (!authNo) {
+      throw { message: "订单缺少预授权号，无法解冻。" };
+    }
+    const remaining = preauthUnfreezeRemainingAmountValue(order);
+    if (remaining <= 0) {
+      throw { message: "订单已无可解冻金额。" };
+    }
+    const unfreeze = await openPreauthUnfreezeModal(order);
+    if (!unfreeze) return;
+    const amount = Number(unfreeze.amount);
+    const outRequestNo = `UF_${order.outTradeNo}_${Date.now()}`;
+    const data = await request(`/api/v1/orders/${encodeURIComponent(outTradeNo)}/unfreeze`, {
+      method: "POST",
+      body: JSON.stringify(compact({
+        preauthOutTradeNo: order.outTradeNo,
+        authNo,
+        outRequestNo,
+        amount: unfreeze.amount,
+        remark: `后台预授权解冻 ${money(amount)}`,
+        channelIds: order.channelId ? [order.channelId] : []
+      }))
+    });
+    if (gatewayFailed(data)) {
+      throw gatewayFailure("支付宝预授权解冻", data);
+    }
+    setDashboardResult({ message: `预授权解冻已提交：${order.outTradeNo}，金额 ${money(amount)}`, response: data });
     await loadOrders();
   }
 
@@ -3107,6 +3300,14 @@
     if (action === "convert-to-pay") {
       try {
         await capturePreauthOrder(outTradeNo);
+      } catch (error) {
+        setDashboardResult(error);
+      }
+      return;
+    }
+    if (action === "preauth-unfreeze") {
+      try {
+        await unfreezePreauthOrder(outTradeNo);
       } catch (error) {
         setDashboardResult(error);
       }
@@ -4327,6 +4528,33 @@
   $("refundForm").addEventListener("submit", (event) => {
     event.preventDefault();
     submitRefundModal();
+  });
+
+  $("closePreauthUnfreezeModalBtn").addEventListener("click", () => closePreauthUnfreezeModal(null));
+
+  $("cancelPreauthUnfreezeModalBtn").addEventListener("click", () => closePreauthUnfreezeModal(null));
+
+  $("preauthUnfreezeModal").addEventListener("click", (event) => {
+    if (event.target.id === "preauthUnfreezeModal") closePreauthUnfreezeModal(null);
+  });
+
+  $("preauthUnfreezeFillAllBtn").addEventListener("click", () => {
+    const order = state.preauthUnfreezeModalOrder;
+    if (!order) return;
+    $("preauthUnfreezeAmountInput").value = preauthUnfreezeRemainingAmountValue(order).toFixed(2);
+    clearPreauthUnfreezeModalError();
+    updatePreauthUnfreezeAfterStatus();
+    $("preauthUnfreezeAmountInput").focus();
+  });
+
+  $("preauthUnfreezeAmountInput").addEventListener("input", () => {
+    clearPreauthUnfreezeModalError();
+    updatePreauthUnfreezeAfterStatus();
+  });
+
+  $("preauthUnfreezeForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitPreauthUnfreezeModal();
   });
 
   $("recentOrders").addEventListener("click", async (event) => {

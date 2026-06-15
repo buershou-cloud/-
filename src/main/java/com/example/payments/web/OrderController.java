@@ -2,6 +2,7 @@ package com.example.payments.web;
 
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
@@ -66,6 +67,14 @@ public class OrderController {
             @Valid @RequestBody PreauthCaptureRequest request
     ) {
         return paymentGatewayService.preauthCapture(request.withPreauthOutTradeNo(outTradeNo));
+    }
+
+    @PostMapping("/{outTradeNo}/unfreeze")
+    public GatewayResponse unfreezePreauth(
+            @PathVariable String outTradeNo,
+            @Valid @RequestBody PreauthUnfreezeRequest request
+    ) {
+        return paymentGatewayService.preauthUnfreeze(request.withPreauthOutTradeNo(outTradeNo));
     }
 
     @DeleteMapping("/{outTradeNo}")

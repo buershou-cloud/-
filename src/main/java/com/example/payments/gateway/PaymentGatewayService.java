@@ -14,6 +14,7 @@ import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PreauthCaptureRequest;
+import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingBatchItem;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
@@ -116,6 +117,21 @@ public class PaymentGatewayService {
         );
         if (response.status() != PaymentStatus.FAILED && hasText(request.preauthOutTradeNo())) {
             orderService.convertPreauthToPay(request.preauthOutTradeNo(), firstText(response.tradeNo(), request.outTradeNo()));
+        }
+        return response;
+    }
+
+    public GatewayResponse preauthUnfreeze(PreauthUnfreezeRequest request) {
+        orderService.ensurePreauthUnfreezable(request.preauthOutTradeNo(), request.authNo(), request.amount());
+        GatewayResponse response = execute(
+                null,
+                request.channelIds(),
+                request.amount(),
+                null,
+                channel -> provider(channel).preauthUnfreeze(channel, request)
+        );
+        if (response.status() == PaymentStatus.SUCCESS && hasText(request.preauthOutTradeNo())) {
+            orderService.recordPreauthUnfreeze(request, response);
         }
         return response;
     }

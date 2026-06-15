@@ -16,6 +16,10 @@ public record DemoOrderView(
         String refundedAmountText,
         BigDecimal refundableAmount,
         String refundableAmountText,
+        BigDecimal preauthUnfrozenAmount,
+        String preauthUnfrozenAmountText,
+        BigDecimal preauthUnfreezeRemainingAmount,
+        String preauthUnfreezeRemainingAmountText,
         DemoOrderStatus status,
         String statusText,
         String createdAt,
@@ -27,6 +31,8 @@ public record DemoOrderView(
         BigDecimal amount = money(order.getAmount());
         BigDecimal refundedAmount = money(order.getRefundedAmount());
         BigDecimal refundableAmount = money(amount.subtract(refundedAmount).max(BigDecimal.ZERO));
+        BigDecimal preauthUnfrozenAmount = money(order.getPreauthUnfrozenAmount());
+        BigDecimal preauthUnfreezeRemainingAmount = money(amount.subtract(preauthUnfrozenAmount).max(BigDecimal.ZERO));
         return new DemoOrderView(
                 order.getOutTradeNo(),
                 order.getTradeNo(),
@@ -40,6 +46,10 @@ public record DemoOrderView(
                 amountText(refundedAmount),
                 refundableAmount,
                 amountText(refundableAmount),
+                preauthUnfrozenAmount,
+                amountText(preauthUnfrozenAmount),
+                preauthUnfreezeRemainingAmount,
+                amountText(preauthUnfreezeRemainingAmount),
                 order.getStatus(),
                 order.getStatus().getLabel(),
                 order.getCreatedAt(),

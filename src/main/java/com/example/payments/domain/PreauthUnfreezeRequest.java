@@ -8,29 +8,23 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 
-public record PreauthCaptureRequest(
+public record PreauthUnfreezeRequest(
         String preauthOutTradeNo,
-        @NotBlank String outTradeNo,
         @NotBlank String authNo,
-        @NotBlank String subject,
-        @NotNull @DecimalMin("0.01") BigDecimal totalAmount,
-        String buyerId,
-        String sellerId,
-        String authConfirmMode,
+        @NotBlank String outRequestNo,
+        @NotNull @DecimalMin("0.01") BigDecimal amount,
+        String remark,
         String appAuthToken,
         List<String> channelIds,
         Map<String, Object> extra
 ) {
-    public PreauthCaptureRequest withPreauthOutTradeNo(String value) {
-        return new PreauthCaptureRequest(
+    public PreauthUnfreezeRequest withPreauthOutTradeNo(String value) {
+        return new PreauthUnfreezeRequest(
                 value,
-                outTradeNo,
                 authNo,
-                subject,
-                totalAmount,
-                buyerId,
-                sellerId,
-                authConfirmMode,
+                outRequestNo,
+                amount,
+                remark,
                 appAuthToken,
                 channelIds,
                 extra
