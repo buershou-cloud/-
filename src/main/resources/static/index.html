@@ -1012,6 +1012,28 @@
       width: min(540px, 100%);
     }
 
+    .confirm-dialog {
+      width: min(480px, 100%);
+    }
+
+    .confirm-message {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 700;
+      line-height: 1.7;
+    }
+
+    .confirm-target {
+      margin-top: 10px;
+      padding: 12px;
+      border: 1px solid #fecaca;
+      border-radius: 8px;
+      background: #fff1f2;
+      color: #991b1b;
+      font-weight: 900;
+      word-break: break-all;
+    }
+
     .channel-modal-head {
       display: flex;
       align-items: center;
@@ -2059,6 +2081,23 @@
   </section>
 </div>
 
+<div id="confirmModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="confirmModalTitle">确认操作</h3>
+      <button class="btn secondary small" id="closeConfirmModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <p id="confirmModalMessage" class="confirm-message">请确认是否继续。</p>
+      <div id="confirmModalTarget" class="confirm-target hidden"></div>
+      <div class="form-actions">
+        <button class="btn secondary" id="cancelConfirmModalBtn" type="button">取消</button>
+        <button class="btn danger" id="confirmModalOkBtn" type="button">确认</button>
+      </div>
+    </div>
+  </section>
+</div>
+
 <script>
   const state = {
     channels: [],
@@ -2076,7 +2115,8 @@
     refundModalOrder: null,
     refundModalResolve: null,
     preauthUnfreezeModalOrder: null,
-    preauthUnfreezeModalResolve: null
+    preauthUnfreezeModalResolve: null,
+    confirmModalResolve: null
   };
 
   const channelCheckTargets = [
@@ -3944,9 +3984,38 @@
     if (saved) closeProductModal();
   }
 
+  function openConfirmModal({ title = "确认操作", message = "请确认是否继续。", target = "", okText = "确认" } = {}) {
+    $("confirmModalTitle").textContent = title;
+    $("confirmModalMessage").textContent = message;
+    $("confirmModalOkBtn").textContent = okText;
+    const targetElement = $("confirmModalTarget");
+    targetElement.textContent = target;
+    targetElement.classList.toggle("hidden", !target);
+    $("confirmModal").classList.remove("hidden");
+    $("confirmModal").setAttribute("aria-hidden", "false");
+    $("confirmModalOkBtn").focus();
+    return new Promise((resolve) => {
+      state.confirmModalResolve = resolve;
+    });
+  }
+
+  function closeConfirmModal(result = false) {
+    $("confirmModal").classList.add("hidden");
+    $("confirmModal").setAttribute("aria-hidden", "true");
+    const resolve = state.confirmModalResolve;
+    state.confirmModalResolve = null;
+    if (resolve) resolve(result);
+  }
+
   async function deleteChannel(channelId) {
-    if (!window.confirm(`确定删除通道 ${channelId} 吗？`)) return;
-    const data = await request(`/api/v1/channels/${channelId}`, {
+    const confirmed = await openConfirmModal({
+      title: "删除支付通道",
+      message: "删除后该通道不会再参与收款路由。请确认要删除这个通道。",
+      target: channelId,
+      okText: "确认删除"
+    });
+    if (!confirmed) return;
+    const data = await request(`/api/v1/channels/${encodeURIComponent(channelId)}`, {
       method: "DELETE"
     });
     setConsole({ message: "通道已删除", channel: data });
@@ -4543,6 +4612,16 @@
     } catch (error) {
       $("passwordResult").textContent = json(error);
     }
+  });
+
+  $("closeConfirmModalBtn").addEventListener("click", () => closeConfirmModal(false));
+
+  $("cancelConfirmModalBtn").addEventListener("click", () => closeConfirmModal(false));
+
+  $("confirmModalOkBtn").addEventListener("click", () => closeConfirmModal(true));
+
+  $("confirmModal").addEventListener("click", (event) => {
+    if (event.target.id === "confirmModal") closeConfirmModal(false);
   });
 
   $("closeRefundModalBtn").addEventListener("click", () => closeRefundModal(null));
