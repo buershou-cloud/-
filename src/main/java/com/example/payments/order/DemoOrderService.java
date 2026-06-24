@@ -426,6 +426,32 @@ public class DemoOrderService {
             boolean preAuthorization,
             PaymentStatus paymentStatus
     ) {
+        return recordPaymentCreated(
+                outTradeNo,
+                tradeNo,
+                channelId,
+                merchantId,
+                merchantName,
+                productName,
+                productName,
+                amount,
+                preAuthorization,
+                paymentStatus
+        );
+    }
+
+    public synchronized DemoOrderView recordPaymentCreated(
+            String outTradeNo,
+            String tradeNo,
+            String channelId,
+            String merchantId,
+            String merchantName,
+            String productName,
+            String subject,
+            BigDecimal amount,
+            boolean preAuthorization,
+            PaymentStatus paymentStatus
+    ) {
         DemoOrderStatus initialStatus = statusFromGateway(paymentStatus, preAuthorization, DemoOrderStatus.UNPAID);
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
         if (order == null) {
@@ -436,6 +462,7 @@ public class DemoOrderService {
                     merchantId,
                     merchantName,
                     productName,
+                    firstText(subject, productName),
                     amount,
                     initialStatus,
                     LocalDateTime.now().format(DISPLAY_TIME),
@@ -446,6 +473,7 @@ public class DemoOrderService {
             if (hasText(tradeNo)) {
                 order.setTradeNo(tradeNo.trim());
             }
+            order.setSubject(firstText(subject, order.getSubject(), productName));
             order.setStatus(preserveRefundStatus(order.getStatus(), initialStatus));
         }
         persist(order);
@@ -568,6 +596,7 @@ public class DemoOrderService {
                     "M10001",
                     "榛樿鍟嗘埛",
                     "鏀粯瀹濇敮浠?",
+                    "鏀粯瀹濇敮浠?",
                     amount == null ? BigDecimal.ZERO : amount,
                     statusFromAlipay(tradeStatus, false),
                     LocalDateTime.now().format(DISPLAY_TIME),
@@ -615,6 +644,7 @@ public class DemoOrderService {
                 rs.getString("merchant_id"),
                 rs.getString("merchant_name"),
                 firstText(rs.getString("product"), rs.getString("subject")),
+                rs.getString("subject"),
                 rs.getBigDecimal("amount"),
                 status(rs.getString("status")),
                 timestampText(rs.getTimestamp("created_at")),
@@ -827,7 +857,7 @@ public class DemoOrderService {
                 order.getMerchantId(),
                 existingChannelId(order.getChannelId()),
                 firstText(order.getProductName(), "PAY"),
-                firstText(order.getProductName(), "PAY"),
+                firstText(order.getSubject(), order.getProductName(), "PAY"),
                 order.getAmount() == null ? BigDecimal.ZERO : order.getAmount(),
                 order.getStatus().name(),
                 order.isPreAuthorization() ? 1 : 0,
@@ -853,7 +883,7 @@ public class DemoOrderService {
                 order.getMerchantId(),
                 existingChannelId(order.getChannelId()),
                 firstText(order.getProductName(), "PAY"),
-                firstText(order.getProductName(), "PAY"),
+                firstText(order.getSubject(), order.getProductName(), "PAY"),
                 order.getAmount() == null ? BigDecimal.ZERO : order.getAmount(),
                 order.getStatus().name(),
                 order.isPreAuthorization() ? 1 : 0,
@@ -979,8 +1009,16 @@ public class DemoOrderService {
         return normalized.length() == 16 ? normalized + ":00" : normalized;
     }
 
-    private static String firstText(String value, String fallback) {
-        return hasText(value) ? value.trim() : fallback;
+    private static String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (hasText(value)) {
+                return value.trim();
+            }
+        }
+        return null;
     }
 
     private static String nullIfBlank(String value) {

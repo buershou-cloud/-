@@ -3288,6 +3288,15 @@
       || latest.status !== order.status);
   }
 
+  function preauthCaptureSubject(order) {
+    const subject = String(order?.subject || "").trim();
+    const productName = String(order?.productName || "").trim();
+    if (subject && subject !== productName && !subject.endsWith("转支付")) {
+      return subject;
+    }
+    return "扫码收银台支付";
+  }
+
   async function capturePreauthOrder(outTradeNo) {
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
     if (!order) {
@@ -3306,7 +3315,7 @@
       body: JSON.stringify(compact({
         preauthOutTradeNo: order.outTradeNo,
         outTradeNo: captureOutTradeNo,
-        subject: `${order.productName || "预授权"}转支付`,
+        subject: preauthCaptureSubject(order),
         totalAmount: captureAmount.toFixed(2),
         authConfirmMode: "COMPLETE",
         channelIds: order.channelId ? [order.channelId] : []

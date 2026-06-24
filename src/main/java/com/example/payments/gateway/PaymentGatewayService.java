@@ -611,6 +611,7 @@ public class PaymentGatewayService {
                 extraText(request.extra(), "merchantId", "M10001"),
                 extraText(request.extra(), "merchantName", "默认商户"),
                 request.product().label(),
+                request.subject(),
                 request.totalAmount(),
                 request.product() == PaymentProduct.ALIPAY_PREAUTH
                         || request.product() == PaymentProduct.ALIPAY_PREAUTH_H5,

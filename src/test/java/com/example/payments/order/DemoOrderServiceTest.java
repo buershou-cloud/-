@@ -15,6 +15,27 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DemoOrderServiceTest {
 
     @Test
+    void recordPaymentCreatedKeepsCashierSubjectSeparateFromProductName() {
+        DemoOrderService service = new DemoOrderService();
+
+        DemoOrderView order = service.recordPaymentCreated(
+                "ORDER-SUBJECT-001",
+                "TRADE-SUBJECT-001",
+                "ali-main",
+                "M10001",
+                "merchant",
+                "H5 preauth",
+                "扫码收银台支付",
+                new BigDecimal("1.00"),
+                true,
+                PaymentStatus.SUCCESS
+        );
+
+        assertThat(order.productName()).isEqualTo("H5 preauth");
+        assertThat(order.subject()).isEqualTo("扫码收银台支付");
+    }
+
+    @Test
     void shareableByChannelSkipsUnavailableAndAlreadySharedOrders() {
         DemoOrderService service = new DemoOrderService();
         service.recordPaymentCreated(

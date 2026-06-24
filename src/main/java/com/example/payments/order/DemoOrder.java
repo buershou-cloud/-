@@ -10,6 +10,7 @@ public class DemoOrder {
     private String merchantId;
     private String merchantName;
     private String productName;
+    private String subject;
     private BigDecimal amount;
     private BigDecimal refundedAmount = BigDecimal.ZERO;
     private BigDecimal preauthUnfrozenAmount = BigDecimal.ZERO;
@@ -26,6 +27,7 @@ public class DemoOrder {
             String merchantId,
             String merchantName,
             String productName,
+            String subject,
             BigDecimal amount,
             DemoOrderStatus status,
             String createdAt,
@@ -37,6 +39,7 @@ public class DemoOrder {
         this.merchantId = merchantId;
         this.merchantName = merchantName;
         this.productName = productName;
+        this.subject = subject;
         this.amount = amount;
         this.status = status;
         this.createdAt = createdAt;
@@ -77,6 +80,14 @@ public class DemoOrder {
 
     public void setProductName(String productName) {
         this.productName = productName;
+    }
+
+    public String getSubject() {
+        return subject;
+    }
+
+    public void setSubject(String subject) {
+        this.subject = subject;
     }
 
     public BigDecimal getAmount() {

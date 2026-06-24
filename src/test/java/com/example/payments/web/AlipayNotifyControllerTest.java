@@ -119,6 +119,7 @@ class AlipayNotifyControllerTest {
                 "M10001",
                 "测试商户",
                 "预授权",
+                "扫码收银台支付",
                 new BigDecimal("1.00"),
                 "¥1.00",
                 BigDecimal.ZERO,
