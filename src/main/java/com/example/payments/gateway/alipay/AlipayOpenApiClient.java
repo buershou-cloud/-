@@ -15,6 +15,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.Charset;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -28,6 +29,8 @@ public class AlipayOpenApiClient {
 
     private static final Logger log = LoggerFactory.getLogger(AlipayOpenApiClient.class);
     private static final DateTimeFormatter ALIPAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(20);
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
 
@@ -36,7 +39,9 @@ public class AlipayOpenApiClient {
 
     public AlipayOpenApiClient(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newHttpClient();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(CONNECT_TIMEOUT)
+                .build();
     }
 
     public AlipayGatewayResponse execute(
@@ -62,6 +67,7 @@ public class AlipayOpenApiClient {
                     bizValue(bizContent, "refund_amount")
             );
             HttpRequest request = HttpRequest.newBuilder(URI.create(channel.getAlipay().getGatewayUrl()))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/x-www-form-urlencoded;charset=" + charset.name())
                     .header("Accept", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body, charset))
@@ -83,6 +89,9 @@ public class AlipayOpenApiClient {
             return gatewayResponse;
         } catch (GatewayException ex) {
             throw ex;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new GatewayException("ALIPAY_REQUEST_INTERRUPTED", "Alipay gateway request was interrupted", ex);
         } catch (Exception ex) {
             throw new GatewayException("ALIPAY_REQUEST_ERROR", "Failed to call Alipay gateway", ex);
         }
@@ -105,6 +114,7 @@ public class AlipayOpenApiClient {
                     businessParams == null ? Map.of() : businessParams.keySet()
             );
             HttpRequest request = HttpRequest.newBuilder(URI.create(channel.getAlipay().getGatewayUrl()))
+                    .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/x-www-form-urlencoded;charset=" + charset.name())
                     .header("Accept", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(body, charset))
@@ -126,6 +136,9 @@ public class AlipayOpenApiClient {
             return gatewayResponse;
         } catch (GatewayException ex) {
             throw ex;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new GatewayException("ALIPAY_REQUEST_INTERRUPTED", "Alipay gateway request was interrupted", ex);
         } catch (Exception ex) {
             throw new GatewayException("ALIPAY_REQUEST_ERROR", "Failed to call Alipay gateway", ex);
         }

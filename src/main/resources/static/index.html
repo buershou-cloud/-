@@ -2394,26 +2394,40 @@
   }
 
   async function request(path, options = {}) {
-    const response = await fetch(path, {
-      headers: { "Content-Type": "application/json; charset=utf-8" },
-      cache: "no-store",
-      ...options
-    });
-    if (response.status === 401) {
-      window.location.href = "/login.html";
-      throw { code: "UNAUTHENTICATED", message: "请先登录后台" };
-    }
-    const text = await response.text();
-    let data = text;
+    const timeoutMs = Number(options.timeoutMs ?? 60000);
+    const controller = timeoutMs > 0 ? new AbortController() : null;
+    const timer = controller ? window.setTimeout(() => controller.abort(), timeoutMs) : null;
+    const { timeoutMs: ignoredTimeout, headers: optionHeaders, signal: optionSignal, ...fetchOptions } = options;
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch (ignored) {
-      data = text;
+      const response = await fetch(path, {
+        cache: "no-store",
+        ...fetchOptions,
+        headers: { "Content-Type": "application/json; charset=utf-8", ...(optionHeaders || {}) },
+        signal: optionSignal || controller?.signal
+      });
+      if (response.status === 401) {
+        window.location.href = "/login.html";
+        throw { code: "UNAUTHENTICATED", message: "请先登录后台" };
+      }
+      const text = await response.text();
+      let data = text;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (ignored) {
+        data = text;
+      }
+      if (!response.ok) {
+        throw data;
+      }
+      return data;
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw { code: "REQUEST_TIMEOUT", message: "请求超时，请稍后查询订单状态或重新操作" };
+      }
+      throw error;
+    } finally {
+      if (timer) window.clearTimeout(timer);
     }
-    if (!response.ok) {
-      throw data;
-    }
-    return data;
   }
 
   async function checkAdminSession() {
@@ -3312,6 +3326,7 @@
     const captureOutTradeNo = `${order.outTradeNo}_PAY_${Date.now()}`;
     const data = await request(`/api/v1/orders/${encodeURIComponent(outTradeNo)}/convert-to-pay`, {
       method: "POST",
+      timeoutMs: 90000,
       body: JSON.stringify(compact({
         preauthOutTradeNo: order.outTradeNo,
         outTradeNo: captureOutTradeNo,
@@ -3348,6 +3363,7 @@
     const outRequestNo = `UF_${order.outTradeNo}_${Date.now()}`;
     const data = await request(`/api/v1/orders/${encodeURIComponent(outTradeNo)}/unfreeze`, {
       method: "POST",
+      timeoutMs: 90000,
       body: JSON.stringify(compact({
         preauthOutTradeNo: order.outTradeNo,
         outRequestNo,
