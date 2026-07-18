@@ -132,6 +132,7 @@ public class PaymentGatewayProperties {
         private BigDecimal payMax;
         private Set<PaymentProduct> products = new LinkedHashSet<>();
         private Alipay alipay = new Alipay();
+        private Douyin douyin = new Douyin();
 
         public String getId() {
             return id;
@@ -211,6 +212,14 @@ public class PaymentGatewayProperties {
 
         public void setAlipay(Alipay alipay) {
             this.alipay = alipay;
+        }
+
+        public Douyin getDouyin() {
+            return douyin;
+        }
+
+        public void setDouyin(Douyin douyin) {
+            this.douyin = douyin;
         }
     }
 
@@ -368,5 +377,39 @@ public class PaymentGatewayProperties {
         public void setReturnUrl(String returnUrl) {
             this.returnUrl = returnUrl;
         }
+    }
+
+    public static class Douyin {
+        private String gatewayUrl = "https://api.douyinpay.com";
+        private String appId;
+        private String mchId;
+        private String merchantSerialNo;
+        private String merchantPrivateKey;
+        private String platformCertificate;
+        private String encryptKey;
+        private String notifyUrl;
+        private String returnUrl;
+        private String h5AppName = "支付平台";
+
+        public String getGatewayUrl() { return gatewayUrl; }
+        public void setGatewayUrl(String gatewayUrl) { this.gatewayUrl = gatewayUrl; }
+        public String getAppId() { return appId; }
+        public void setAppId(String appId) { this.appId = appId; }
+        public String getMchId() { return mchId; }
+        public void setMchId(String mchId) { this.mchId = mchId; }
+        public String getMerchantSerialNo() { return merchantSerialNo; }
+        public void setMerchantSerialNo(String merchantSerialNo) { this.merchantSerialNo = merchantSerialNo; }
+        public String getMerchantPrivateKey() { return merchantPrivateKey; }
+        public void setMerchantPrivateKey(String merchantPrivateKey) { this.merchantPrivateKey = merchantPrivateKey; }
+        public String getPlatformCertificate() { return platformCertificate; }
+        public void setPlatformCertificate(String platformCertificate) { this.platformCertificate = platformCertificate; }
+        public String getEncryptKey() { return encryptKey; }
+        public void setEncryptKey(String encryptKey) { this.encryptKey = encryptKey; }
+        public String getNotifyUrl() { return notifyUrl; }
+        public void setNotifyUrl(String notifyUrl) { this.notifyUrl = notifyUrl; }
+        public String getReturnUrl() { return returnUrl; }
+        public void setReturnUrl(String returnUrl) { this.returnUrl = returnUrl; }
+        public String getH5AppName() { return h5AppName; }
+        public void setH5AppName(String h5AppName) { this.h5AppName = h5AppName; }
     }
 }

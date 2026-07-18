@@ -17,6 +17,12 @@ new code. For example, `20260529_add_alipay_payment_code_product.sql` enables
 the new `ALIPAY_PAYMENT_CODE` product on channels that already support
 `ALIPAY_F2F`.
 
+To enable the Douyin H5 payment channel on an existing database, run:
+
+```bash
+mysql -u payment_gateway -p payment_gateway < database/mysql/20260718_add_douyin_h5_payment.sql
+```
+
 ## Spring Boot Startup
 
 After importing the SQL, start the app with database persistence enabled:

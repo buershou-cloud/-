@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class ChannelRegistry {
 
     private static final String DEFAULT_GATEWAY = "https://openapi.alipay.com/gateway.do";
+    private static final String DEFAULT_DOUYIN_GATEWAY = "https://api.douyinpay.com";
     private static final String CREDENTIAL_PUBLIC_KEY = "PUBLIC_KEY";
 
     private final Map<String, PaymentGatewayProperties.Channel> channels;
@@ -179,7 +180,10 @@ public class ChannelRegistry {
                        gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
                        app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
                        app_cert_content, alipay_cert_content, alipay_root_cert_content,
-                       app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
+                       app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type,
+                       douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
+                       douyin_merchant_private_key, douyin_platform_certificate, douyin_encrypt_key,
+                       douyin_notify_url, douyin_return_url, douyin_h5_app_name
                 FROM pay_channel
                 """, (rs, rowNum) -> {
             PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
@@ -209,6 +213,17 @@ public class ChannelRegistry {
             alipay.setReturnUrl(nullIfBlank(rs.getString("return_url")));
             alipay.setCharset(firstText(rs.getString("charset_name"), "UTF-8"));
             alipay.setSignType(firstText(rs.getString("sign_type"), "RSA2"));
+            PaymentGatewayProperties.Douyin douyin = channel.getDouyin();
+            douyin.setGatewayUrl(firstText(rs.getString("douyin_gateway_url"), DEFAULT_DOUYIN_GATEWAY));
+            douyin.setAppId(nullIfBlank(rs.getString("douyin_app_id")));
+            douyin.setMchId(nullIfBlank(rs.getString("douyin_mch_id")));
+            douyin.setMerchantSerialNo(nullIfBlank(rs.getString("douyin_merchant_serial_no")));
+            douyin.setMerchantPrivateKey(nullIfBlank(rs.getString("douyin_merchant_private_key")));
+            douyin.setPlatformCertificate(nullIfBlank(rs.getString("douyin_platform_certificate")));
+            douyin.setEncryptKey(nullIfBlank(rs.getString("douyin_encrypt_key")));
+            douyin.setNotifyUrl(nullIfBlank(rs.getString("douyin_notify_url")));
+            douyin.setReturnUrl(nullIfBlank(rs.getString("douyin_return_url")));
+            douyin.setH5AppName(firstText(rs.getString("douyin_h5_app_name"), "支付平台"));
             channel.setProducts(loadProducts(channel.getId()));
             return channel;
         });
@@ -240,8 +255,14 @@ public class ChannelRegistry {
                   gateway_url, app_id, alipay_public_key, merchant_private_key, credential_mode,
                   app_cert_sn, alipay_cert_sn, alipay_root_cert_sn,
                   app_cert_content, alipay_cert_content, alipay_root_cert_content,
-                  app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type,
+                  douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
+                  douyin_merchant_private_key, douyin_platform_certificate, douyin_encrypt_key,
+                  douyin_notify_url, douyin_return_url, douyin_h5_app_name
+                ) VALUES (
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                )
                 """,
                 channel.getId(),
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -267,7 +288,17 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getAlipay().getNotifyUrl()),
                 nullIfBlank(channel.getAlipay().getReturnUrl()),
                 firstText(channel.getAlipay().getCharset(), "UTF-8"),
-                firstText(channel.getAlipay().getSignType(), "RSA2")
+                firstText(channel.getAlipay().getSignType(), "RSA2"),
+                firstText(channel.getDouyin().getGatewayUrl(), DEFAULT_DOUYIN_GATEWAY),
+                nullIfBlank(channel.getDouyin().getAppId()),
+                nullIfBlank(channel.getDouyin().getMchId()),
+                nullIfBlank(channel.getDouyin().getMerchantSerialNo()),
+                nullIfBlank(channel.getDouyin().getMerchantPrivateKey()),
+                nullIfBlank(channel.getDouyin().getPlatformCertificate()),
+                nullIfBlank(channel.getDouyin().getEncryptKey()),
+                nullIfBlank(channel.getDouyin().getNotifyUrl()),
+                nullIfBlank(channel.getDouyin().getReturnUrl()),
+                firstText(channel.getDouyin().getH5AppName(), "支付平台")
         );
         replaceProducts(channel);
     }
@@ -281,7 +312,11 @@ public class ChannelRegistry {
                     app_cert_sn = ?, alipay_cert_sn = ?, alipay_root_cert_sn = ?,
                     app_cert_content = ?, alipay_cert_content = ?, alipay_root_cert_content = ?,
                     app_auth_token = ?, sub_merchant_id = ?, notify_url = ?, return_url = ?,
-                    charset_name = ?, sign_type = ?
+                    charset_name = ?, sign_type = ?,
+                    douyin_gateway_url = ?, douyin_app_id = ?, douyin_mch_id = ?,
+                    douyin_merchant_serial_no = ?, douyin_merchant_private_key = ?,
+                    douyin_platform_certificate = ?, douyin_encrypt_key = ?,
+                    douyin_notify_url = ?, douyin_return_url = ?, douyin_h5_app_name = ?
                 WHERE id = ?
                 """,
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -308,6 +343,16 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getAlipay().getReturnUrl()),
                 firstText(channel.getAlipay().getCharset(), "UTF-8"),
                 firstText(channel.getAlipay().getSignType(), "RSA2"),
+                firstText(channel.getDouyin().getGatewayUrl(), DEFAULT_DOUYIN_GATEWAY),
+                nullIfBlank(channel.getDouyin().getAppId()),
+                nullIfBlank(channel.getDouyin().getMchId()),
+                nullIfBlank(channel.getDouyin().getMerchantSerialNo()),
+                nullIfBlank(channel.getDouyin().getMerchantPrivateKey()),
+                nullIfBlank(channel.getDouyin().getPlatformCertificate()),
+                nullIfBlank(channel.getDouyin().getEncryptKey()),
+                nullIfBlank(channel.getDouyin().getNotifyUrl()),
+                nullIfBlank(channel.getDouyin().getReturnUrl()),
+                firstText(channel.getDouyin().getH5AppName(), "支付平台"),
                 channel.getId()
         );
         replaceProducts(channel);

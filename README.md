@@ -1,6 +1,12 @@
 # Payment Gateway
 
-Spring Boot payment gateway skeleton for these Alipay flows:
+Spring Boot payment gateway for Alipay and Douyin Pay flows.
+
+Douyin Pay:
+
+- 抖音 H5 支付: `POST /v1/trade/transactions/h5`, with official RSA request signing, order query/close, refund, signed encrypted notifications, and H5 cashier redirection.
+
+Alipay:
 
 - 手机网站支付: `alipay.trade.wap.pay` with `QUICK_WAP_WAY`
 - APP支付: `alipay.trade.app.pay` with `QUICK_MSECURITY_PAY`; returns the signed order string for the Alipay App SDK
@@ -89,6 +95,7 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 - `PATCH /api/v1/channels/{channelId}`
 - `GET /api/v1/merchants/{merchantId}/cashier-qr`
 - `POST /api/v1/alipay/notify/{channelId}`
+- `POST /api/v1/douyin/notify/{channelId}`
 
 ## Example Pay Request
 
@@ -108,6 +115,7 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 
 For WAP/page payments, the response contains `redirectHtml`. Return it directly to the browser.
 For face-to-face QR and order-code payments, the response contains `qrCode`.
+For Douyin H5 payments, the response contains `redirectUrl`; mobile clients open the official H5 cashier directly and desktop clients display it as a QR code.
 For payment-code collection, use product `ALIPAY_PAYMENT_CODE` and pass the
 customer Alipay barcode digits in `authCode`; the gateway calls
 `alipay.trade.pay` with `product_code=FACE_TO_FACE_PAYMENT` and

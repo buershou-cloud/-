@@ -23,6 +23,23 @@ final class RequestUrlSupport {
         return apiBase(request) + "/alipay/return/" + encode(channelId);
     }
 
+    static String douyinNotifyUrl(HttpServletRequest request, String channelId) {
+        return apiBase(request) + "/douyin/notify/" + encode(channelId);
+    }
+
+    static String douyinReturnUrl(HttpServletRequest request, String channelId) {
+        return origin(request) + "/cashier.html?channelId=" + encode(channelId);
+    }
+
+    static String clientIp(HttpServletRequest request) {
+        String forwarded = firstHeader(request, "X-Forwarded-For");
+        if (forwarded != null) {
+            return forwarded;
+        }
+        String realIp = firstHeader(request, "X-Real-IP");
+        return realIp == null ? request.getRemoteAddr() : realIp;
+    }
+
     static String origin(HttpServletRequest request) {
         String forwardedProto = firstHeader(request, "X-Forwarded-Proto");
         String forwardedHost = firstHeader(request, "X-Forwarded-Host");

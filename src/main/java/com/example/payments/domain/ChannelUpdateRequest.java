@@ -26,6 +26,16 @@ public record ChannelUpdateRequest(
         String appAuthToken,
         String subMerchantId,
         String notifyUrl,
-        String returnUrl
+        String returnUrl,
+        String douyinGatewayUrl,
+        String douyinAppId,
+        String douyinMchId,
+        String douyinMerchantSerialNo,
+        String douyinMerchantPrivateKey,
+        String douyinPlatformCertificate,
+        String douyinEncryptKey,
+        String douyinNotifyUrl,
+        String douyinReturnUrl,
+        String douyinH5AppName
 ) {
 }

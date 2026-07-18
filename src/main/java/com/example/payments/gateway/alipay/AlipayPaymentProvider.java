@@ -89,6 +89,10 @@ public class AlipayPaymentProvider implements PaymentProvider {
             case ALIPAY_DIRECT_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
             case ALIPAY_DIRECT_ORDER_CODE -> orderCodePay(channel, request);
             case ALIPAY_DIRECT_JSAPI -> jsapi(channel, request);
+            case DOUYIN_H5 -> throw new GatewayException(
+                    "UNSUPPORTED_PRODUCT",
+                    "Douyin H5 payment cannot be processed by an Alipay channel"
+            );
         };
     }
 

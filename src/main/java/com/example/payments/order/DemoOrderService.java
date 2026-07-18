@@ -305,6 +305,10 @@ public class DemoOrderService {
         }
     }
 
+    public synchronized BigDecimal amountByIdentifier(String outTradeNo, String tradeNo) {
+        return money(orderByIdentifierOrThrow(outTradeNo, tradeNo).getAmount());
+    }
+
     public synchronized DemoOrderView recordRefund(RefundCreateRequest request, GatewayResponse response) {
         DemoOrder order = orderByIdentifierOrThrow(request.outTradeNo(), request.tradeNo());
         BigDecimal refundAmount = money(request.refundAmount());
@@ -320,6 +324,42 @@ public class DemoOrderService {
         if (hasText(response.tradeNo())) {
             order.setTradeNo(response.tradeNo().trim());
         }
+        applyRefundStatus(order);
+        persist(order);
+        return DemoOrderView.from(order);
+    }
+
+    public synchronized DemoOrderView recordDouyinRefundNotify(
+            String outRefundNo,
+            String refundStatus,
+            String refundId
+    ) {
+        if (!databaseBacked()) {
+            throw new IllegalStateException("Douyin refund notifications require database mode");
+        }
+        String localStatus = "SUCCESS".equals(refundStatus) ? "SUCCESS" : "FAILED";
+        String outTradeNo;
+        try {
+            outTradeNo = jdbcTemplate.queryForObject(
+                    "SELECT out_trade_no FROM refund_order WHERE out_request_no = ?",
+                    String.class,
+                    outRefundNo
+            );
+        } catch (EmptyResultDataAccessException ex) {
+            throw new IllegalArgumentException("Refund order does not exist: " + outRefundNo);
+        }
+        jdbcTemplate.update("""
+                UPDATE refund_order
+                SET status = ?, code = ?, message = ?, completed_at = CURRENT_TIMESTAMP
+                WHERE out_request_no = ?
+                """,
+                localStatus,
+                nullIfBlank(refundId),
+                nullIfBlank(refundStatus),
+                outRefundNo
+        );
+        DemoOrder order = order(outTradeNo);
+        order.setRefundedAmount(successfulRefundAmount(outTradeNo));
         applyRefundStatus(order);
         persist(order);
         return DemoOrderView.from(order);
@@ -1031,11 +1071,12 @@ public class DemoOrderService {
             GatewayResponse response,
             BigDecimal refundAmount
     ) {
+        String refundStatus = response.status() == PaymentStatus.SUCCESS ? "SUCCESS" : "PENDING";
         jdbcTemplate.update("""
                 INSERT INTO refund_order (
                     out_request_no, out_trade_no, trade_no, merchant_id, channel_id, refund_amount,
                     status, refund_reason, code, message, raw_response, completed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, 'SUCCESS', ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'SUCCESS' THEN CURRENT_TIMESTAMP ELSE NULL END)
                 ON DUPLICATE KEY UPDATE
                     trade_no = VALUES(trade_no),
                     channel_id = VALUES(channel_id),
@@ -1053,10 +1094,12 @@ public class DemoOrderService {
                 order.getMerchantId(),
                 existingChannelId(firstText(response.channelId(), order.getChannelId())),
                 refundAmount,
+                refundStatus,
                 nullIfBlank(request.refundReason()),
                 nullIfBlank(response.code()),
                 nullIfBlank(response.message()),
-                json(response)
+                json(response),
+                refundStatus
         );
     }
 

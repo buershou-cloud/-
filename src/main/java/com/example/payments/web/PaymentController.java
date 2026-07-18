@@ -22,6 +22,7 @@ import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.onboarding.OnboardingRecordService;
 import com.example.payments.sharing.ProfitSharingRelationService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,6 +34,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Validated
 @RestController
@@ -57,8 +60,35 @@ public class PaymentController {
     }
 
     @PostMapping("/pay")
-    public GatewayResponse pay(@Valid @RequestBody PayCreateRequest request) {
-        return paymentGatewayService.pay(request);
+    public GatewayResponse pay(
+            @Valid @RequestBody PayCreateRequest request,
+            HttpServletRequest servletRequest
+    ) {
+        Map<String, Object> extra = new LinkedHashMap<>(request.extra() == null ? Map.of() : request.extra());
+        extra.putIfAbsent("payer_client_ip", RequestUrlSupport.clientIp(servletRequest));
+        String userAgent = servletRequest.getHeader("User-Agent");
+        if (userAgent != null && !userAgent.isBlank()) {
+            extra.putIfAbsent("user_agent", userAgent.trim());
+        }
+        return paymentGatewayService.pay(new PayCreateRequest(
+                request.product(),
+                request.outTradeNo(),
+                request.subject(),
+                request.totalAmount(),
+                request.authCode(),
+                request.buyerId(),
+                request.buyerOpenId(),
+                request.quitUrl(),
+                request.timeoutExpress(),
+                request.notifyUrl(),
+                request.returnUrl(),
+                request.appAuthToken(),
+                request.routingMode(),
+                request.channelIds(),
+                extra,
+                request.settleInfo(),
+                request.royaltyInfo()
+        ));
     }
 
     @PostMapping("/query")

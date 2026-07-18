@@ -1990,6 +1990,7 @@
             <select id="newChannelProvider">
               <option value="ALIPAY">支付宝官方产品</option>
               <option value="ALIPAY_DIRECT">支付宝直付通</option>
+              <option value="DOUYIN">抖音支付</option>
             </select>
           </label>
           <label>支付宝 AppID<input id="newChannelAppId" required placeholder="支付宝开放平台 AppID"></label>
@@ -2002,6 +2003,19 @@
           <label class="direct-channel-field hidden">二级商户 SMID<input id="newChannelSubMerchantId" placeholder="支付宝直付通二级商户 SMID"></label>
           <label>最小金额<input id="newChannelPayMin" type="number" min="0" step="0.01" value="0.01"></label>
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
+          <label class="douyin-channel-field hidden">抖音网站应用 AppID<input id="newDouyinAppId" placeholder="抖音支付网站应用 AppID"></label>
+          <label class="douyin-channel-field hidden">抖音支付商户号<input id="newDouyinMchId" placeholder="mchid"></label>
+          <label class="douyin-channel-field hidden">商户证书序列号<input id="newDouyinMerchantSerialNo" placeholder="merchant serial_no"></label>
+          <label class="wide douyin-channel-field hidden">商户 RSA 私钥<textarea id="newDouyinMerchantPrivateKey" placeholder="PKCS#8 PEM 私钥"></textarea></label>
+          <label class="wide douyin-channel-field hidden">抖音支付平台证书<textarea id="newDouyinPlatformCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+          <label class="wide douyin-channel-field hidden">上传抖音支付平台证书
+            <input id="newDouyinPlatformCertificateFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
+          </label>
+          <label class="douyin-channel-field hidden">通知加密密钥<input id="newDouyinEncryptKey" type="password" autocomplete="new-password" placeholder="必须正好 32 字节"></label>
+          <label class="douyin-channel-field hidden">H5 应用名称<input id="newDouyinH5AppName" value="支付平台" placeholder="支付平台"></label>
+          <label class="douyin-channel-field hidden">抖音支付网关<input id="newDouyinGatewayUrl" value="https://api.douyinpay.com"></label>
+          <label class="douyin-channel-field hidden">抖音异步通知地址<input id="newDouyinNotifyUrl" readonly></label>
+          <label class="douyin-channel-field hidden">H5 返回地址<input id="newDouyinReturnUrl" readonly></label>
           <label class="wide public-key-field">支付宝公钥<textarea id="newChannelAlipayPublicKey" required placeholder="支付宝公钥"></textarea></label>
           <label class="wide">应用私钥<textarea id="newChannelMerchantPrivateKey" required placeholder="应用 RSA2 私钥"></textarea></label>
           <div class="wide cert-mode-field cert-upload-grid hidden">
@@ -2139,7 +2153,8 @@
     ALIPAY_DIRECT_F2F: "直付通当面付",
     ALIPAY_DIRECT_PAGE: "直付通PC网页",
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
-    ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
+    ALIPAY_DIRECT_JSAPI: "直付通JSAPI",
+    DOUYIN_H5: "抖音H5支付"
   };
 
   const standardProductIds = [
@@ -2161,6 +2176,7 @@
     "ALIPAY_DIRECT_PAGE",
     "ALIPAY_DIRECT_JSAPI"
   ];
+  const douyinProductIds = ["DOUYIN_H5"];
   const $ = (id) => document.getElementById(id);
 
   function setText(id, value) {
@@ -3792,6 +3808,7 @@
   function channelCheckLabel(channel) {
     const tags = [];
     if (channel.provider === "ALIPAY_DIRECT") tags.push("直付通");
+    if (channel.provider === "DOUYIN") tags.push("抖音支付");
     if (!channel.enabled) tags.push("未启用");
     return tags.length ? `${channel.id}（${tags.join("，")}）` : channel.id;
   }
@@ -3814,6 +3831,13 @@
   }
 
   function channelSecretTags(channel) {
+    if (channel.provider === "DOUYIN") {
+      return [
+        `<span class="mini">${channel.hasDouyinMerchantPrivateKey ? "商户私钥已配置" : "缺商户私钥"}</span>`,
+        `<span class="mini">${channel.hasDouyinPlatformCertificate ? "平台证书已配置" : "缺平台证书"}</span>`,
+        `<span class="mini">${channel.hasDouyinEncryptKey ? "通知密钥已配置" : "缺通知密钥"}</span>`
+      ].join("");
+    }
     const tags = [
       `<span class="mini">${channel.credentialMode === "CERTIFICATE" ? "证书模式" : "公钥模式"}</span>`,
       `<span class="mini">${channel.hasMerchantPrivateKey ? "私钥已配" : "缺私钥"}</span>`
@@ -3840,9 +3864,9 @@
         </td>
         <td>
           <strong>${html(channel.id)}</strong>
-          <div class="muted">${html(channel.provider)}</div>
+          <div class="muted">${html(channel.provider === "DOUYIN" ? "抖音支付" : channel.provider)}</div>
         </td>
-        <td>${html(channel.appId || "-")}</td>
+        <td>${html((channel.provider === "DOUYIN" ? channel.douyinAppId : channel.appId) || "-")}</td>
         <td>
           ${channel.provider === "ALIPAY_DIRECT"
             ? `<input data-channel-input="${html(channel.id)}" data-field="subMerchantId" placeholder="二级商户 SMID" value="${html(channel.subMerchantId || "")}">`
@@ -3894,6 +3918,7 @@
 
   function channelProductIds(channel) {
     if (!channel) return [];
+    if (channel.provider === "DOUYIN") return douyinProductIds;
     return channel.provider === "ALIPAY_DIRECT" ? directProductIds : standardProductIds;
   }
 
@@ -4153,17 +4178,49 @@
     $("newChannelSubMerchantId").required = direct;
   }
 
+  function syncProviderFields() {
+    const douyin = $("newChannelProvider").value === "DOUYIN";
+    const editing = Boolean(state.editingChannelId);
+    const alipayFieldIds = [
+      "newChannelAppId",
+      "newChannelCredentialMode",
+      "newChannelAlipayPublicKey",
+      "newChannelMerchantPrivateKey",
+      "newChannelAppAuthToken",
+      "newChannelGatewayUrl",
+      "newChannelNotifyUrl",
+      "newChannelReturnUrl"
+    ];
+    alipayFieldIds.forEach((id) => $(id)?.closest("label")?.classList.toggle("hidden", douyin));
+    document.querySelectorAll(".douyin-channel-field").forEach((field) => field.classList.toggle("hidden", !douyin));
+
+    $("newChannelAppId").required = !douyin;
+    $("newDouyinAppId").required = douyin;
+    $("newDouyinMchId").required = douyin;
+    $("newDouyinMerchantSerialNo").required = douyin;
+    $("newDouyinH5AppName").required = douyin;
+    $("newDouyinGatewayUrl").required = douyin;
+    $("newDouyinMerchantPrivateKey").required = douyin && !editing;
+    $("newDouyinPlatformCertificate").required = false;
+    $("newDouyinEncryptKey").required = douyin && !editing;
+
+    syncDirectChannelField();
+    syncCredentialModeFields();
+    syncChannelCallbackUrls();
+  }
+
   function syncCredentialModeFields() {
+    const douyin = $("newChannelProvider").value === "DOUYIN";
     const certificateMode = $("newChannelCredentialMode").value === "CERTIFICATE";
     const editing = Boolean(state.editingChannelId);
     const channel = editing ? state.channels.find((item) => item.id === state.editingChannelId) : null;
     document.querySelectorAll(".cert-mode-field").forEach((field) => {
-      field.classList.toggle("hidden", !certificateMode);
+      field.classList.toggle("hidden", douyin || !certificateMode);
     });
     document.querySelectorAll(".public-key-field").forEach((field) => {
-      field.classList.toggle("hidden", certificateMode);
+      field.classList.toggle("hidden", douyin || certificateMode);
     });
-    $("newChannelAlipayPublicKey").required = !certificateMode && !editing;
+    $("newChannelAlipayPublicKey").required = !douyin && !certificateMode && !editing;
     if ($("newChannelAlipayPublicKey").required) {
       $("newChannelAlipayPublicKey").setAttribute("required", "");
     } else {
@@ -4197,6 +4254,8 @@
     const channelId = ($("newChannelId").value || state.editingChannelId || "").trim();
     $("newChannelNotifyUrl").value = callbackUrl("/api/v1/alipay/notify", channelId);
     $("newChannelReturnUrl").value = callbackUrl("/api/v1/alipay/return", channelId);
+    $("newDouyinNotifyUrl").value = callbackUrl("/api/v1/douyin/notify", channelId);
+    $("newDouyinReturnUrl").value = `${appOrigin()}/cashier.html${channelId ? `?channelId=${encodeURIComponent(channelId)}` : ""}`;
   }
 
   function showChannelModal() {
@@ -4234,9 +4293,12 @@
     $("newChannelPayMin").value = "0.01";
     $("newChannelPayMax").value = "50000";
     $("newChannelGatewayUrl").value = "https://openapi.alipay.com/gateway.do";
-    syncChannelCallbackUrls();
-    syncDirectChannelField();
-    syncCredentialModeFields();
+    $("newDouyinGatewayUrl").value = "https://api.douyinpay.com";
+    $("newDouyinH5AppName").value = "支付平台";
+    $("newDouyinMerchantPrivateKey").value = "";
+    $("newDouyinPlatformCertificate").value = "";
+    $("newDouyinEncryptKey").value = "";
+    syncProviderFields();
   }
 
   function openCreateChannelModal() {
@@ -4269,6 +4331,14 @@
     $("newChannelPayMin").value = channel.payMin ?? "";
     $("newChannelPayMax").value = channel.payMax ?? "";
     $("newChannelGatewayUrl").value = channel.gatewayUrl || "https://openapi.alipay.com/gateway.do";
+    $("newDouyinAppId").value = channel.douyinAppId || "";
+    $("newDouyinMchId").value = channel.douyinMchId || "";
+    $("newDouyinMerchantSerialNo").value = channel.douyinMerchantSerialNo || "";
+    $("newDouyinMerchantPrivateKey").value = "";
+    $("newDouyinPlatformCertificate").value = "";
+    $("newDouyinEncryptKey").value = "";
+    $("newDouyinH5AppName").value = channel.douyinH5AppName || "支付平台";
+    $("newDouyinGatewayUrl").value = channel.douyinGatewayUrl || "https://api.douyinpay.com";
     syncChannelCallbackUrls();
     $("newChannelAlipayPublicKey").required = false;
     $("newChannelAlipayPublicKey").removeAttribute("required");
@@ -4280,33 +4350,68 @@
     $("newChannelMerchantPrivateKey").placeholder = channel.hasMerchantPrivateKey
       ? "已保存，留空不修改应用私钥"
       : "应用 RSA2 私钥";
+    $("newDouyinMerchantPrivateKey").placeholder = channel.hasDouyinMerchantPrivateKey
+      ? "已保存，留空不修改商户私钥"
+      : "PKCS#8 PEM 私钥";
+    $("newDouyinPlatformCertificate").placeholder = channel.hasDouyinPlatformCertificate
+      ? "已保存，留空不修改平台证书"
+      : "-----BEGIN CERTIFICATE-----";
+    $("newDouyinEncryptKey").placeholder = channel.hasDouyinEncryptKey
+      ? "已保存，留空不修改通知密钥"
+      : "必须正好 32 字节";
     $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
-    syncDirectChannelField();
-    syncCredentialModeFields();
+    syncProviderFields();
     showChannelModal();
     $("newChannelAppId").focus();
   }
 
   async function channelFormPayload() {
     const editing = Boolean(state.editingChannelId);
+    const provider = $("newChannelProvider").value;
     syncChannelCallbackUrls();
     const payload = compact({
       id: $("newChannelId").value.trim(),
       payMin: amountField("newChannelPayMin"),
-      payMax: amountField("newChannelPayMax"),
+      payMax: amountField("newChannelPayMax")
+    });
+
+    if (!editing) {
+      payload.provider = provider;
+      payload.enabled = true;
+      payload.dailyEnabled = true;
+    }
+
+    if (provider === "DOUYIN") {
+      Object.assign(payload, compact({
+        douyinGatewayUrl: $("newDouyinGatewayUrl").value,
+        douyinAppId: $("newDouyinAppId").value,
+        douyinMchId: $("newDouyinMchId").value,
+        douyinMerchantSerialNo: $("newDouyinMerchantSerialNo").value,
+        douyinNotifyUrl: $("newDouyinNotifyUrl").value,
+        douyinReturnUrl: $("newDouyinReturnUrl").value,
+        douyinH5AppName: $("newDouyinH5AppName").value
+      }));
+      const merchantPrivateKey = $("newDouyinMerchantPrivateKey").value.trim();
+      const encryptKey = $("newDouyinEncryptKey").value.trim();
+      const uploadedCertificate = await readCertificateFile("newDouyinPlatformCertificateFile");
+      const platformCertificate = uploadedCertificate || $("newDouyinPlatformCertificate").value.trim();
+      if (!editing && !platformCertificate) {
+        throw new Error("请填写或上传抖音支付平台证书");
+      }
+      if (!editing || merchantPrivateKey) payload.douyinMerchantPrivateKey = merchantPrivateKey;
+      if (!editing || platformCertificate) payload.douyinPlatformCertificate = platformCertificate;
+      if (!editing || encryptKey) payload.douyinEncryptKey = encryptKey;
+      return compact(payload);
+    }
+
+    Object.assign(payload, compact({
       gatewayUrl: $("newChannelGatewayUrl").value,
       appId: $("newChannelAppId").value,
       credentialMode: $("newChannelCredentialMode").value,
       subMerchantId: $("newChannelSubMerchantId").value,
       notifyUrl: $("newChannelNotifyUrl").value,
       returnUrl: $("newChannelReturnUrl").value
-    });
-
-    if (!editing) {
-      payload.provider = $("newChannelProvider").value;
-      payload.enabled = true;
-      payload.dailyEnabled = true;
-    }
+    }));
 
     const merchantPrivateKey = $("newChannelMerchantPrivateKey").value.trim();
     const alipayPublicKey = $("newChannelAlipayPublicKey").value.trim();
@@ -5031,7 +5136,7 @@
 
   $("newChannelId").addEventListener("input", syncChannelCallbackUrls);
 
-  $("newChannelProvider").addEventListener("change", syncDirectChannelField);
+  $("newChannelProvider").addEventListener("change", syncProviderFields);
 
   $("newChannelCredentialMode").addEventListener("change", syncCredentialModeFields);
 
@@ -5071,9 +5176,7 @@
     if (event.target.id === "qrModal") hideCashierQr();
   });
 
-  syncDirectChannelField();
-  syncCredentialModeFields();
-  syncChannelCallbackUrls();
+  syncProviderFields();
   renderTopbarDate();
   renderDefaultComplaintTimes();
   renderComplaintRecords();

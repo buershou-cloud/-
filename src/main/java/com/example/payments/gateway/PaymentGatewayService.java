@@ -100,9 +100,27 @@ public class PaymentGatewayService {
 
     public GatewayResponse refund(RefundCreateRequest request) {
         orderService.ensureRefundable(request.outTradeNo(), request.tradeNo(), request.refundAmount());
-        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).refund(channel, request));
-        if (response.status() == PaymentStatus.SUCCESS) {
-            orderService.recordRefund(request, response);
+        Map<String, Object> refundExtra = new LinkedHashMap<>(request.extra() == null ? Map.of() : request.extra());
+        refundExtra.putIfAbsent(
+                "douyin_total_amount_fen",
+                orderService.amountByIdentifier(request.outTradeNo(), request.tradeNo())
+                        .movePointRight(2)
+                        .setScale(0, RoundingMode.UNNECESSARY)
+                        .longValueExact()
+        );
+        RefundCreateRequest prepared = new RefundCreateRequest(
+                request.outTradeNo(),
+                request.tradeNo(),
+                request.refundAmount(),
+                request.outRequestNo(),
+                request.refundReason(),
+                request.appAuthToken(),
+                request.channelIds(),
+                refundExtra
+        );
+        GatewayResponse response = execute(null, prepared.channelIds(), null, null, channel -> provider(channel).refund(channel, prepared));
+        if (response.status() != PaymentStatus.FAILED) {
+            orderService.recordRefund(prepared, response);
         }
         return response;
     }

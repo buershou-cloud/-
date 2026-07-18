@@ -426,7 +426,8 @@
     ALIPAY_DIRECT_APP: "直付通APP支付",
     ALIPAY_DIRECT_PAGE: "直付通PC网页",
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
-    ALIPAY_DIRECT_JSAPI: "直付通JSAPI"
+    ALIPAY_DIRECT_JSAPI: "直付通JSAPI",
+    DOUYIN_H5: "抖音H5支付"
   };
   const desktopProductPreference = [
     "ALIPAY_ORDER_CODE",
@@ -443,7 +444,8 @@
     "ALIPAY_PAGE",
     "ALIPAY_DIRECT_PAGE",
     "ALIPAY_JSAPI",
-    "ALIPAY_DIRECT_JSAPI"
+    "ALIPAY_DIRECT_JSAPI",
+    "DOUYIN_H5"
   ];
   const mobileProductPreference = desktopProductPreference;
 
@@ -863,7 +865,7 @@
     paymentPollTimer = setTimeout(poll, 1000);
   }
 
-  function startAppPaymentPolling(paymentResponse, payload) {
+  function startAppPaymentPolling(paymentResponse, payload, paymentName = "APP支付") {
     clearPaymentPolling();
     if (!payload.outTradeNo) {
       return;
@@ -888,7 +890,7 @@
         }
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult("APP支付结果确认中，请稍后在后台订单列表查看。", "loading");
+          writeResult(`${paymentName}结果确认中，请稍后在后台订单列表查看。`, "loading");
           return;
         }
         paymentPollTimer = setTimeout(poll, 2000);
@@ -994,6 +996,10 @@
 
   function isJsapiProduct(product) {
     return product === "ALIPAY_JSAPI" || product === "ALIPAY_DIRECT_JSAPI";
+  }
+
+  function isDouyinH5Product(product) {
+    return product === "DOUYIN_H5";
   }
 
   function channelsForCurrentProduct() {
@@ -1165,7 +1171,9 @@
       currentAvailableChannels = [currentChannel];
       $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
       $("channelText").textContent = currentChannel.id;
-      $("providerText").textContent = currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品";
+      $("providerText").textContent = currentChannel.provider === "DOUYIN"
+        ? "抖音支付"
+        : (currentChannel.provider === "ALIPAY_DIRECT" ? "支付宝直付通" : "支付宝官方产品");
       const options = productOptions(currentChannel);
       currentProductOptions = options;
       if (preferredProduct && !options.includes(preferredProduct)) {
@@ -1284,7 +1292,9 @@
     }
     if (currentChannel) {
       payload.channelIds = [currentChannel.id];
-      payload.notifyUrl = `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
+      payload.notifyUrl = currentChannel.provider === "DOUYIN"
+        ? `${location.origin}/api/v1/douyin/notify/${encodeURIComponent(currentChannel.id)}`
+        : `${location.origin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
     }
     if (isPaymentCodeProduct(currentProduct)) {
       const paymentCode = normalizePaymentCode($("paymentCode").value);
@@ -1427,6 +1437,20 @@
           "请使用支付宝扫码付款，付款完成后订单会自动回调更新。"
         );
       } else if (data.redirectUrl) {
+        if (isDouyinH5Product(currentProduct)) {
+          startAppPaymentPolling(data, payload, "抖音H5支付");
+          writeResult("抖音H5支付订单已创建，正在打开官方收银台...", "loading");
+          if (isMobilePayClient()) {
+            window.location.href = data.redirectUrl;
+            return;
+          }
+          showPaymentQr(
+            data.redirectUrl,
+            "抖音H5支付二维码",
+            "请使用手机扫码进入抖音支付官方H5收银台完成付款。"
+          );
+          return;
+        }
         if (isMobilePayClient()) {
           openAlipayQr(data.redirectUrl);
           return;
