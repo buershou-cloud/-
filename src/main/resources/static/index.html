@@ -620,6 +620,131 @@
       grid-column: 1 / -1;
     }
 
+    .segmented-control {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #f7f9fc;
+    }
+
+    .segmented-btn {
+      min-height: 32px;
+      padding: 5px 13px;
+      border: 0;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .segmented-btn.active {
+      background: #fff;
+      color: var(--primary);
+      box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+    }
+
+    .batch-toolbar,
+    .batch-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .batch-toolbar {
+      margin: 20px 0 10px;
+    }
+
+    .batch-toolbar-title {
+      display: grid;
+      gap: 3px;
+    }
+
+    .batch-summary {
+      margin-top: 14px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .batch-total {
+      display: flex;
+      align-items: baseline;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .batch-total strong {
+      color: var(--text);
+      font-size: 18px;
+    }
+
+    .batch-payment {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .batch-payment input {
+      width: 220px;
+    }
+
+    .payout-batch-table {
+      min-width: 1120px;
+    }
+
+    .payout-batch-table th,
+    .payout-batch-table td {
+      height: 48px;
+      padding: 6px 8px;
+    }
+
+    .payout-batch-table input,
+    .payout-batch-table select {
+      width: 100%;
+      min-width: 120px;
+      height: 36px;
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      color: var(--text);
+    }
+
+    .payout-batch-table [data-batch-field="recipient"] {
+      min-width: 220px;
+    }
+
+    .payout-batch-table [data-batch-field="amount"] {
+      min-width: 100px;
+    }
+
+    .requirements-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 22px;
+    }
+
+    .requirement-item {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .requirement-item strong {
+      font-size: 15px;
+    }
+
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1359,6 +1484,10 @@
       .channel-toolbar {
         grid-template-columns: 1fr;
       }
+
+      .requirements-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     @media (max-width: 720px) {
@@ -1370,6 +1499,37 @@
 
       .content {
         padding: 16px;
+      }
+
+      .panel-head {
+        align-items: flex-start;
+        flex-direction: column;
+        padding-top: 14px;
+        padding-bottom: 14px;
+      }
+
+      .segmented-control {
+        width: 100%;
+      }
+
+      .segmented-btn {
+        flex: 1;
+      }
+
+      .batch-summary {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .batch-payment {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .batch-payment input,
+      .batch-summary > .btn {
+        width: 100%;
       }
 
       .form-grid {
@@ -1523,46 +1683,100 @@
 
       <section id="page-payouts" class="page">
         <div class="work-grid">
-          <section class="panel">
-            <div class="panel-head"><h2 class="panel-title">发起商家代付</h2></div>
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">发起商家代付</h2>
+              <div class="segmented-control" aria-label="代付模式">
+                <button class="segmented-btn active" type="button" data-payout-mode="single">单笔代付</button>
+                <button class="segmented-btn" type="button" data-payout-mode="batch">批量代付</button>
+              </div>
+            </div>
             <div class="panel-body">
-              <form id="payoutForm">
-                <div class="form-grid">
-                  <label>代付通道
-                    <select id="payoutChannel" required>
-                      <option value="">请选择支付宝或抖音通道</option>
-                    </select>
-                  </label>
-                  <label>代付单号<input id="payoutOutBizNo" maxlength="32" placeholder="留空自动生成"></label>
-                  <label>代付金额<input id="payoutAmount" type="number" min="0.01" step="0.01" required></label>
-                  <label>收款标识类型
-                    <select id="payoutRecipientType" required></select>
-                  </label>
-                  <label class="wide">收款标识<input id="payoutRecipient" autocomplete="off" required></label>
-                  <label>收款人姓名<input id="payoutRecipientName" autocomplete="off" placeholder="登录号收款或大额抖音转账时填写"></label>
-                  <label>订单标题<input id="payoutOrderTitle" maxlength="64" value="商家代付"></label>
-                  <label class="wide">转账备注<input id="payoutRemark" maxlength="200" value="商家代付" required></label>
-                  <div id="payoutDouyinFields" class="form-grid wide hidden">
-                    <label>转账场景 ID<input id="payoutTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
-                    <label>场景报备类型<input id="payoutSceneInfoType" placeholder="例如 activity_name"></label>
-                    <label class="wide">场景报备内容<input id="payoutSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+              <div id="payoutSingleMode">
+                <form id="payoutForm">
+                  <div class="form-grid">
+                    <label>代付通道
+                      <select id="payoutChannel" required>
+                        <option value="">请选择支付宝或抖音通道</option>
+                      </select>
+                    </label>
+                    <label>代付单号<input id="payoutOutBizNo" maxlength="32" placeholder="留空自动生成"></label>
+                    <label>代付金额<input id="payoutAmount" type="number" min="0.01" step="0.01" required></label>
+                    <label>收款标识类型
+                      <select id="payoutRecipientType" required></select>
+                    </label>
+                    <label class="wide">收款标识<input id="payoutRecipient" autocomplete="off" required></label>
+                    <label>收款人姓名<input id="payoutRecipientName" autocomplete="off" placeholder="登录号收款或大额抖音转账时填写"></label>
+                    <label>订单标题<input id="payoutOrderTitle" maxlength="64" value="商家代付"></label>
+                    <label class="wide">转账备注<input id="payoutRemark" maxlength="200" value="商家代付" required></label>
+                    <div id="payoutDouyinFields" class="form-grid wide hidden">
+                      <label>转账场景 ID<input id="payoutTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
+                      <label>场景报备类型<input id="payoutSceneInfoType" placeholder="例如 activity_name"></label>
+                      <label class="wide">场景报备内容<input id="payoutSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+                    </div>
+                    <label class="wide">支付密码<input id="payoutPaymentPassword" type="password" autocomplete="off" required></label>
                   </div>
-                  <label class="wide">支付密码<input id="payoutPaymentPassword" type="password" autocomplete="off" required></label>
-                </div>
-                <div class="form-actions">
-                  <button class="btn" id="submitPayoutBtn" type="submit">确认代付</button>
-                  <button class="btn secondary" id="refreshPayoutsBtn" type="button">刷新记录</button>
-                </div>
-              </form>
+                  <div class="form-actions">
+                    <button class="btn" id="submitPayoutBtn" type="submit">确认代付</button>
+                    <button class="btn secondary" id="refreshPayoutsBtn" type="button">刷新记录</button>
+                  </div>
+                </form>
+              </div>
+
+              <div id="payoutBatchMode" class="hidden">
+                <form id="payoutBatchForm">
+                  <div class="form-grid">
+                    <label>统一代付通道
+                      <select id="payoutBatchChannel" required>
+                        <option value="">请选择支付宝或抖音通道</option>
+                      </select>
+                    </label>
+                    <label>统一订单标题<input id="payoutBatchOrderTitle" maxlength="64" value="商家代付"></label>
+                    <label class="wide">统一转账备注<input id="payoutBatchRemark" maxlength="200" value="商家代付" required></label>
+                    <div id="payoutBatchDouyinFields" class="form-grid wide hidden">
+                      <label>转账场景 ID<input id="payoutBatchTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
+                      <label>场景报备类型<input id="payoutBatchSceneInfoType" placeholder="例如 activity_name"></label>
+                      <label class="wide">场景报备内容<input id="payoutBatchSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+                    </div>
+                  </div>
+                  <div class="batch-toolbar">
+                    <div class="batch-toolbar-title">
+                      <strong>收款明细</strong>
+                      <span class="muted">每批最多 20 笔，同时最多处理 4 笔</span>
+                    </div>
+                    <button class="btn secondary small" id="addPayoutBatchRowBtn" type="button">添加一笔</button>
+                  </div>
+                  <div class="table-wrap">
+                    <table class="payout-batch-table">
+                      <thead><tr><th>代付单号</th><th>收款类型</th><th>收款标识</th><th>收款人姓名</th><th>金额</th><th>操作</th></tr></thead>
+                      <tbody id="payoutBatchRows"></tbody>
+                    </table>
+                  </div>
+                  <div class="batch-summary">
+                    <div class="batch-total">
+                      <span>共 <strong id="payoutBatchCount">0</strong> 笔</span>
+                      <span>合计 <strong id="payoutBatchTotal">¥0.00</strong></span>
+                    </div>
+                    <label class="batch-payment">支付密码<input id="payoutBatchPaymentPassword" type="password" autocomplete="off" required></label>
+                    <button class="btn" id="submitPayoutBatchBtn" type="submit">确认批量代付</button>
+                  </div>
+                </form>
+              </div>
               <pre id="payoutResult" class="operation-result">代付不会自动重试；结果未知时请查询原代付单。</pre>
             </div>
           </section>
-          <section class="panel">
+          <section class="panel wide-panel">
             <div class="panel-head"><h2 class="panel-title">接入要求</h2></div>
-            <div class="panel-body">
-              <p class="muted">支付宝商家转账仅支持自研应用和公钥证书模式；应用网关需配置为下方回调地址。</p>
-              <pre id="alipayPayoutNotifyUrl" class="operation-result"></pre>
-              <p class="muted">抖音转账要求商户证书、平台公钥证书、通知密钥和已开通的转账场景。手机号和姓名会在服务端加密后发送。</p>
+            <div class="panel-body requirements-grid">
+              <div class="requirement-item">
+                <strong>支付宝商家转账</strong>
+                <p class="muted">仅支持自研应用和公钥证书模式，应用网关需配置为下方回调地址。</p>
+                <pre id="alipayPayoutNotifyUrl" class="operation-result"></pre>
+              </div>
+              <div class="requirement-item">
+                <strong>抖音商家转账</strong>
+                <p class="muted">需要商户证书、平台公钥证书、通知密钥和已开通的转账场景；手机号和姓名由服务端加密后发送。</p>
+              </div>
             </div>
           </section>
           <section class="panel wide-panel">
@@ -1581,7 +1795,7 @@
 
       <section id="page-accounts" class="page">
         <div class="work-grid">
-          <section class="panel wide-panel">
+          <section id="accountAdministratorPanel" class="panel wide-panel">
             <div class="panel-head">
               <h2 class="panel-title">管理员账号</h2>
               <button class="btn small" id="adminAccountBtn" type="button">添加管理员</button>
@@ -1598,13 +1812,13 @@
           <section class="panel">
             <div class="panel-head"><h2 class="panel-title">登录安全</h2></div>
             <div class="panel-body">
-              <p>当前账号：<strong id="accountCurrentUsername">-</strong></p>
+              <p>当前账号：<strong id="accountCurrentUsername">-</strong> · <span id="accountCurrentRole">普通管理员</span></p>
               <div class="form-actions">
                 <button class="btn secondary" id="changePasswordBtn" type="button">修改登录密码</button>
               </div>
             </div>
           </section>
-          <section class="panel">
+          <section id="accountPaymentPasswordPanel" class="panel">
             <div class="panel-head"><h2 class="panel-title">代付安全</h2></div>
             <div class="panel-body">
               <p>支付密码：<strong id="accountPaymentPasswordStatus">未设置</strong></p>
@@ -2288,6 +2502,8 @@
     profitSharingRelations: [],
     payouts: [],
     paymentPasswordConfigured: false,
+    superAdministrator: false,
+    superAdministratorUsername: "admin",
     administrators: [],
     adminDeleteTarget: null,
     editingChannelId: null,
@@ -2299,6 +2515,8 @@
     preauthUnfreezeModalResolve: null,
     confirmModalResolve: null
   };
+
+  let payoutBatchRowSequence = 0;
 
   const channelCheckTargets = [
     "onboardChannelChecks",
@@ -2425,18 +2643,18 @@
   function refundResultText(order, refundAmount, outRequestNo, data) {
     const raw = data?.raw || {};
     const lines = [
-      "支付宝退款已提交",
+      "退款请求已提交",
       `订单号：${order?.outTradeNo || data?.outTradeNo || "-"}`,
       `退款金额：${money(refundAmount)}`,
       `退款状态：${paymentStatusText(data?.status)}`
     ];
     if (data?.channelId) lines.push(`退款通道：${data.channelId}`);
-    if (data?.tradeNo) lines.push(`支付宝交易号：${data.tradeNo}`);
+    if (data?.tradeNo) lines.push(`平台交易号：${data.tradeNo}`);
     if (outRequestNo) lines.push(`退款请求号：${outRequestNo}`);
-    if (data?.code) lines.push(`支付宝返回码：${data.code}`);
-    if (data?.message) lines.push(`支付宝返回消息：${data.message}`);
+    if (data?.code) lines.push(`平台返回码：${data.code}`);
+    if (data?.message) lines.push(`平台返回消息：${data.message}`);
     const refundFee = rawField(raw, "refund_fee", "refund_amount");
-    if (refundFee) lines.push(`支付宝确认退款金额：${money(refundFee)}`);
+    if (refundFee) lines.push(`平台确认退款金额：${money(refundFee)}`);
     const fundChange = rawField(raw, "fund_change");
     if (fundChange) lines.push(`资金是否变化：${fundChange === "Y" ? "是" : fundChange === "N" ? "否" : fundChange}`);
     return lines.join("\n");
@@ -2613,6 +2831,16 @@
     }
   }
 
+  function applyAdminSecurity(security) {
+    state.paymentPasswordConfigured = Boolean(security.paymentPasswordConfigured);
+    state.superAdministrator = Boolean(security.superAdministrator);
+    state.superAdministratorUsername = security.superAdministratorUsername || "admin";
+    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    if (security.username) {
+      $("adminUsername").textContent = security.username;
+    }
+  }
+
   async function checkAdminSession() {
     const session = await request("/api/v1/admin-auth/session");
     if (!session.authenticated) {
@@ -2621,9 +2849,7 @@
     }
     $("adminUsername").textContent = session.username || "admin";
     const security = await request("/api/v1/admin-auth/security");
-    state.paymentPasswordConfigured = Boolean(security.paymentPasswordConfigured);
-    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
-    $("adminUsername").textContent = security.username || session.username || "admin";
+    applyAdminSecurity(security);
     renderAccountManagement();
   }
 
@@ -2663,6 +2889,7 @@
   }
 
   function openAdminAccountModal() {
+    if (!state.superAdministrator) return;
     $("adminAccountForm").reset();
     $("adminAccountResult").classList.add("hidden");
     $("adminAccountModal").classList.remove("hidden");
@@ -2678,16 +2905,24 @@
   function renderAccountManagement() {
     const current = $("adminUsername").textContent.trim();
     setText("accountCurrentUsername", current || "-");
+    setText("accountCurrentRole", state.superAdministrator ? "超级管理员" : "普通管理员");
+    $("accountAdministratorPanel").classList.toggle("hidden", !state.superAdministrator);
+    $("accountPaymentPasswordPanel").classList.toggle("hidden", !state.superAdministrator);
     setText("accountPaymentPasswordStatus", state.paymentPasswordConfigured ? "已设置" : "未设置");
     setText("paymentPasswordBtn", state.paymentPasswordConfigured ? "修改支付密码" : "设置支付密码");
     const tableBody = $("accountTableBody");
     if (!tableBody) return;
+    if (!state.superAdministrator) {
+      tableBody.innerHTML = "";
+      return;
+    }
     tableBody.innerHTML = state.administrators.map((username) => {
       const active = username === current;
+      const superAccount = username === state.superAdministratorUsername;
       return `<tr>
         <td>${html(username)}</td>
-        <td>${active ? '<span class="status success">当前登录</span>' : '<span class="status">可登录</span>'}</td>
-        <td>${active ? '<span class="muted">当前账号不可删除</span>' : `<button class="btn danger small" type="button" data-delete-admin="${html(username)}">删除</button>`}</td>
+        <td><span class="status ${superAccount ? "success" : ""}">${superAccount ? "超级管理员" : "普通管理员"}${active ? " · 当前登录" : ""}</span></td>
+        <td>${superAccount ? '<span class="muted">超级管理员不可删除</span>' : `<button class="btn danger small" type="button" data-delete-admin="${html(username)}">删除</button>`}</td>
       </tr>`;
     }).join("");
   }
@@ -2705,12 +2940,13 @@
         password: newPassword
       })
     });
-    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    applyAdminSecurity(security);
     renderAccountManagement();
     return { message: "管理员账号已添加", username: $("newAdminUsername").value.trim() };
   }
 
   function openDeleteAdminModal(username) {
+    if (!state.superAdministrator || username === state.superAdministratorUsername) return;
     state.adminDeleteTarget = username;
     $("deleteAdminForm").reset();
     setText("deleteAdminTarget", username);
@@ -2732,12 +2968,13 @@
       method: "DELETE",
       body: JSON.stringify({ currentPassword: $("deleteAdminCurrentPassword").value })
     });
-    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    applyAdminSecurity(security);
     renderAccountManagement();
     return { message: "管理员账号已删除", username };
   }
 
   function openPaymentPasswordModal() {
+    if (!state.superAdministrator) return;
     $("paymentPasswordForm").reset();
     $("paymentPasswordResult").classList.add("hidden");
     $("currentPaymentPasswordField").classList.toggle("hidden", !state.paymentPasswordConfigured);
@@ -2766,7 +3003,7 @@
         newPaymentPassword: newPassword
       })
     });
-    state.paymentPasswordConfigured = Boolean(security.paymentPasswordConfigured);
+    applyAdminSecurity(security);
     renderAccountManagement();
     return { message: "代付支付密码已保存" };
   }
@@ -3574,7 +3811,7 @@
       throw { message: `订单不存在: ${outTradeNo}` };
     }
     if (!refundableOrder(order)) {
-      throw { message: "只有已完成或部分退款且仍有可退金额的订单可以发起支付宝退款" };
+      throw { message: "只有已完成或部分退款且仍有可退金额的订单可以发起退款" };
     }
     const refund = await openRefundModal(order);
     if (!refund) return;
@@ -3592,7 +3829,7 @@
       }))
     });
     if (gatewayFailed(data)) {
-      throw gatewayFailure("支付宝退款", data);
+      throw gatewayFailure("订单退款", data);
     }
     setDashboardResult({ message: refundResultText(order, refundAmount, outRequestNo, data) });
     await refreshOrdersAfterMutation(order.outTradeNo, (latest) => refundableAmountValue(latest) < refundableAmountValue(order)
@@ -4070,18 +4307,42 @@
   }
 
   function renderPayoutChannelOptions() {
-    const select = $("payoutChannel");
-    if (!select) return;
-    const selected = select.value;
-    select.innerHTML = '<option value="">请选择支付宝或抖音通道</option>' + payoutChannels().map((channel) => `
-      <option value="${html(channel.id)}">${html(channel.id)}（${channel.provider === "DOUYIN" ? "抖音" : "支付宝"}）</option>
-    `).join("");
-    select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
+    ["payoutChannel", "payoutBatchChannel"].forEach((id) => {
+      const select = $(id);
+      if (!select) return;
+      const selected = select.value;
+      select.innerHTML = '<option value="">请选择支付宝或抖音通道</option>' + payoutChannels().map((channel) => `
+        <option value="${html(channel.id)}">${html(channel.id)}（${channel.provider === "DOUYIN" ? "抖音" : "支付宝"}）</option>
+      `).join("");
+      select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
+    });
     syncPayoutProviderFields();
+    syncPayoutBatchProviderFields();
   }
 
-  function selectedPayoutChannel() {
-    return state.channels.find((channel) => channel.id === $("payoutChannel")?.value);
+  function selectedPayoutChannel(selectId = "payoutChannel") {
+    return state.channels.find((channel) => channel.id === $(selectId)?.value);
+  }
+
+  function payoutRecipientTypeOptions(channel, selected = "") {
+    const options = channel?.provider === "DOUYIN"
+      ? [
+          ["DOUYIN_OPEN_ID", "抖音 OpenID"],
+          ["DOUYIN_PHONE", "手机号"]
+        ]
+      : channel
+        ? [
+            ["ALIPAY_OPEN_ID", "支付宝 OpenID"],
+            ["ALIPAY_USER_ID", "支付宝用户 ID"],
+            ["ALIPAY_LOGON_ID", "支付宝登录号"]
+          ]
+        : [];
+    if (!options.length) {
+      return '<option value="">请先选择通道</option>';
+    }
+    return options.map(([value, label]) => `
+      <option value="${value}"${value === selected ? " selected" : ""}>${label}</option>
+    `).join("");
   }
 
   function syncPayoutProviderFields() {
@@ -4090,12 +4351,7 @@
     const recipientType = $("payoutRecipientType");
     if (!recipientType) return;
     const selected = recipientType.value;
-    recipientType.innerHTML = douyin
-      ? '<option value="DOUYIN_OPEN_ID">抖音 OpenID</option><option value="DOUYIN_PHONE">手机号</option>'
-      : '<option value="ALIPAY_OPEN_ID">支付宝 OpenID</option><option value="ALIPAY_USER_ID">支付宝用户 ID</option><option value="ALIPAY_LOGON_ID">支付宝登录号</option>';
-    if (Array.from(recipientType.options).some((option) => option.value === selected)) {
-      recipientType.value = selected;
-    }
+    recipientType.innerHTML = payoutRecipientTypeOptions(channel, selected);
     $("payoutDouyinFields").classList.toggle("hidden", !douyin);
     ["payoutTransferSceneId", "payoutSceneInfoType", "payoutSceneInfoContent"].forEach((id) => {
       $(id).required = douyin;
@@ -4103,6 +4359,62 @@
     $("payoutRecipient").placeholder = douyin ? "填写抖音 OpenID 或手机号" : "填写支付宝 OpenID、用户 ID 或登录号";
     const notifyChannel = encodeURIComponent(channel?.id || "通道编号");
     setText("alipayPayoutNotifyUrl", `${window.location.origin}/api/v1/payouts/notify/alipay/${notifyChannel}`);
+  }
+
+  function syncPayoutBatchProviderFields() {
+    const channel = selectedPayoutChannel("payoutBatchChannel");
+    const douyin = channel?.provider === "DOUYIN";
+    $("payoutBatchDouyinFields").classList.toggle("hidden", !douyin);
+    ["payoutBatchTransferSceneId", "payoutBatchSceneInfoType", "payoutBatchSceneInfoContent"].forEach((id) => {
+      $(id).required = douyin;
+    });
+    document.querySelectorAll('#payoutBatchRows [data-batch-field="recipientType"]').forEach((select) => {
+      select.innerHTML = payoutRecipientTypeOptions(channel, select.value);
+    });
+  }
+
+  function switchPayoutMode(mode) {
+    const batch = mode === "batch";
+    $("payoutSingleMode").classList.toggle("hidden", batch);
+    $("payoutBatchMode").classList.toggle("hidden", !batch);
+    document.querySelectorAll("[data-payout-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.payoutMode === mode);
+    });
+  }
+
+  function updatePayoutBatchSummary() {
+    const rows = Array.from($("payoutBatchRows").querySelectorAll("tr"));
+    const total = rows.reduce((sum, row) => {
+      const amount = Number(row.querySelector('[data-batch-field="amount"]')?.value || 0);
+      return sum + (Number.isFinite(amount) ? amount : 0);
+    }, 0);
+    setText("payoutBatchCount", rows.length);
+    setText("payoutBatchTotal", money(total));
+    $("addPayoutBatchRowBtn").disabled = rows.length >= 20;
+  }
+
+  function addPayoutBatchRow(values = {}) {
+    const tableBody = $("payoutBatchRows");
+    if (tableBody.querySelectorAll("tr").length >= 20) return;
+    payoutBatchRowSequence += 1;
+    const row = document.createElement("tr");
+    row.dataset.payoutBatchRow = String(payoutBatchRowSequence);
+    row.innerHTML = `
+      <td><input data-batch-field="outBizNo" maxlength="32" value="${html(values.outBizNo || "")}" placeholder="留空自动生成"></td>
+      <td><select data-batch-field="recipientType" required>${payoutRecipientTypeOptions(selectedPayoutChannel("payoutBatchChannel"), values.recipientType)}</select></td>
+      <td><input data-batch-field="recipient" value="${html(values.recipient || "")}" autocomplete="off" required placeholder="收款账号或 OpenID"></td>
+      <td><input data-batch-field="recipientName" value="${html(values.recipientName || "")}" autocomplete="off" placeholder="按通道要求填写"></td>
+      <td><input data-batch-field="amount" type="number" min="0.01" step="0.01" value="${html(values.amount || "")}" required></td>
+      <td><button class="btn secondary small" type="button" data-remove-payout-row title="删除此行">删除</button></td>
+    `;
+    tableBody.appendChild(row);
+    updatePayoutBatchSummary();
+  }
+
+  function removePayoutBatchRow(button) {
+    button.closest("tr")?.remove();
+    if (!$("payoutBatchRows").querySelector("tr")) addPayoutBatchRow();
+    updatePayoutBatchSummary();
   }
 
   function payoutStatusText(status) {
@@ -4178,10 +4490,39 @@
     });
   }
 
+  function payoutBatchPayload() {
+    const channelId = $("payoutBatchChannel").value;
+    if (!channelId) throw { message: "请选择批量代付通道" };
+    const common = {
+      channelId,
+      orderTitle: $("payoutBatchOrderTitle").value.trim(),
+      remark: $("payoutBatchRemark").value.trim(),
+      transferSceneId: $("payoutBatchTransferSceneId").value.trim(),
+      sceneInfoType: $("payoutBatchSceneInfoType").value.trim(),
+      sceneInfoContent: $("payoutBatchSceneInfoContent").value.trim()
+    };
+    const items = Array.from($("payoutBatchRows").querySelectorAll("tr")).map((row) => compact({
+      ...common,
+      outBizNo: row.querySelector('[data-batch-field="outBizNo"]').value.trim(),
+      recipientType: row.querySelector('[data-batch-field="recipientType"]').value,
+      recipient: row.querySelector('[data-batch-field="recipient"]').value.trim(),
+      recipientName: row.querySelector('[data-batch-field="recipientName"]').value.trim(),
+      amount: row.querySelector('[data-batch-field="amount"]').value
+    }));
+    if (!items.length) throw { message: "请至少添加一笔代付明细" };
+    return {
+      items,
+      paymentPassword: $("payoutBatchPaymentPassword").value
+    };
+  }
+
   async function submitPayout() {
     if (!state.paymentPasswordConfigured) {
-      openPaymentPasswordModal();
-      throw { message: "请先设置代付支付密码" };
+      if (state.superAdministrator) {
+        openPaymentPasswordModal();
+        throw { message: "请先设置代付支付密码" };
+      }
+      throw { message: "系统尚未设置代付支付密码，请联系超级管理员" };
     }
     const payload = payoutPayload();
     const confirmed = await openConfirmModal({
@@ -4205,6 +4546,47 @@
     } catch (error) {
       $("payoutPaymentPassword").value = "";
       throw error;
+    }
+  }
+
+  async function submitPayoutBatch() {
+    if (!state.paymentPasswordConfigured) {
+      if (state.superAdministrator) {
+        openPaymentPasswordModal();
+        throw { message: "请先设置代付支付密码" };
+      }
+      throw { message: "系统尚未设置代付支付密码，请联系超级管理员" };
+    }
+    const payload = payoutBatchPayload();
+    const total = payload.items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const confirmed = await openConfirmModal({
+      title: "确认批量代付",
+      message: "系统会并发提交以下代付。提交后不会自动重试，失败项请根据结果单独处理。",
+      target: `${payload.items.length} 笔 · 合计 ${money(total)} · ${payload.items[0].channelId}`,
+      okText: "确认批量代付"
+    });
+    if (!confirmed) return null;
+    try {
+      const data = await request("/api/v1/payouts/batch", {
+        method: "POST",
+        timeoutMs: 180000,
+        body: JSON.stringify(payload)
+      });
+      const details = (data.results || []).map((result) => {
+        const number = result.payout?.outBizNo || result.requestedOutBizNo || `第 ${Number(result.index) + 1} 笔`;
+        return result.payout
+          ? `${number}：${payoutStatusText(result.payout.status)}`
+          : `${number}：未提交 - ${result.error || "未知错误"}`;
+      });
+      $("payoutResult").textContent = [
+        `批量代付处理完成：共 ${data.total} 笔，已受理 ${data.processed} 笔，未提交 ${data.rejected} 笔`,
+        "",
+        ...details
+      ].join("\n");
+      await loadPayouts();
+      return data;
+    } finally {
+      $("payoutBatchPaymentPassword").value = "";
     }
   }
 
@@ -5258,12 +5640,44 @@
 
   $("payoutChannel").addEventListener("change", syncPayoutProviderFields);
 
+  $("payoutBatchChannel").addEventListener("change", syncPayoutBatchProviderFields);
+
+  document.querySelectorAll("[data-payout-mode]").forEach((button) => {
+    button.addEventListener("click", () => switchPayoutMode(button.dataset.payoutMode));
+  });
+
+  $("addPayoutBatchRowBtn").addEventListener("click", () => addPayoutBatchRow());
+
+  $("payoutBatchRows").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-payout-row]");
+    if (button) removePayoutBatchRow(button);
+  });
+
+  $("payoutBatchRows").addEventListener("input", updatePayoutBatchSummary);
+
   $("payoutForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    const button = $("submitPayoutBtn");
+    button.disabled = true;
     try {
       await submitPayout();
     } catch (error) {
       $("payoutResult").textContent = json(error);
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  $("payoutBatchForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const button = $("submitPayoutBatchBtn");
+    button.disabled = true;
+    try {
+      await submitPayoutBatch();
+    } catch (error) {
+      $("payoutResult").textContent = json(error);
+    } finally {
+      button.disabled = false;
     }
   });
 
@@ -5719,6 +6133,8 @@
   });
 
   syncProviderFields();
+  addPayoutBatchRow();
+  addPayoutBatchRow();
   renderTopbarDate();
   renderDefaultComplaintTimes();
   renderComplaintRecords();

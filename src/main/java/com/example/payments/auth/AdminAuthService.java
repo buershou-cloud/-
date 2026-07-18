@@ -21,7 +21,6 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 @Service
@@ -31,6 +30,7 @@ public class AdminAuthService {
     private static final int PAYMENT_PASSWORD_ITERATIONS = 210_000;
     private static final int PAYMENT_PASSWORD_BITS = 256;
     private static final String USERNAME_PATTERN = "[A-Za-z0-9._@-]{3,32}";
+    private static final String DEFAULT_SUPER_ADMINISTRATOR = "admin";
 
     private final Path authFile;
     private final String defaultUsername;
@@ -38,6 +38,7 @@ public class AdminAuthService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     private LinkedHashMap<String, Credential> credentials;
+    private String superAdministratorUsername;
     private String paymentSalt;
     private String paymentPasswordHash;
 
@@ -60,6 +61,7 @@ public class AdminAuthService {
         credentials = new LinkedHashMap<>();
         Credential credential = createCredential(defaultUsername, defaultPassword);
         credentials.put(credential.username(), credential);
+        superAdministratorUsername = credential.username();
         paymentSalt = "";
         paymentPasswordHash = "";
         saveCredentials();
@@ -75,6 +77,14 @@ public class AdminAuthService {
 
     public synchronized boolean hasUsername(String username) {
         return !isBlank(username) && credentials.containsKey(username.trim());
+    }
+
+    public synchronized boolean isSuperAdministrator(String username) {
+        return !isBlank(username) && username.trim().equals(superAdministratorUsername);
+    }
+
+    public synchronized String superAdministratorUsername() {
+        return superAdministratorUsername;
     }
 
     public synchronized boolean verify(String username, String password) {
@@ -107,21 +117,7 @@ public class AdminAuthService {
         if (!verify(current.username(), currentPassword)) {
             throw new IllegalArgumentException("登录密码不正确");
         }
-        String username = validateUsername(newUsername);
-        if (!current.username().equals(username) && credentials.containsKey(username)) {
-            throw new IllegalArgumentException("管理员账号已存在");
-        }
-
-        LinkedHashMap<String, Credential> renamed = new LinkedHashMap<>();
-        for (Map.Entry<String, Credential> entry : credentials.entrySet()) {
-            if (entry.getKey().equals(current.username())) {
-                renamed.put(username, new Credential(username, current.salt(), current.passwordHash()));
-            } else {
-                renamed.put(entry.getKey(), entry.getValue());
-            }
-        }
-        credentials = renamed;
-        saveCredentials();
+        throw new IllegalArgumentException("管理员账号名称创建后不可修改");
     }
 
     public synchronized void addAdministrator(
@@ -134,6 +130,7 @@ public class AdminAuthService {
         if (!verify(current.username(), currentPassword)) {
             throw new IllegalArgumentException("当前登录密码不正确");
         }
+        requireSuperAdministrator(current.username());
         String username = validateUsername(newUsername);
         if (credentials.containsKey(username)) {
             throw new IllegalArgumentException("管理员账号已存在");
@@ -153,9 +150,10 @@ public class AdminAuthService {
         if (!verify(current.username(), currentPassword)) {
             throw new IllegalArgumentException("当前登录密码不正确");
         }
+        requireSuperAdministrator(current.username());
         String target = targetUsername == null ? "" : targetUsername.trim();
-        if (current.username().equals(target)) {
-            throw new IllegalArgumentException("不能删除当前登录的管理员账号");
+        if (superAdministratorUsername.equals(target)) {
+            throw new IllegalArgumentException("超级管理员账号不可删除");
         }
         if (!credentials.containsKey(target)) {
             throw new IllegalArgumentException("要删除的管理员账号不存在");
@@ -192,6 +190,7 @@ public class AdminAuthService {
         if (!verify(credential.username(), adminPassword)) {
             throw new IllegalArgumentException("登录密码不正确");
         }
+        requireSuperAdministrator(credential.username());
         if (paymentPasswordConfigured() && !verifyPaymentPassword(currentPaymentPassword)) {
             throw new IllegalArgumentException("原支付密码不正确");
         }
@@ -230,6 +229,10 @@ public class AdminAuthService {
             loaded.put(legacy.username(), legacy);
         }
         credentials = loaded;
+        superAdministratorUsername = resolveSuperAdministrator(
+                loaded,
+                properties.getProperty("superAdministratorUsername", "")
+        );
         paymentSalt = properties.getProperty("paymentSalt", "");
         paymentPasswordHash = properties.getProperty("paymentPasswordHash", "");
     }
@@ -243,6 +246,7 @@ public class AdminAuthService {
         properties.setProperty("username", primary.username());
         properties.setProperty("salt", primary.salt());
         properties.setProperty("passwordHash", primary.passwordHash());
+        properties.setProperty("superAdministratorUsername", superAdministratorUsername);
         properties.setProperty("admin.count", Integer.toString(values.size()));
         for (int index = 0; index < values.size(); index++) {
             Credential credential = values.get(index);
@@ -275,6 +279,26 @@ public class AdminAuthService {
             throw new IllegalArgumentException("管理员账号不存在或登录已失效");
         }
         return credential;
+    }
+
+    private void requireSuperAdministrator(String username) {
+        if (!isSuperAdministrator(username)) {
+            throw new IllegalArgumentException("只有超级管理员可以执行此操作");
+        }
+    }
+
+    private static String resolveSuperAdministrator(
+            LinkedHashMap<String, Credential> loaded,
+            String configuredUsername
+    ) {
+        String configured = configuredUsername == null ? "" : configuredUsername.trim();
+        if (loaded.containsKey(configured)) {
+            return configured;
+        }
+        if (loaded.containsKey(DEFAULT_SUPER_ADMINISTRATOR)) {
+            return DEFAULT_SUPER_ADMINISTRATOR;
+        }
+        return loaded.keySet().iterator().next();
     }
 
     private Credential createCredential(String username, String password) {

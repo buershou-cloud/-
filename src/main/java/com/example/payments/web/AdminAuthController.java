@@ -1,8 +1,8 @@
 package com.example.payments.web;
 
-import com.example.payments.auth.AdminAuthService;
 import com.example.payments.auth.AdminAccountCreateRequest;
 import com.example.payments.auth.AdminAccountDeleteRequest;
+import com.example.payments.auth.AdminAuthService;
 import com.example.payments.auth.AdminLoginRequest;
 import com.example.payments.auth.AdminPasswordChangeRequest;
 import com.example.payments.auth.AdminSession;
@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -145,7 +146,14 @@ public class AdminAuthController {
     }
 
     private AdminSecurityView securityView(String username) {
-        return new AdminSecurityView(username, authService.paymentPasswordConfigured(), authService.usernames());
+        boolean superAdministrator = authService.isSuperAdministrator(username);
+        return new AdminSecurityView(
+                username,
+                superAdministrator,
+                authService.superAdministratorUsername(),
+                authService.paymentPasswordConfigured(),
+                superAdministrator ? authService.usernames() : List.of(username)
+        );
     }
 
     private static String requiredSessionUsername(HttpServletRequest request) {

@@ -6,6 +6,7 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.RefundCreateRequest;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -105,6 +106,55 @@ class DouyinPaymentProviderTest {
 
         assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
         assertThat(response.tradeNo()).isEqualTo("DY1001");
+    }
+
+    @Test
+    void submitsOfficialRefundRequestWithFenAmountsAndCallback() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.post(any(), eq("/v1/trade/refund/domestic/refunds"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of(
+                                "status", "PROCESSING",
+                                "out_trade_no", "ORDER-1001",
+                                "transaction_id", "DY1001"
+                        ),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+        PaymentGatewayProperties.Channel channel = channel();
+
+        GatewayResponse response = provider.refund(channel, new RefundCreateRequest(
+                "ORDER-1001",
+                "DY1001",
+                new BigDecimal("1.23"),
+                "REFUND-1001",
+                "测试退款",
+                null,
+                List.of("douyin-test"),
+                Map.of("douyin_total_amount_fen", 500L)
+        ));
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(response.outTradeNo()).isEqualTo("ORDER-1001");
+        assertThat(response.tradeNo()).isEqualTo("DY1001");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(client).post(eq(channel), eq("/v1/trade/refund/domestic/refunds"), bodyCaptor.capture());
+        Map<String, Object> body = bodyCaptor.getValue();
+        assertThat(body)
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("transaction_id", "DY1001")
+                .containsEntry("out_trade_no", "ORDER-1001")
+                .containsEntry("out_refund_no", "REFUND-1001")
+                .containsEntry("reason", "测试退款")
+                .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test");
+        assertThat((Map<String, Object>) body.get("amount"))
+                .containsEntry("refund", 123L)
+                .containsEntry("total", 500L)
+                .containsEntry("currency", "CNY");
     }
 
     private static PaymentGatewayProperties.Channel channel() {

@@ -57,7 +57,7 @@ Default admin login:
 - Username: `admin`
 - Password: `admin123`
 
-After first startup the credentials are stored in `data/admin-auth.properties`. Use the `账户管理` page to add independent administrator accounts, delete non-current accounts, change the current login password, and set the global merchant-payout payment password. Existing single-account files are migrated automatically when saved.
+After first startup the credentials are stored in `data/admin-auth.properties`. The `admin` account is migrated as the super administrator when it exists. Only the super administrator can add/delete ordinary administrators or maintain the global merchant-payout payment password; every administrator can change their own login password. Existing single-account files are migrated automatically when saved.
 
 ## MySQL Schema
 
@@ -101,6 +101,7 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 - `POST /api/v1/payments/onboarding`
 - `GET /api/v1/payouts`
 - `POST /api/v1/payouts`
+- `POST /api/v1/payouts/batch` (up to 20 items per request, processed with 4 workers, no automatic retry)
 - `POST /api/v1/payouts/{outBizNo}/query`
 - `POST /api/v1/payouts/notify/alipay/{channelId}`
 - `POST /api/v1/payouts/notify/douyin/{channelId}`

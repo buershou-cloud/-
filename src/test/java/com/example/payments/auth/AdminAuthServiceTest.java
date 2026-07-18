@@ -20,6 +20,7 @@ class AdminAuthServiceTest {
         service.load();
 
         assertThat(service.verify("admin", "admin123")).isTrue();
+        assertThat(service.isSuperAdministrator("admin")).isTrue();
 
         service.changePassword("admin", "admin123", "newpass123");
         assertThat(service.verify("admin", "admin123")).isFalse();
@@ -46,6 +47,8 @@ class AdminAuthServiceTest {
         reloaded.load();
         assertThat(reloaded.usernames()).containsExactly("admin", "finance.admin");
         assertThat(reloaded.verify("finance.admin", "finance123")).isTrue();
+        assertThat(reloaded.isSuperAdministrator("admin")).isTrue();
+        assertThat(reloaded.isSuperAdministrator("finance.admin")).isFalse();
     }
 
     @Test
@@ -87,18 +90,41 @@ class AdminAuthServiceTest {
     }
 
     @Test
-    void removesAnotherAdministratorButNeverTheCurrentAccount() {
+    void removesAnotherAdministratorButNeverTheSuperAdministrator() {
         AdminAuthService service = service(tempDir.resolve("remove.properties"));
         service.load();
         service.addAdministrator("admin", "admin123", "finance", "finance123");
 
         assertThatThrownBy(() -> service.removeAdministrator("admin", "admin123", "admin"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("不能删除当前登录");
+                .hasMessageContaining("超级管理员账号不可删除");
 
         service.removeAdministrator("admin", "admin123", "finance");
         assertThat(service.usernames()).containsExactly("admin");
         assertThat(service.verify("finance", "finance123")).isFalse();
+    }
+
+    @Test
+    void ordinaryAdministratorCanOnlyMaintainOwnLoginPassword() {
+        AdminAuthService service = service(tempDir.resolve("roles.properties"));
+        service.load();
+        service.addAdministrator("admin", "admin123", "finance", "finance123");
+
+        service.changePassword("finance", "finance123", "finance456");
+        assertThat(service.verify("finance", "finance456")).isTrue();
+
+        assertThatThrownBy(() -> service.addAdministrator("finance", "finance456", "operator", "operator123"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("只有超级管理员");
+        assertThatThrownBy(() -> service.removeAdministrator("finance", "finance456", "admin"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("只有超级管理员");
+        assertThatThrownBy(() -> service.changePaymentPassword("finance", "finance456", null, "paypass123"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("只有超级管理员");
+        assertThatThrownBy(() -> service.changeUsername("finance", "finance456", "finance.new"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("创建后不可修改");
     }
 
     private static AdminAuthService service(Path authFile) {
