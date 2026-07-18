@@ -15,9 +15,13 @@ import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
+import com.example.payments.domain.ProfitSharingReturnQueryRequest;
+import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.onboarding.OnboardingRecordService;
@@ -134,6 +138,36 @@ public class PaymentController {
     @PostMapping("/profit-sharing/relations/query")
     public GatewayResponse queryProfitSharingRelations(@RequestBody ProfitSharingRelationQueryRequest request) {
         return paymentGatewayService.queryProfitSharingRelations(request);
+    }
+
+    @PostMapping("/profit-sharing/relations/unbind")
+    public GatewayResponse unbindProfitSharingRelation(@Valid @RequestBody ProfitSharingRelationBindRequest request) {
+        return paymentGatewayService.unbindProfitSharingRelation(request);
+    }
+
+    @PostMapping("/profit-sharing/query")
+    public GatewayResponse queryProfitSharing(@Valid @RequestBody ProfitSharingQueryRequest request) {
+        return paymentGatewayService.queryProfitSharing(request);
+    }
+
+    @PostMapping("/profit-sharing/finish")
+    public GatewayResponse finishProfitSharing(@Valid @RequestBody ProfitSharingFinishRequest request) {
+        return paymentGatewayService.finishProfitSharing(request);
+    }
+
+    @PostMapping("/profit-sharing/remaining")
+    public GatewayResponse profitSharingRemainingAmount(@Valid @RequestBody ProfitSharingQueryRequest request) {
+        return paymentGatewayService.profitSharingRemainingAmount(request);
+    }
+
+    @PostMapping("/profit-sharing/return")
+    public GatewayResponse returnProfitSharing(@Valid @RequestBody ProfitSharingReturnRequest request) {
+        return paymentGatewayService.returnProfitSharing(request);
+    }
+
+    @PostMapping("/profit-sharing/return/query")
+    public GatewayResponse queryProfitSharingReturn(@Valid @RequestBody ProfitSharingReturnQueryRequest request) {
+        return paymentGatewayService.queryProfitSharingReturn(request);
     }
 
     @GetMapping("/profit-sharing/relations")

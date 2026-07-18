@@ -13,7 +13,11 @@ import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
+import com.example.payments.domain.ProfitSharingReturnQueryRequest;
+import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.PaymentProvider;
@@ -39,6 +43,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
     private static final String METHOD_TRADE_PAY = "alipay.trade.pay";
     private static final String METHOD_ORDER_SETTLE = "alipay.trade.order.settle";
     private static final String METHOD_ROYALTY_RELATION_BIND = "alipay.trade.royalty.relation.bind";
+    private static final String METHOD_ROYALTY_RELATION_UNBIND = "alipay.trade.royalty.relation.unbind";
     private static final String METHOD_ROYALTY_RELATION_QUERY = "alipay.trade.royalty.relation.batchquery";
     private static final String METHOD_OAUTH_TOKEN = "alipay.system.oauth.token";
     private static final String METHOD_PREAUTH_FREEZE = "alipay.fund.auth.order.app.freeze";
@@ -227,6 +232,57 @@ public class AlipayPaymentProvider implements PaymentProvider {
         merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_ROYALTY_RELATION_QUERY, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, null, null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse unbindProfitSharingRelation(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingRelationBindRequest request
+    ) {
+        Map<String, Object> bizContent = new LinkedHashMap<>();
+        bizContent.put("out_request_no", request.outRequestNo());
+        bizContent.put("receiver_list", List.of(relationReceiver(
+                request.receiverType(),
+                request.receiverAccount(),
+                request.receiverName(),
+                request.memo()
+        )));
+        merge(bizContent, request.extra());
+        AlipayGatewayResponse response = client.execute(
+                channel,
+                METHOD_ROYALTY_RELATION_UNBIND,
+                bizContent,
+                options(request.appAuthToken(), null, null)
+        );
+        return apiResponse(channel.getId(), response, null, null, bizContent);
+    }
+
+    @Override
+    public GatewayResponse queryProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingQueryRequest request) {
+        throw unsupportedProfitSharingOperation("分账结果查询");
+    }
+
+    @Override
+    public GatewayResponse finishProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingFinishRequest request) {
+        throw unsupportedProfitSharingOperation("完成分账");
+    }
+
+    @Override
+    public GatewayResponse profitSharingRemainingAmount(PaymentGatewayProperties.Channel channel, ProfitSharingQueryRequest request) {
+        throw unsupportedProfitSharingOperation("剩余待分金额查询");
+    }
+
+    @Override
+    public GatewayResponse returnProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingReturnRequest request) {
+        throw unsupportedProfitSharingOperation("分账回退");
+    }
+
+    @Override
+    public GatewayResponse queryProfitSharingReturn(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingReturnQueryRequest request
+    ) {
+        throw unsupportedProfitSharingOperation("分账回退结果查询");
     }
 
     @Override
@@ -717,6 +773,13 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private static boolean hasText(String value) {
         return value != null && !value.isBlank();
+    }
+
+    private static GatewayException unsupportedProfitSharingOperation(String operation) {
+        return new GatewayException(
+                "ALIPAY_PROFIT_SHARING_OPERATION_UNSUPPORTED",
+                "支付宝当前通用分账流程不支持此抖音专用操作：" + operation
+        );
     }
 
     private static boolean hasUsableText(String value) {

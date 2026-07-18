@@ -10,6 +10,7 @@ public record ProfitSharingBatchRequest(
         @NotBlank String transIn,
         String transInType,
         BigDecimal amount,
+        BigDecimal percentage,
         String desc,
         String outRequestNoPrefix,
         String operatorId,

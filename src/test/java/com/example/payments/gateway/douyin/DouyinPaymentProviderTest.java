@@ -7,6 +7,11 @@ import com.example.payments.domain.PaymentProduct;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.RefundCreateRequest;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
+import com.example.payments.domain.ProfitSharingRelationBindRequest;
+import com.example.payments.domain.ProfitSharingRelationQueryRequest;
+import com.example.payments.domain.ProfitSharingRequest;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -69,6 +74,7 @@ class DouyinPaymentProviderTest {
                 .containsEntry("appid", "dy-app-1")
                 .containsEntry("mchid", "dy-mch-1")
                 .containsEntry("out_trade_no", "ORDER-1001")
+                .containsEntry("profit_sharing", true)
                 .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test");
         assertThat((Map<String, Object>) body.get("amount"))
                 .containsEntry("total", 123L)
@@ -155,6 +161,160 @@ class DouyinPaymentProviderTest {
                 .containsEntry("refund", 123L)
                 .containsEntry("total", 500L)
                 .containsEntry("currency", "CNY");
+    }
+
+    @Test
+    void submitsOfficialProfitSharingRequestWithFenReceiverAmount() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.post(any(), eq("/v1/trade/profitsharing/orders"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of(
+                                "state", "PROCESSING",
+                                "out_order_no", "PS_ORDER-1001",
+                                "order_id", "DYPS1001",
+                                "transaction_id", "DY1001"
+                        ),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+        PaymentGatewayProperties.Channel channel = channel();
+
+        GatewayResponse response = provider.profitSharing(channel, new ProfitSharingRequest(
+                "ORDER-1001",
+                "DY1001",
+                "PS_ORDER-1001",
+                List.of(Map.of(
+                        "trans_in_type", "MERCHANT_ID",
+                        "trans_in", "dy-receiver-mch",
+                        "amount", new BigDecimal("0.50"),
+                        "desc", "合作方分账"
+                )),
+                null,
+                null,
+                List.of("douyin-test"),
+                Map.of("unfreeze_unsplit", false)
+        ));
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(response.tradeNo()).isEqualTo("DY1001");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(client).post(eq(channel), eq("/v1/trade/profitsharing/orders"), bodyCaptor.capture());
+        Map<String, Object> body = bodyCaptor.getValue();
+        assertThat(body)
+                .containsEntry("appid", "dy-app-1")
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("transaction_id", "DY1001")
+                .containsEntry("out_order_no", "PS_ORDER-1001")
+                .containsEntry("unfreeze_unsplit", "false");
+        List<Map<String, Object>> receivers = (List<Map<String, Object>>) body.get("receivers");
+        assertThat(receivers).singleElement().satisfies(receiver -> assertThat(receiver)
+                .containsEntry("type", "MERCHANT_ID")
+                .containsEntry("account", "dy-receiver-mch")
+                .containsEntry("amount", 50L)
+                .containsEntry("description", "合作方分账"));
+    }
+
+    @Test
+    void addsAndDeletesOfficialProfitSharingReceiver() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.postSensitive(any(), eq("/v1/trade/profitsharing/receivers/add"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(204, Map.of(), "", Map.of()));
+        when(client.post(any(), eq("/v1/trade/profitsharing/receivers/delete"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(204, Map.of(), "", Map.of()));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+        PaymentGatewayProperties.Channel channel = channel();
+        ProfitSharingRelationBindRequest request = new ProfitSharingRelationBindRequest(
+                "receiver-open-id",
+                "PERSONAL_OPENID",
+                null,
+                "partner",
+                "REL-1001",
+                null,
+                List.of("douyin-test"),
+                Map.of("relation_type", "PARTNER")
+        );
+
+        GatewayResponse added = provider.bindProfitSharingRelation(channel, request);
+        GatewayResponse deleted = provider.unbindProfitSharingRelation(channel, request);
+
+        assertThat(added.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(deleted.status()).isEqualTo(PaymentStatus.SUCCESS);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> addBody = ArgumentCaptor.forClass(Map.class);
+        verify(client).postSensitive(eq(channel), eq("/v1/trade/profitsharing/receivers/add"), addBody.capture());
+        assertThat(addBody.getValue())
+                .containsEntry("appid", "dy-app-1")
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("type", "PERSONAL_OPENID")
+                .containsEntry("account", "receiver-open-id")
+                .containsEntry("relation_type", "PARTNER");
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> deleteBody = ArgumentCaptor.forClass(Map.class);
+        verify(client).post(eq(channel), eq("/v1/trade/profitsharing/receivers/delete"), deleteBody.capture());
+        assertThat(deleteBody.getValue())
+                .containsEntry("appid", "dy-app-1")
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("type", "PERSONAL_OPENID")
+                .containsEntry("account", "receiver-open-id");
+    }
+
+    @Test
+    void queriesAndFinishesOfficialProfitSharingOrder() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        String queryPath = "/v1/trade/profitsharing/orders/PS_ORDER-1001?mchid=dy-mch-1&transaction_id=DY1001";
+        when(client.get(any(), eq(queryPath))).thenReturn(new DouyinGatewayResponse(
+                200,
+                Map.of("state", "SUCCESS", "out_order_no", "PS_ORDER-1001", "transaction_id", "DY1001"),
+                "{}",
+                Map.of()
+        ));
+        when(client.post(any(), eq("/v1/trade/profitsharing/finish-orders"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of("state", "PROCESSING", "out_order_no", "PS_FINISH-1001", "transaction_id", "DY1001"),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+        PaymentGatewayProperties.Channel channel = channel();
+
+        GatewayResponse queried = provider.queryProfitSharing(channel, new ProfitSharingQueryRequest(
+                "ORDER-1001", "DY1001", "PS_ORDER-1001", null, List.of("douyin-test"), Map.of()
+        ));
+        GatewayResponse finished = provider.finishProfitSharing(channel, new ProfitSharingFinishRequest(
+                "ORDER-1001", "DY1001", "PS_FINISH-1001", "finish sharing", List.of("douyin-test"), Map.of()
+        ));
+
+        assertThat(queried.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(finished.status()).isEqualTo(PaymentStatus.PENDING);
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> finishBody = ArgumentCaptor.forClass(Map.class);
+        verify(client).post(eq(channel), eq("/v1/trade/profitsharing/finish-orders"), finishBody.capture());
+        assertThat(finishBody.getValue())
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("transaction_id", "DY1001")
+                .containsEntry("out_order_no", "PS_FINISH-1001")
+                .containsEntry("description", "finish sharing");
+    }
+
+    @Test
+    void relationRefreshDoesNotInventRemoteReceiverRecords() {
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(mock(DouyinPayClient.class));
+
+        GatewayResponse response = provider.queryProfitSharingRelations(channel(), new ProfitSharingRelationQueryRequest(
+                null, null, null, null, null, null, List.of("douyin-test"), Map.of()
+        ));
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(response.raw()).containsEntry("provider", "DOUYIN");
+        assertThat(response.raw()).doesNotContainKeys("account", "type", "status");
     }
 
     private static PaymentGatewayProperties.Channel channel() {

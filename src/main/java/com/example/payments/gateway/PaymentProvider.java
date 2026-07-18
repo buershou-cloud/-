@@ -12,7 +12,11 @@ import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
+import com.example.payments.domain.ProfitSharingReturnQueryRequest;
+import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 
 public interface PaymentProvider {
@@ -40,6 +44,18 @@ public interface PaymentProvider {
     GatewayResponse bindProfitSharingRelation(PaymentGatewayProperties.Channel channel, ProfitSharingRelationBindRequest request);
 
     GatewayResponse queryProfitSharingRelations(PaymentGatewayProperties.Channel channel, ProfitSharingRelationQueryRequest request);
+
+    GatewayResponse unbindProfitSharingRelation(PaymentGatewayProperties.Channel channel, ProfitSharingRelationBindRequest request);
+
+    GatewayResponse queryProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingQueryRequest request);
+
+    GatewayResponse finishProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingFinishRequest request);
+
+    GatewayResponse profitSharingRemainingAmount(PaymentGatewayProperties.Channel channel, ProfitSharingQueryRequest request);
+
+    GatewayResponse returnProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingReturnRequest request);
+
+    GatewayResponse queryProfitSharingReturn(PaymentGatewayProperties.Channel channel, ProfitSharingReturnQueryRequest request);
 
     GatewayResponse queryComplaints(PaymentGatewayProperties.Channel channel, ComplaintQueryRequest request);
 

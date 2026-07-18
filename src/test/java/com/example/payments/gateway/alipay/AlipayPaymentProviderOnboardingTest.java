@@ -11,6 +11,7 @@ import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
+import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.gateway.GatewayException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
@@ -911,6 +912,36 @@ class AlipayPaymentProviderOnboardingTest {
                 .containsEntry("current_page_num", 1)
                 .containsEntry("page_size", 10)
                 .containsEntry("status_list", List.of("WAIT_PROCESS"));
+    }
+
+    @Test
+    void profitSharingKeepsOfficialAmountPercentageParameter() {
+        CapturingAlipayClient client = new CapturingAlipayClient();
+        AlipayPaymentProvider provider = new AlipayPaymentProvider(new PaymentGatewayProperties(), client);
+        Map<String, Object> receiver = new LinkedHashMap<>();
+        receiver.put("royalty_type", "transfer");
+        receiver.put("trans_in_type", "userId");
+        receiver.put("trans_in", "2088100000000000");
+        receiver.put("amount_percentage", "35");
+        receiver.put("desc", "按比例分账");
+
+        provider.profitSharing(standardChannel(), new ProfitSharingRequest(
+                "ORDER-PERCENT-001",
+                null,
+                "PS-ORDER-PERCENT-001",
+                List.of(receiver),
+                null,
+                null,
+                List.of("ali-standard"),
+                Map.of()
+        ));
+
+        assertThat(client.method).isEqualTo("alipay.trade.order.settle");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> royaltyParameters = (List<Map<String, Object>>) client.bizContent.get("royalty_parameters");
+        assertThat(royaltyParameters).singleElement().satisfies(item -> assertThat(item)
+                .containsEntry("amount_percentage", "35")
+                .doesNotContainKey("amount"));
     }
 
     private static PaymentGatewayProperties.Channel channel() {

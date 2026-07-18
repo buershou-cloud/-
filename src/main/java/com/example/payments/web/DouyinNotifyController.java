@@ -98,6 +98,12 @@ public class DouyinNotifyController {
             return ResponseEntity.noContent().build();
         }
 
+        if (isProfitSharingNotification(eventType, originalType, payload)) {
+            // Profit-sharing is asynchronous. Its final state remains queryable with out_order_no,
+            // and acknowledging the verified notification prevents unnecessary platform retries.
+            return ResponseEntity.noContent().build();
+        }
+
         String outTradeNo = required(payload, "out_trade_no");
         String tradeState = required(payload, "trade_state");
         DemoOrderView order = orderService.recordPaymentResult(
@@ -144,6 +150,20 @@ public class DouyinNotifyController {
             case "NOTPAY", "USERPAYING" -> PaymentStatus.PAYING;
             default -> PaymentStatus.UNKNOWN;
         };
+    }
+
+    private static boolean isProfitSharingNotification(
+            String eventType,
+            String originalType,
+            Map<String, Object> payload
+    ) {
+        String event = eventType == null ? "" : eventType.toUpperCase();
+        String original = originalType == null ? "" : originalType.toUpperCase();
+        return event.contains("PROFITSHARING")
+                || original.contains("PROFITSHARING")
+                || (payload.containsKey("out_order_no")
+                    && payload.containsKey("state")
+                    && !payload.containsKey("trade_state"));
     }
 
     private static String required(Map<String, Object> data, String key) {

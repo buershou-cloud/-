@@ -18,9 +18,13 @@ import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingBatchItem;
 import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
+import com.example.payments.domain.ProfitSharingReturnQueryRequest;
+import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.domain.RoutingMode;
 import com.example.payments.order.DemoOrderService;
@@ -174,7 +178,7 @@ public class PaymentGatewayService {
             validateProfitSharingRelations(channel.getId(), request.royaltyParameters());
             return provider(channel).profitSharing(channel, request);
         });
-        if (response.status() != PaymentStatus.FAILED && hasText(request.outTradeNo())) {
+        if (response.status() == PaymentStatus.SUCCESS && hasText(request.outTradeNo())) {
             orderService.markProfitShared(request.outTradeNo());
         }
         return response;
@@ -190,6 +194,72 @@ public class PaymentGatewayService {
         GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
         profitSharingRelationService.recordQuery(request, response);
         return response;
+    }
+
+    public GatewayResponse unbindProfitSharingRelation(ProfitSharingRelationBindRequest request) {
+        GatewayResponse response = execute(
+                null,
+                request.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).unbindProfitSharingRelation(channel, request)
+        );
+        profitSharingRelationService.recordUnbind(request, response);
+        return response;
+    }
+
+    public GatewayResponse queryProfitSharing(ProfitSharingQueryRequest request) {
+        GatewayResponse response = execute(
+                null,
+                request.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).queryProfitSharing(channel, request)
+        );
+        if (response.status() == PaymentStatus.SUCCESS && hasText(request.outTradeNo())) {
+            orderService.markProfitShared(request.outTradeNo());
+        }
+        return response;
+    }
+
+    public GatewayResponse finishProfitSharing(ProfitSharingFinishRequest request) {
+        return execute(
+                null,
+                request.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).finishProfitSharing(channel, request)
+        );
+    }
+
+    public GatewayResponse profitSharingRemainingAmount(ProfitSharingQueryRequest request) {
+        return execute(
+                null,
+                request.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).profitSharingRemainingAmount(channel, request)
+        );
+    }
+
+    public GatewayResponse returnProfitSharing(ProfitSharingReturnRequest request) {
+        return execute(
+                null,
+                request.channelIds(),
+                request.amount(),
+                null,
+                channel -> provider(channel).returnProfitSharing(channel, request)
+        );
+    }
+
+    public GatewayResponse queryProfitSharingReturn(ProfitSharingReturnQueryRequest request) {
+        return execute(
+                null,
+                request.channelIds(),
+                null,
+                null,
+                channel -> provider(channel).queryProfitSharingReturn(channel, request)
+        );
     }
 
     public List<ProfitSharingRelationService.ProfitSharingRelationView> profitSharingRelations(String channelId) {
@@ -247,7 +317,7 @@ public class PaymentGatewayService {
                 orders.size(),
                 success,
                 failed,
-                "通道 " + request.channelId() + " 已处理 " + orders.size() + " 笔订单，成功 " + success + " 笔，失败 " + failed + " 笔",
+                "通道 " + request.channelId() + " 已处理 " + orders.size() + " 笔订单，已提交 " + success + " 笔，失败 " + failed + " 笔",
                 List.copyOf(items)
         );
     }
@@ -666,7 +736,12 @@ public class PaymentGatewayService {
         parameter.put("royalty_type", "transfer");
         parameter.put("trans_in_type", firstText(request.transInType(), "loginName"));
         parameter.put("trans_in", request.transIn());
-        parameter.put("amount", amount(firstAmount(request.amount(), order.amount())));
+        if (request.percentage() != null) {
+            validatePercentage(request.percentage());
+            parameter.put("amount_percentage", percentage(request.percentage()));
+        } else {
+            parameter.put("amount", amount(firstAmount(request.amount(), order.amount())));
+        }
         parameter.put("desc", firstText(request.desc(), "通道批量分账 " + order.outTradeNo()));
         return parameter;
     }
@@ -682,7 +757,7 @@ public class PaymentGatewayService {
             }
             String transInType = firstText(mapText(parameter, "trans_in_type"), "loginName");
             if (!profitSharingRelationService.isBound(channelId, transInType, transIn)) {
-                throw new IllegalArgumentException("收入方账号未绑定分帐关系，请先在“分帐关系”中添加：" + transIn);
+                throw new IllegalArgumentException("收入方账号未绑定分账关系，请先在“分账关系”中添加：" + transIn);
             }
         }
     }
@@ -706,6 +781,16 @@ public class PaymentGatewayService {
 
     private static String amount(BigDecimal amount) {
         return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
+    }
+
+    private static String percentage(BigDecimal value) {
+        return value.stripTrailingZeros().toPlainString();
+    }
+
+    private static void validatePercentage(BigDecimal value) {
+        if (value.signum() <= 0 || value.compareTo(new BigDecimal("100")) > 0) {
+            throw new IllegalArgumentException("分账比例必须大于 0 且不能超过 100%");
+        }
     }
 
     private static String firstText(String value, String fallback) {

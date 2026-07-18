@@ -21,7 +21,7 @@
       --red-soft: #fff1f0;
       --yellow: #faad14;
       --yellow-soft: #fff7df;
-      --shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+      --shadow: 0 6px 18px rgba(15, 23, 42, 0.045);
     }
 
     * {
@@ -46,7 +46,7 @@
 
     .app {
       display: grid;
-      grid-template-columns: 240px minmax(0, 1fr);
+      grid-template-columns: 220px minmax(0, 1fr);
       min-height: 100vh;
     }
 
@@ -218,7 +218,7 @@
     }
 
     .content {
-      padding: 26px 28px 42px;
+      padding: 22px 24px 36px;
     }
 
     .page {
@@ -242,17 +242,17 @@
 
     .overview-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
-      margin-bottom: 22px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 16px;
     }
 
     .metric-card {
       display: grid;
-      grid-template-columns: 72px minmax(0, 1fr);
+      grid-template-columns: 56px minmax(0, 1fr);
       align-items: center;
-      min-height: 118px;
-      padding: 26px;
+      min-height: 94px;
+      padding: 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
@@ -262,10 +262,10 @@
     .metric-icon {
       display: grid;
       place-items: center;
-      width: 52px;
-      height: 52px;
-      border-radius: 14px;
-      font-size: 28px;
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      font-size: 22px;
       font-weight: 800;
     }
 
@@ -298,7 +298,7 @@
     .metric-value {
       margin-top: 8px;
       color: #0b1220;
-      font-size: 30px;
+      font-size: 26px;
       font-weight: 850;
       line-height: 1;
     }
@@ -318,7 +318,7 @@
     }
 
     .panel + .panel {
-      margin-top: 18px;
+      margin-top: 16px;
     }
 
     .panel-head {
@@ -326,18 +326,18 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      min-height: 62px;
-      padding: 0 22px;
+      min-height: 54px;
+      padding: 0 18px;
       border-bottom: 1px solid #eef1f5;
     }
 
     .panel-title {
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 820;
     }
 
     .panel-body {
-      padding: 22px;
+      padding: 18px;
     }
 
     .table-wrap {
@@ -612,12 +612,74 @@
     .work-grid {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(360px, 0.68fr);
-      gap: 18px;
+      gap: 16px;
       align-items: start;
+    }
+
+    .work-grid > .panel + .panel {
+      margin-top: 0;
     }
 
     .work-grid .wide-panel {
       grid-column: 1 / -1;
+    }
+
+    .sharing-workspace {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .relation-workspace {
+      grid-template-columns: minmax(360px, 0.78fr) minmax(560px, 1.22fr);
+    }
+
+    .advanced-options {
+      margin-top: 18px;
+      border-top: 1px solid var(--line);
+    }
+
+    .advanced-options summary {
+      padding: 14px 0 2px;
+      color: var(--primary);
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .advanced-options .form-grid {
+      margin-top: 14px;
+    }
+
+    .sharing-result {
+      min-height: 54px;
+      max-height: 220px;
+      margin-top: 12px;
+    }
+
+    .result-details {
+      margin-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .result-details summary {
+      padding-top: 14px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .result-details .operation-result {
+      margin-bottom: 0;
+    }
+
+    .field-hint {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
     }
 
     .segmented-control {
@@ -748,7 +810,11 @@
     .form-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
+      gap: 14px;
+    }
+
+    .order-filter-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 
     label,
@@ -1445,6 +1511,12 @@
       font-weight: 850;
     }
 
+    @media (max-width: 1400px) and (min-width: 1101px) {
+      .overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
     @media (max-width: 1100px) {
       .app {
         grid-template-columns: 1fr;
@@ -1568,11 +1640,11 @@
       <button class="nav-btn" data-page="payouts"><span class="nav-icon">¥</span><span>商家代付</span></button>
       <div class="nav-group" data-nav-group="sharing">
         <button class="nav-group-toggle" type="button" data-nav-toggle="sharing" aria-expanded="false">
-          <span class="nav-icon">$</span><span>分帐</span><span class="nav-caret">›</span>
+          <span class="nav-icon">$</span><span>分账</span><span class="nav-caret">›</span>
         </button>
         <div class="nav-children">
-          <button class="nav-btn nav-child" data-page="sharing"><span>分帐处理</span></button>
-          <button class="nav-btn nav-child" data-page="sharing-relations"><span>分帐关系</span></button>
+          <button class="nav-btn nav-child" data-page="sharing"><span>分账处理</span></button>
+          <button class="nav-btn nav-child" data-page="sharing-relations"><span>分账关系</span></button>
         </div>
       </div>
       <button class="nav-btn" data-page="complaints"><span class="nav-icon"></span><span>投诉查询</span></button>
@@ -1640,7 +1712,7 @@
           </div>
           <div class="panel-body">
             <form id="orderFilterForm">
-              <div class="form-grid">
+              <div class="form-grid order-filter-grid">
                 <label>开始时间<input id="orderBeginTime" type="datetime-local"></label>
                 <label>结束时间<input id="orderEndTime" type="datetime-local"></label>
                 <label>订单号<input id="orderOutTradeNo" placeholder="商户订单号"></label>
@@ -1831,14 +1903,14 @@
       </section>
 
       <section id="page-sharing" class="page">
-        <div class="work-grid">
+        <div class="work-grid sharing-workspace">
           <section class="panel">
-            <div class="panel-head"><h2 class="panel-title">分帐处理</h2></div>
+            <div class="panel-head"><h2 class="panel-title">发起分账</h2></div>
             <div class="panel-body">
               <form id="profitShareForm">
                 <div class="form-grid">
-                  <label>单笔订单号<input id="profitShareOutTradeNo" placeholder="填写商户订单号"></label>
-                  <label>批量支付通道
+                  <label>订单号<input id="profitShareOutTradeNo" placeholder="填写或从右侧订单中选择"></label>
+                  <label>支付通道
                     <select id="profitShareChannel">
                       <option value="">请选择通道</option>
                     </select>
@@ -1852,23 +1924,65 @@
                     <input id="profitShareTransInTypeLabel" value="-" readonly>
                     <input id="profitShareTransInType" type="hidden" value="loginName">
                   </label>
-                  <label>分账金额<input id="profitShareAmount" type="number" min="0" step="0.01" placeholder="单笔必填；批量留空按订单金额"></label>
-                  <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS"></label>
-                  <label>操作员 ID<input id="profitShareOperatorId" placeholder="可选"></label>
-                  <label>App Auth Token<input id="profitShareAppAuthToken" placeholder="可选"></label>
+                  <label id="profitShareModeField">分账方式
+                    <select id="profitShareMode">
+                      <option value="PERCENTAGE">按比例</option>
+                      <option value="AMOUNT">按金额</option>
+                    </select>
+                  </label>
+                  <label><span id="profitShareValueLabel">分账比例（%）</span>
+                    <input id="profitShareAmount" type="number" min="0.01" max="100" step="0.01" placeholder="例如 30">
+                  </label>
                   <label class="wide">分账说明<input id="profitShareDesc" value="订单分账"></label>
-                  <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
                 </div>
+                <details class="advanced-options">
+                  <summary>高级选项</summary>
+                  <div class="form-grid">
+                    <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS"></label>
+                    <label>操作员 ID<input id="profitShareOperatorId" placeholder="可选"></label>
+                    <label>App Auth Token<input id="profitShareAppAuthToken" placeholder="服务商模式填写"></label>
+                    <label id="profitShareUnfreezeField" class="hidden">抖音剩余资金
+                      <select id="profitShareUnfreezeUnsplit">
+                        <option value="false">保留，后续继续分账</option>
+                        <option value="true">本次提交后解冻</option>
+                      </select>
+                    </label>
+                    <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
+                  </div>
+                  <div class="form-actions">
+                    <button class="btn secondary" id="shareChannelBtn" type="button">批量处理当前通道订单</button>
+                  </div>
+                </details>
                 <div class="form-actions">
                   <button class="btn secondary" id="refreshProfitRelationsBtn" type="button">刷新已绑定关系</button>
-                  <button class="btn" id="shareSingleBtn" type="button">单笔订单分账</button>
-                  <button class="btn secondary" id="shareChannelBtn" type="button">通道批量分账</button>
+                  <button class="btn" id="shareSingleBtn" type="button">提交分账</button>
                 </div>
               </form>
-              <pre id="profitShareResult" class="operation-result">等待分账操作</pre>
+              <details id="profitShareResultDetails" class="result-details">
+                <summary>最近操作结果</summary>
+                <pre id="profitShareResult" class="operation-result sharing-result">等待分账操作</pre>
+              </details>
+              <details id="douyinProfitAdvanced" class="advanced-options hidden">
+                <summary>抖音分账高级操作</summary>
+                <div class="form-grid">
+                  <label>抖音交易单号<input id="profitShareTradeNo" placeholder="选择订单后自动填写"></label>
+                  <label>分账请求号<input id="profitShareQueryOutRequestNo" placeholder="提交后自动填写"></label>
+                  <label>回退请求号<input id="profitShareReturnNo" placeholder="留空自动生成"></label>
+                  <label>回退接收方商户号<input id="profitShareReturnAccount" placeholder="仅支持商户号"></label>
+                  <label>回退金额<input id="profitShareReturnAmount" type="number" min="0.01" step="0.01"></label>
+                  <label>回退说明<input id="profitShareReturnDesc" value="分账回退"></label>
+                </div>
+                <div class="form-actions">
+                  <button class="btn secondary" id="queryProfitShareBtn" type="button">查询结果</button>
+                  <button class="btn secondary" id="profitShareRemainingBtn" type="button">查询剩余金额</button>
+                  <button class="btn secondary" id="finishProfitShareBtn" type="button">完成分账</button>
+                  <button class="btn secondary" id="returnProfitShareBtn" type="button">提交回退</button>
+                  <button class="btn secondary" id="queryProfitShareReturnBtn" type="button">查询回退</button>
+                </div>
+              </details>
             </div>
           </section>
-          <section class="panel">
+          <section class="panel wide-panel">
             <div class="panel-head"><h2 class="panel-title">可分账订单</h2></div>
             <div class="panel-body">
               <div class="table-wrap">
@@ -1883,8 +1997,9 @@
       </section>
 
       <section id="page-sharing-relations" class="page">
-        <section class="panel">
-          <div class="panel-head"><h2 class="panel-title">分帐关系</h2></div>
+        <div class="work-grid relation-workspace">
+          <section class="panel">
+          <div class="panel-head"><h2 class="panel-title">添加分账关系</h2></div>
           <div class="panel-body">
             <form id="profitRelationForm">
               <div class="form-grid">
@@ -1893,7 +2008,7 @@
                     <option value="">请选择通道</option>
                   </select>
                 </label>
-                <label>收入方账号<input id="profitRelationAccount" placeholder="支付宝登录号或 2088 用户号"></label>
+                <label>收入方账号<input id="profitRelationAccount" placeholder="选择通道后按提示填写"></label>
                 <label>收入方账号类型
                   <select id="profitRelationType">
                     <option value="loginName">支付宝登录号</option>
@@ -1901,20 +2016,56 @@
                     <option value="cardAliasNo">支付宝绑卡编号</option>
                   </select>
                 </label>
-                <label>收入方名称<input id="profitRelationName" placeholder="可选，建议填写真实名称"></label>
-                <label>请求号<input id="profitRelationOutRequestNo" placeholder="留空自动生成"></label>
-                <label>App Auth Token<input id="profitRelationAppAuthToken" placeholder="服务商代商户分帐时填写"></label>
-                <label class="wide">关系说明<input id="profitRelationMemo" value="订单分帐收入方"></label>
-                <label class="wide">扩展参数 JSON<textarea id="profitRelationExtra">{}</textarea></label>
+                <label>收入方名称<input id="profitRelationName" placeholder="抖音商户接收方必填"></label>
+                <label id="profitRelationRelationTypeField" class="hidden">抖音关系类型
+                  <select id="profitRelationRelationType">
+                    <option value="PARTNER">合作伙伴</option>
+                    <option value="SERVICE_PROVIDER">服务商</option>
+                    <option value="STORE">门店</option>
+                    <option value="STAFF">员工</option>
+                    <option value="STORE_OWNER">店主</option>
+                    <option value="HEADQUARTER">总部</option>
+                    <option value="BRAND">品牌方</option>
+                    <option value="DISTRIBUTOR">分销商</option>
+                    <option value="USER">用户</option>
+                    <option value="SUPPLIER">供应商</option>
+                    <option value="CUSTOM">自定义</option>
+                  </select>
+                </label>
+                <label id="profitRelationCustomField" class="hidden">自定义关系<input id="profitRelationCustom" maxlength="10"></label>
               </div>
+              <details class="advanced-options">
+                <summary>高级选项</summary>
+                <div class="form-grid">
+                  <label>请求号<input id="profitRelationOutRequestNo" placeholder="留空自动生成"></label>
+                  <label>App Auth Token<input id="profitRelationAppAuthToken" placeholder="服务商模式填写"></label>
+                  <label class="wide">关系说明<input id="profitRelationMemo" value="订单分账收入方"></label>
+                  <label class="wide">扩展参数 JSON<textarea id="profitRelationExtra">{}</textarea></label>
+                </div>
+              </details>
               <div class="form-actions">
-                <button class="btn" id="bindProfitRelationBtn" type="button">添加分帐关系</button>
-                <button class="btn secondary" id="queryProfitRelationBtn" type="button">查询分帐关系</button>
+                <button class="btn" id="bindProfitRelationBtn" type="button">添加分账关系</button>
+                <button class="btn secondary" id="queryProfitRelationBtn" type="button">刷新关系</button>
               </div>
             </form>
-            <pre id="profitRelationResult" class="operation-result">等待分帐关系操作</pre>
+            <details id="profitRelationResultDetails" class="result-details">
+              <summary>最近操作结果</summary>
+              <pre id="profitRelationResult" class="operation-result">等待分账关系操作</pre>
+            </details>
           </div>
-        </section>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">已绑定关系</h2></div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>通道</th><th>账号</th><th>类型</th><th>名称</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody id="profitRelationTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="page-onboard" class="page">
@@ -2734,6 +2885,13 @@
   function setProfitShareResult(value) {
     const element = $("profitShareResult");
     if (!element) return;
+    const details = $("profitShareResultDetails");
+    const message = value && typeof value === "object" ? value.message : "";
+    if (details && message) {
+      details.open = true;
+      const summary = details.querySelector("summary");
+      if (summary) summary.textContent = `最近操作：${message}`;
+    }
     if (value && typeof value === "object" && value.message) {
       const detail = value.response ? value.response : value.items;
       element.textContent = value.message + (detail ? `\n${json(detail)}` : "");
@@ -2745,6 +2903,13 @@
   function setProfitRelationResult(value) {
     const element = $("profitRelationResult");
     if (!element) return;
+    const details = $("profitRelationResultDetails");
+    const message = value && typeof value === "object" ? value.message : "";
+    if (details && message) {
+      details.open = true;
+      const summary = details.querySelector("summary");
+      if (summary) summary.textContent = `最近操作：${message}`;
+    }
     if (value && typeof value === "object" && value.message) {
       element.textContent = value.message + (value.response ? `\n${json(value.response)}` : "");
       return;
@@ -4061,11 +4226,14 @@
     $("profitShareOutTradeNo").value = outTradeNo || "";
     if (order) {
       $("profitShareChannel").value = order.channelId || "";
-      $("profitShareAmount").value = order.amount ?? "";
+      syncProfitShareModeFields();
+      const douyin = channelById(order.channelId)?.provider === "DOUYIN";
+      $("profitShareAmount").value = douyin || $("profitShareMode").value === "AMOUNT" ? (order.amount ?? "") : "100";
+      $("profitShareTradeNo").value = order.tradeNo || "";
       $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
       loadProfitSharingRelations(order.channelId, true).catch((error) => setProfitShareResult(error));
     }
-    setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请选择已绑定分帐关系后提交单笔分账` });
+    setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请选择已绑定分账关系后提交单笔分账` });
     $("profitShareTransIn").focus();
   }
 
@@ -4088,9 +4256,51 @@
     const labels = {
       loginName: "支付宝登录号",
       userId: "支付宝用户号",
-      cardAliasNo: "支付宝绑卡编号"
+      cardAliasNo: "支付宝绑卡编号",
+      MERCHANT_ID: "抖音商户号",
+      PERSONAL_OPENID: "抖音 OpenID"
     };
     return labels[type] || type || "-";
+  }
+
+  function channelById(channelId) {
+    return state.channels.find((channel) => channel.id === channelId);
+  }
+
+  function syncProfitShareModeFields() {
+    const channel = channelById($("profitShareChannel")?.value);
+    const douyin = channel?.provider === "DOUYIN";
+    const mode = douyin ? "AMOUNT" : $("profitShareMode").value;
+    if (douyin) $("profitShareMode").value = "AMOUNT";
+    $("profitShareModeField").classList.toggle("hidden", douyin);
+    $("profitShareUnfreezeField").classList.toggle("hidden", !douyin);
+    $("douyinProfitAdvanced").classList.toggle("hidden", !douyin);
+    $("profitShareValueLabel").textContent = mode === "PERCENTAGE" ? "分账比例（%）" : "分账金额";
+    $("profitShareAmount").placeholder = mode === "PERCENTAGE" ? "例如 30" : "输入金额";
+    $("profitShareAmount").max = mode === "PERCENTAGE" ? "100" : "";
+  }
+
+  function syncProfitRelationProviderFields() {
+    const channel = channelById($("profitRelationChannel")?.value);
+    const douyin = channel?.provider === "DOUYIN";
+    const selected = $("profitRelationType").value;
+    const options = douyin
+      ? [["MERCHANT_ID", "抖音商户号"], ["PERSONAL_OPENID", "抖音 OpenID"]]
+      : [["loginName", "支付宝登录号"], ["userId", "支付宝用户号"], ["cardAliasNo", "支付宝绑卡编号"]];
+    $("profitRelationType").innerHTML = options.map(([value, label]) =>
+      `<option value="${value}"${value === selected ? " selected" : ""}>${label}</option>`
+    ).join("");
+    $("profitRelationRelationTypeField").classList.toggle("hidden", !douyin);
+    $("profitRelationAccount").placeholder = douyin ? "填写抖音商户号或 OpenID" : "支付宝登录号或 2088 用户号";
+    syncProfitRelationCustomField();
+  }
+
+  function syncProfitRelationCustomField() {
+    const douyin = channelById($("profitRelationChannel")?.value)?.provider === "DOUYIN";
+    $("profitRelationCustomField").classList.toggle(
+      "hidden",
+      !douyin || $("profitRelationRelationType").value !== "CUSTOM"
+    );
   }
 
   function relationOptionText(relation) {
@@ -4117,8 +4327,10 @@
     const select = $("profitShareTransIn");
     if (!select) return;
     const selected = select.value;
-    const placeholder = $("profitShareChannel").value ? "请选择已绑定分帐关系" : "请先选择支付通道";
-    select.innerHTML = `<option value="">${placeholder}</option>` + state.profitSharingRelations.map((relation) => {
+    const placeholder = $("profitShareChannel").value ? "请选择已绑定分账关系" : "请先选择支付通道";
+    select.innerHTML = `<option value="">${placeholder}</option>` + state.profitSharingRelations
+      .filter((relation) => relation.status === "BOUND")
+      .map((relation) => {
       const key = `${relation.receiverType || "loginName"}|${relation.receiverAccount}`;
       return `
         <option value="${html(key)}"
@@ -4132,84 +4344,141 @@
     syncProfitShareRelationType();
   }
 
+  function renderProfitRelationTable() {
+    const body = $("profitRelationTableBody");
+    if (!body) return;
+    if (!state.profitSharingRelations.length) {
+      body.innerHTML = '<tr><td colspan="6" class="muted">暂无分账关系</td></tr>';
+      return;
+    }
+    body.innerHTML = state.profitSharingRelations.map((relation) => `
+      <tr>
+        <td>${html(relation.channelId)}</td>
+        <td>${html(relation.receiverAccount)}</td>
+        <td>${html(receiverTypeText(relation.receiverType))}</td>
+        <td>${html(relation.receiverName || "-")}</td>
+        <td>${relation.status === "BOUND" ? '<span class="status success">已绑定</span>' : '<span class="status pending">已删除</span>'}</td>
+        <td>${relation.status === "BOUND" ? `<button class="btn small danger" type="button"
+          data-unbind-relation="${html(relation.receiverAccount)}"
+          data-relation-type="${html(relation.receiverType)}"
+          data-relation-name="${html(relation.receiverName || "")}">删除</button>` : "-"}</td>
+      </tr>
+    `).join("");
+  }
+
   async function loadProfitSharingRelations(channelId = $("profitShareChannel").value, silent = false) {
     const safeChannelId = (channelId || "").trim();
     if (!safeChannelId) {
       state.profitSharingRelations = [];
       renderProfitShareRelationOptions();
-      if (!silent) setProfitShareResult({ message: "请先选择支付通道，再刷新已绑定分帐关系" });
+      renderProfitRelationTable();
+      if (!silent) setProfitShareResult({ message: "请先选择支付通道，再刷新已绑定分账关系" });
       return [];
     }
     const data = await request(`/api/v1/payments/profit-sharing/relations?channelId=${encodeURIComponent(safeChannelId)}`);
     state.profitSharingRelations = Array.isArray(data) ? data : [];
     renderProfitShareRelationOptions();
+    renderProfitRelationTable();
     if (!silent) {
-      setProfitShareResult({ message: `已加载 ${state.profitSharingRelations.length} 个已绑定分帐关系` });
+      setProfitShareResult({ message: `已加载 ${state.profitSharingRelations.length} 个已绑定分账关系` });
     }
     return state.profitSharingRelations;
   }
 
-  function profitShareRoyaltyParameter(amount) {
+  function profitShareRoyaltyParameter(amount, percentage) {
     const relation = selectedProfitShareRelation();
     const transIn = relation.account.trim();
     if (!transIn) {
-      throw { message: "请选择已绑定分帐关系中的收入方账号" };
+      throw { message: "请选择已绑定分账关系中的收入方账号" };
     }
     return compact({
       royalty_type: "transfer",
       trans_in_type: relation.type,
       trans_in: transIn,
-      amount,
+      amount: percentage ? undefined : amount,
+      amount_percentage: percentage,
       desc: $("profitShareDesc").value.trim()
     });
   }
 
   function profitShareSinglePayload() {
-    const amount = amountField("profitShareAmount");
-    if (!amount) {
-      throw { message: "单笔订单分账必须填写分账金额" };
+    const channel = channelById($("profitShareChannel").value);
+    const mode = channel?.provider === "DOUYIN" ? "AMOUNT" : $("profitShareMode").value;
+    const value = amountField("profitShareAmount");
+    if (!value) {
+      throw { message: mode === "PERCENTAGE" ? "请填写分账比例" : "请填写分账金额" };
+    }
+    if (mode === "PERCENTAGE" && (value <= 0 || value > 100)) {
+      throw { message: "分账比例必须大于 0 且不能超过 100%" };
     }
     const outTradeNo = $("profitShareOutTradeNo").value.trim();
+    if (!outTradeNo) {
+      throw { message: "请填写或选择订单号" };
+    }
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    const extra = parseJson("profitShareExtra", {});
+    if (channel?.provider === "DOUYIN") {
+      extra.unfreeze_unsplit = $("profitShareUnfreezeUnsplit").value === "true";
+    }
     return compact({
       outTradeNo,
       tradeNo: order?.tradeNo,
       outRequestNo: `${$("profitShareOutRequestPrefix").value || "PS"}_${outTradeNo}`,
-      royaltyParameters: [profitShareRoyaltyParameter(amount)],
+      royaltyParameters: [profitShareRoyaltyParameter(
+        mode === "AMOUNT" ? value : undefined,
+        mode === "PERCENTAGE" ? value : undefined
+      )],
       operatorId: $("profitShareOperatorId").value,
       appAuthToken: $("profitShareAppAuthToken").value,
       channelIds: order?.channelId ? [order.channelId] : ($("profitShareChannel").value ? [$("profitShareChannel").value] : []),
-      extra: parseJson("profitShareExtra", {})
+      extra
     });
   }
 
   function profitShareBatchPayload() {
     const relation = selectedProfitShareRelation();
     if (!relation.account) {
-      throw { message: "请选择已绑定分帐关系中的收入方账号" };
+      throw { message: "请选择已绑定分账关系中的收入方账号" };
+    }
+    const channel = channelById($("profitShareChannel").value);
+    const mode = channel?.provider === "DOUYIN" ? "AMOUNT" : $("profitShareMode").value;
+    const value = amountField("profitShareAmount");
+    if (mode === "PERCENTAGE" && !value) {
+      throw { message: "批量按比例分账必须填写分账比例" };
+    }
+    if (mode === "PERCENTAGE" && (value <= 0 || value > 100)) {
+      throw { message: "分账比例必须大于 0 且不能超过 100%" };
+    }
+    const extra = parseJson("profitShareExtra", {});
+    if (channel?.provider === "DOUYIN") {
+      extra.unfreeze_unsplit = $("profitShareUnfreezeUnsplit").value === "true";
     }
     return compact({
       channelId: $("profitShareChannel").value,
       transIn: relation.account.trim(),
       transInType: relation.type,
-      amount: amountField("profitShareAmount"),
+      amount: mode === "AMOUNT" ? value : undefined,
+      percentage: mode === "PERCENTAGE" ? value : undefined,
       desc: $("profitShareDesc").value.trim(),
       outRequestNoPrefix: $("profitShareOutRequestPrefix").value,
       operatorId: $("profitShareOperatorId").value,
       appAuthToken: $("profitShareAppAuthToken").value,
-      extra: parseJson("profitShareExtra", {})
+      extra
     });
   }
 
   async function submitSingleProfitShare() {
+    const payload = profitShareSinglePayload();
     const data = await request("/api/v1/payments/profit-sharing", {
       method: "POST",
-      body: JSON.stringify(profitShareSinglePayload())
+      body: JSON.stringify(payload)
     });
     if (gatewayFailed(data)) {
-      throw gatewayFailure("支付宝分账", data);
+      throw gatewayFailure("分账", data);
     }
-    setProfitShareResult({ message: "支付宝分账已提交", response: data });
+    $("profitShareTradeNo").value = payload.tradeNo || data.tradeNo || "";
+    $("profitShareQueryOutRequestNo").value = payload.outRequestNo;
+    setProfitShareResult({ message: "分账请求已提交", response: data });
     await loadOrders();
   }
 
@@ -4228,6 +4497,103 @@
     await loadOrders();
   }
 
+  function douyinProfitQueryPayload() {
+    const channelId = $("profitShareChannel").value;
+    if (channelById(channelId)?.provider !== "DOUYIN") {
+      throw { message: "该高级操作仅适用于抖音支付通道" };
+    }
+    const outRequestNo = $("profitShareQueryOutRequestNo").value.trim();
+    const tradeNo = $("profitShareTradeNo").value.trim();
+    if (!outRequestNo || !tradeNo) {
+      throw { message: "请填写抖音交易单号和分账请求号" };
+    }
+    return {
+      outTradeNo: $("profitShareOutTradeNo").value.trim(),
+      tradeNo,
+      outRequestNo,
+      channelIds: [channelId],
+      extra: {}
+    };
+  }
+
+  async function queryProfitShare() {
+    const data = await request("/api/v1/payments/profit-sharing/query", {
+      method: "POST",
+      body: JSON.stringify(douyinProfitQueryPayload())
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("查询抖音分账结果", data);
+    setProfitShareResult({ message: "抖音分账结果已更新", response: data });
+    await loadOrders();
+  }
+
+  async function queryProfitShareRemaining() {
+    const data = await request("/api/v1/payments/profit-sharing/remaining", {
+      method: "POST",
+      body: JSON.stringify(douyinProfitQueryPayload())
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("查询抖音剩余待分金额", data);
+    setProfitShareResult({ message: "抖音剩余待分金额查询完成", response: data });
+  }
+
+  async function finishProfitShare() {
+    const payload = douyinProfitQueryPayload();
+    const data = await request("/api/v1/payments/profit-sharing/finish", {
+      method: "POST",
+      body: JSON.stringify({
+        outTradeNo: payload.outTradeNo,
+        tradeNo: payload.tradeNo,
+        outRequestNo: `PSF_${Date.now()}`,
+        description: "完成分账并解冻剩余资金",
+        channelIds: payload.channelIds,
+        extra: {}
+      })
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("完成抖音分账", data);
+    setProfitShareResult({ message: "完成分账请求已提交", response: data });
+  }
+
+  async function returnProfitShare() {
+    const base = douyinProfitQueryPayload();
+    const receiverAccount = $("profitShareReturnAccount").value.trim();
+    const amount = amountField("profitShareReturnAmount");
+    if (!receiverAccount || !amount) {
+      throw { message: "请填写回退接收方商户号和回退金额" };
+    }
+    const outReturnNo = $("profitShareReturnNo").value.trim() || `PSR_${Date.now()}`;
+    $("profitShareReturnNo").value = outReturnNo;
+    const data = await request("/api/v1/payments/profit-sharing/return", {
+      method: "POST",
+      body: JSON.stringify({
+        outRequestNo: base.outRequestNo,
+        outReturnNo,
+        receiverAccount,
+        amount,
+        description: $("profitShareReturnDesc").value.trim(),
+        channelIds: base.channelIds,
+        extra: {}
+      })
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("抖音分账回退", data);
+    setProfitShareResult({ message: "分账回退请求已提交", response: data });
+  }
+
+  async function queryProfitShareReturn() {
+    const base = douyinProfitQueryPayload();
+    const outReturnNo = $("profitShareReturnNo").value.trim();
+    if (!outReturnNo) throw { message: "请填写回退请求号" };
+    const data = await request("/api/v1/payments/profit-sharing/return/query", {
+      method: "POST",
+      body: JSON.stringify({
+        outRequestNo: base.outRequestNo,
+        outReturnNo,
+        channelIds: base.channelIds,
+        extra: {}
+      })
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("查询抖音分账回退", data);
+    setProfitShareResult({ message: "分账回退结果查询完成", response: data });
+  }
+
   function profitRelationPayload(requireAccount = true, includePaging = false) {
     const account = $("profitRelationAccount").value.trim();
     if (requireAccount && !account) {
@@ -4236,6 +4602,18 @@
     const channelId = $("profitRelationChannel").value;
     if (!channelId) {
       throw { message: "请选择支付通道" };
+    }
+    const channel = channelById(channelId);
+    const extra = parseJson("profitRelationExtra", {});
+    if (channel?.provider === "DOUYIN") {
+      extra.relation_type = $("profitRelationRelationType").value;
+      if (extra.relation_type === "CUSTOM") {
+        extra.custom_relation = $("profitRelationCustom").value.trim();
+        if (!extra.custom_relation) throw { message: "请填写自定义关系名称" };
+      }
+      if ($("profitRelationType").value === "MERCHANT_ID" && !$("profitRelationName").value.trim()) {
+        throw { message: "抖音商户接收方必须填写商户名称" };
+      }
     }
     return compact({
       receiverAccount: account,
@@ -4247,7 +4625,7 @@
       pageSize: includePaging ? 20 : undefined,
       appAuthToken: $("profitRelationAppAuthToken").value.trim(),
       channelIds: [channelId],
-      extra: parseJson("profitRelationExtra", {})
+      extra
     });
   }
 
@@ -4257,12 +4635,10 @@
       body: JSON.stringify(profitRelationPayload(true))
     });
     if (gatewayFailed(data)) {
-      throw gatewayFailure("添加分帐关系", data);
+      throw gatewayFailure("添加分账关系", data);
     }
-    setProfitRelationResult({ message: "分帐关系已提交添加", response: data });
-    if ($("profitShareChannel").value === $("profitRelationChannel").value) {
-      await loadProfitSharingRelations($("profitRelationChannel").value, true);
-    }
+    setProfitRelationResult({ message: "分账关系已提交添加", response: data });
+    await loadProfitSharingRelations($("profitRelationChannel").value, true);
   }
 
   async function queryProfitRelation() {
@@ -4274,12 +4650,36 @@
       body: JSON.stringify(payload)
     });
     if (gatewayFailed(data)) {
-      throw gatewayFailure("查询分帐关系", data);
+      throw gatewayFailure("查询分账关系", data);
     }
-    setProfitRelationResult({ message: "分帐关系查询完成", response: data });
-    if ($("profitShareChannel").value === $("profitRelationChannel").value) {
-      await loadProfitSharingRelations($("profitRelationChannel").value, true);
-    }
+    setProfitRelationResult({ message: "分账关系查询完成", response: data });
+    await loadProfitSharingRelations($("profitRelationChannel").value, true);
+  }
+
+  async function unbindProfitRelation(account, type, name) {
+    const channelId = $("profitRelationChannel").value;
+    const confirmed = await openConfirmModal({
+      title: "删除分账关系",
+      message: "删除后将不能再向该账号发起新的分账。",
+      target: `${account}（${receiverTypeText(type)}）`,
+      okText: "确认删除"
+    });
+    if (!confirmed) return;
+    const data = await request("/api/v1/payments/profit-sharing/relations/unbind", {
+      method: "POST",
+      body: JSON.stringify({
+        receiverAccount: account,
+        receiverType: type,
+        receiverName: name || undefined,
+        memo: "删除分账关系",
+        outRequestNo: `PRU_${Date.now()}`,
+        channelIds: [channelId],
+        extra: {}
+      })
+    });
+    if (gatewayFailed(data)) throw gatewayFailure("删除分账关系", data);
+    setProfitRelationResult({ message: "分账关系已删除", response: data });
+    await loadProfitSharingRelations(channelId, true);
   }
 
   function renderTopbarDate() {
@@ -4637,6 +5037,8 @@
     renderChannelSelect("profitShareChannel", "请选择通道");
     renderChannelSelect("profitRelationChannel", "请选择通道");
     renderProfitShareRelationOptions();
+    syncProfitShareModeFields();
+    syncProfitRelationProviderFields();
   }
 
   function renderChannelSelect(id, placeholder) {
@@ -5830,6 +6232,7 @@
 
   $("profitShareChannel").addEventListener("change", async () => {
     try {
+      syncProfitShareModeFields();
       await loadProfitSharingRelations($("profitShareChannel").value);
     } catch (error) {
       setProfitShareResult(error);
@@ -5837,6 +6240,8 @@
   });
 
   $("profitShareTransIn").addEventListener("change", syncProfitShareRelationType);
+
+  $("profitShareMode").addEventListener("change", syncProfitShareModeFields);
 
   $("refreshProfitRelationsBtn").addEventListener("click", async () => {
     try {
@@ -5862,9 +6267,40 @@
     }
   });
 
+  $("queryProfitShareBtn").addEventListener("click", async () => {
+    try { await queryProfitShare(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("profitShareRemainingBtn").addEventListener("click", async () => {
+    try { await queryProfitShareRemaining(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("finishProfitShareBtn").addEventListener("click", async () => {
+    try { await finishProfitShare(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("returnProfitShareBtn").addEventListener("click", async () => {
+    try { await returnProfitShare(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("queryProfitShareReturnBtn").addEventListener("click", async () => {
+    try { await queryProfitShareReturn(); } catch (error) { setProfitShareResult(error); }
+  });
+
   $("profitRelationForm").addEventListener("submit", (event) => {
     event.preventDefault();
   });
+
+  $("profitRelationChannel").addEventListener("change", async () => {
+    syncProfitRelationProviderFields();
+    try {
+      await loadProfitSharingRelations($("profitRelationChannel").value, true);
+    } catch (error) {
+      setProfitRelationResult(error);
+    }
+  });
+
+  $("profitRelationRelationType").addEventListener("change", syncProfitRelationCustomField);
 
   $("bindProfitRelationBtn").addEventListener("click", async () => {
     try {
@@ -5877,6 +6313,20 @@
   $("queryProfitRelationBtn").addEventListener("click", async () => {
     try {
       await queryProfitRelation();
+    } catch (error) {
+      setProfitRelationResult(error);
+    }
+  });
+
+  $("profitRelationTableBody").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-unbind-relation]");
+    if (!button) return;
+    try {
+      await unbindProfitRelation(
+        button.dataset.unbindRelation,
+        button.dataset.relationType,
+        button.dataset.relationName
+      );
     } catch (error) {
       setProfitRelationResult(error);
     }

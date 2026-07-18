@@ -13,7 +13,11 @@ import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
+import com.example.payments.domain.ProfitSharingFinishRequest;
+import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
+import com.example.payments.domain.ProfitSharingReturnQueryRequest;
+import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.PaymentProvider;
@@ -35,6 +39,11 @@ public class DouyinPaymentProvider implements PaymentProvider {
     private static final String QUERY_BY_OUT_TRADE_NO = "/v1/trade/transactions/out-trade-no/";
     private static final String QUERY_BY_TRANSACTION_ID = "/v1/trade/transactions/id/";
     private static final String REFUND_PATH = "/v1/trade/refund/domestic/refunds";
+    private static final String PROFIT_SHARING_ORDER_PATH = "/v1/trade/profitsharing/orders";
+    private static final String PROFIT_SHARING_RETURN_PATH = "/v1/trade/profitsharing/return-orders";
+    private static final String PROFIT_SHARING_FINISH_PATH = "/v1/trade/profitsharing/finish-orders";
+    private static final String PROFIT_SHARING_RECEIVER_ADD_PATH = "/v1/trade/profitsharing/receivers/add";
+    private static final String PROFIT_SHARING_RECEIVER_DELETE_PATH = "/v1/trade/profitsharing/receivers/delete";
 
     private final DouyinPayClient client;
 
@@ -84,6 +93,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("notify_url", notifyUrl);
         body.put("amount", amount(request.totalAmount()));
         body.put("scene_info", sceneInfo);
+        body.put("profit_sharing", true);
         mergeAllowedPayExtras(body, request.extra());
 
         DouyinGatewayResponse response = client.post(channel, H5_ORDER_PATH, body);
@@ -196,7 +206,25 @@ public class DouyinPaymentProvider implements PaymentProvider {
 
     @Override
     public GatewayResponse profitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingRequest request) {
-        throw unsupported("profit sharing");
+        String transactionId = required(request.tradeNo(), "Douyin Pay profit sharing requires transactionId");
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("appid", required(channel.getDouyin().getAppId(), "Douyin Pay appId is required"));
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
+        body.put("transaction_id", transactionId);
+        body.put("out_order_no", request.outRequestNo());
+        body.put("receivers", douyinReceivers(request.royaltyParameters()));
+        body.put("unfreeze_unsplit", Boolean.toString(booleanExtra(request.extra(), "unfreeze_unsplit", false)));
+        putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
+
+        DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_ORDER_PATH, body);
+        return profitSharingResponse(
+                channel.getId(),
+                response,
+                request.outTradeNo(),
+                transactionId,
+                request.outRequestNo(),
+                PROFIT_SHARING_ORDER_PATH
+        );
     }
 
     @Override
@@ -204,7 +232,31 @@ public class DouyinPaymentProvider implements PaymentProvider {
             PaymentGatewayProperties.Channel channel,
             ProfitSharingRelationBindRequest request
     ) {
-        throw unsupported("profit sharing relation binding");
+        String type = douyinReceiverType(request.receiverType());
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
+        body.put("appid", required(channel.getDouyin().getAppId(), "Douyin Pay appId is required"));
+        body.put("type", type);
+        body.put("account", request.receiverAccount());
+        if (hasText(request.receiverName())) {
+            body.put("name", DouyinSignatureSupport.encryptSensitive(
+                    request.receiverName().trim(),
+                    channel.getDouyin().getPlatformCertificate()
+            ));
+        } else if ("MERCHANT_ID".equals(type)) {
+            throw new GatewayException("DOUYIN_RECEIVER_NAME_MISSING", "抖音商户分账接收方必须填写商户名称");
+        }
+        String relationType = firstText(extraText(request.extra(), "relation_type"), "PARTNER");
+        body.put("relation_type", relationType);
+        if ("CUSTOM".equals(relationType)) {
+            body.put("custom_relation", required(
+                    extraText(request.extra(), "custom_relation"),
+                    "Douyin Pay custom relation is required when relation_type is CUSTOM"
+            ));
+        }
+
+        DouyinGatewayResponse response = client.postSensitive(channel, PROFIT_SHARING_RECEIVER_ADD_PATH, body);
+        return relationResponse(channel.getId(), response, request, "BOUND", PROFIT_SHARING_RECEIVER_ADD_PATH);
     }
 
     @Override
@@ -212,7 +264,107 @@ public class DouyinPaymentProvider implements PaymentProvider {
             PaymentGatewayProperties.Channel channel,
             ProfitSharingRelationQueryRequest request
     ) {
-        throw unsupported("profit sharing relation query");
+        Map<String, Object> raw = new LinkedHashMap<>();
+        raw.put("provider", "DOUYIN");
+        raw.put("message", "抖音支付未提供分账接收方列表查询接口，以下关系来自本系统已成功绑定记录");
+        return new GatewayResponse(
+                channel.getId(),
+                PaymentStatus.SUCCESS,
+                "SUCCESS",
+                "已刷新本地抖音分账关系",
+                null,
+                null,
+                null,
+                null,
+                raw,
+                List.of()
+        );
+    }
+
+    @Override
+    public GatewayResponse unbindProfitSharingRelation(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingRelationBindRequest request
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
+        body.put("appid", required(channel.getDouyin().getAppId(), "Douyin Pay appId is required"));
+        body.put("type", douyinReceiverType(request.receiverType()));
+        body.put("account", request.receiverAccount());
+        DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_RECEIVER_DELETE_PATH, body);
+        return relationResponse(channel.getId(), response, request, "DISABLED", PROFIT_SHARING_RECEIVER_DELETE_PATH);
+    }
+
+    @Override
+    public GatewayResponse queryProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingQueryRequest request) {
+        String transactionId = required(request.tradeNo(), "Douyin Pay profit sharing query requires transactionId");
+        String path = PROFIT_SHARING_ORDER_PATH + "/" + path(request.outRequestNo())
+                + "?mchid=" + query(channel.getDouyin().getMchId())
+                + "&transaction_id=" + query(transactionId);
+        DouyinGatewayResponse response = client.get(channel, path);
+        return profitSharingResponse(
+                channel.getId(), response, request.outTradeNo(), transactionId, request.outRequestNo(), path
+        );
+    }
+
+    @Override
+    public GatewayResponse finishProfitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingFinishRequest request) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
+        body.put("transaction_id", request.tradeNo());
+        body.put("out_order_no", request.outRequestNo());
+        body.put("description", firstText(request.description(), "完成分账并解冻剩余资金"));
+        putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
+        DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_FINISH_PATH, body);
+        return profitSharingResponse(
+                channel.getId(), response, request.outTradeNo(), request.tradeNo(), request.outRequestNo(), PROFIT_SHARING_FINISH_PATH
+        );
+    }
+
+    @Override
+    public GatewayResponse profitSharingRemainingAmount(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingQueryRequest request
+    ) {
+        String path = "/v1/trade/profitsharing/order/" + path(required(
+                request.tradeNo(), "Douyin Pay remaining amount query requires transactionId"
+        )) + "/amounts?mchid=" + query(channel.getDouyin().getMchId());
+        DouyinGatewayResponse response = client.get(channel, path);
+        return profitSharingResponse(
+                channel.getId(), response, request.outTradeNo(), request.tradeNo(), request.outRequestNo(), path
+        );
+    }
+
+    @Override
+    public GatewayResponse returnProfitSharing(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingReturnRequest request
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
+        body.put("out_order_no", request.outRequestNo());
+        body.put("out_return_no", request.outReturnNo());
+        body.put("return_mchid", request.receiverAccount());
+        body.put("amount", fen(request.amount()));
+        body.put("description", firstText(request.description(), "分账回退"));
+        DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_RETURN_PATH, body);
+        return profitSharingResponse(
+                channel.getId(), response, null, null, request.outRequestNo(), PROFIT_SHARING_RETURN_PATH
+        );
+    }
+
+    @Override
+    public GatewayResponse queryProfitSharingReturn(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingReturnQueryRequest request
+    ) {
+        String path = PROFIT_SHARING_RETURN_PATH + "/" + path(request.outReturnNo())
+                + "?mchid=" + query(channel.getDouyin().getMchId())
+                + "&out_order_no=" + query(request.outRequestNo());
+        DouyinGatewayResponse response = client.get(channel, path);
+        return profitSharingResponse(
+                channel.getId(), response, null, null, request.outRequestNo(), path
+        );
     }
 
     @Override
@@ -284,6 +436,114 @@ public class DouyinPaymentProvider implements PaymentProvider {
         return PaymentStatus.PENDING;
     }
 
+    private static GatewayResponse profitSharingResponse(
+            String channelId,
+            DouyinGatewayResponse response,
+            String outTradeNo,
+            String transactionId,
+            String outOrderNo,
+            String requestPath
+    ) {
+        Map<String, Object> raw = responseRaw(response, requestPath);
+        raw.putIfAbsent("profit_sharing_out_order_no", firstText(text(response.body(), "out_order_no"), outOrderNo));
+        String state = firstText(
+                text(response.body(), "state"),
+                text(response.body(), "result"),
+                nestedText(response.body(), "data", "state")
+        );
+        PaymentStatus status = switch (firstText(state, "PROCESSING")) {
+            case "FINISHED", "SUCCESS" -> PaymentStatus.SUCCESS;
+            case "CLOSED", "FAILED", "FAIL" -> PaymentStatus.FAILED;
+            default -> PaymentStatus.PENDING;
+        };
+        return new GatewayResponse(
+                channelId,
+                status,
+                firstText(text(response.body(), "code"), state, "SUCCESS"),
+                firstText(
+                        text(response.body(), "message"),
+                        text(response.body(), "fail_reason"),
+                        status == PaymentStatus.SUCCESS ? "抖音分账处理完成" : "抖音分账请求已受理"
+                ),
+                outTradeNo,
+                firstText(text(response.body(), "transaction_id"), transactionId),
+                null,
+                null,
+                raw,
+                List.of()
+        );
+    }
+
+    private static GatewayResponse relationResponse(
+            String channelId,
+            DouyinGatewayResponse response,
+            ProfitSharingRelationBindRequest request,
+            String status,
+            String requestPath
+    ) {
+        Map<String, Object> raw = responseRaw(response, requestPath);
+        raw.putIfAbsent("account", request.receiverAccount());
+        raw.putIfAbsent("type", douyinReceiverType(request.receiverType()));
+        raw.putIfAbsent("name", request.receiverName());
+        raw.put("status", status);
+        return new GatewayResponse(
+                channelId,
+                PaymentStatus.SUCCESS,
+                firstText(text(response.body(), "code"), "SUCCESS"),
+                firstText(text(response.body(), "message"), "BOUND".equals(status) ? "抖音分账关系已添加" : "抖音分账关系已删除"),
+                null,
+                null,
+                null,
+                null,
+                raw,
+                List.of()
+        );
+    }
+
+    private static List<Map<String, Object>> douyinReceivers(List<Map<String, Object>> royaltyParameters) {
+        if (royaltyParameters == null || royaltyParameters.isEmpty()) {
+            throw new GatewayException("DOUYIN_RECEIVERS_MISSING", "抖音分账至少需要一个接收方");
+        }
+        return royaltyParameters.stream().map(parameter -> {
+            Map<String, Object> receiver = new LinkedHashMap<>();
+            receiver.put("type", douyinReceiverType(text(parameter, "trans_in_type")));
+            receiver.put("account", required(text(parameter, "trans_in"), "Douyin Pay receiver account is required"));
+            receiver.put("amount", fen(decimal(parameter.get("amount"))));
+            receiver.put("description", firstText(text(parameter, "desc"), "订单分账"));
+            return receiver;
+        }).toList();
+    }
+
+    private static String douyinReceiverType(String value) {
+        if ("PERSONAL_OPENID".equalsIgnoreCase(value)) {
+            return "PERSONAL_OPENID";
+        }
+        if ("MERCHANT_ID".equalsIgnoreCase(value)) {
+            return "MERCHANT_ID";
+        }
+        throw new GatewayException(
+                "DOUYIN_RECEIVER_TYPE_INVALID",
+                "抖音分账接收方类型必须是 MERCHANT_ID 或 PERSONAL_OPENID"
+        );
+    }
+
+    private static BigDecimal decimal(Object value) {
+        if (value instanceof BigDecimal decimal) {
+            return decimal;
+        }
+        if (value instanceof Number number) {
+            return new BigDecimal(number.toString());
+        }
+        if (value == null || value.toString().isBlank()) {
+            throw new GatewayException("DOUYIN_RECEIVER_AMOUNT_MISSING", "抖音分账接收方金额不能为空");
+        }
+        try {
+            return new BigDecimal(value.toString());
+        } catch (NumberFormatException ex) {
+            throw new GatewayException("DOUYIN_RECEIVER_AMOUNT_INVALID", "抖音分账接收方金额格式无效", ex);
+        }
+    }
+
     private static Map<String, Object> amount(BigDecimal total) {
         return Map.of("total", fen(total), "currency", "CNY");
     }
@@ -352,6 +612,14 @@ public class DouyinPaymentProvider implements PaymentProvider {
         } catch (NumberFormatException ignored) {
             return 0;
         }
+    }
+
+    private static boolean booleanExtra(Map<String, Object> extra, String key, boolean fallback) {
+        Object value = extra == null ? null : extra.get(key);
+        if (value instanceof Boolean booleanValue) {
+            return booleanValue;
+        }
+        return value == null ? fallback : Boolean.parseBoolean(value.toString());
     }
 
     private static void putIfText(Map<String, Object> data, String key, String value) {

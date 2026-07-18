@@ -100,6 +100,26 @@ public class ProfitSharingRelationService {
         }
     }
 
+    public void recordUnbind(ProfitSharingRelationBindRequest request, GatewayResponse response) {
+        if (request == null || response == null || response.status() == PaymentStatus.FAILED) {
+            return;
+        }
+        String channelId = firstText(response.channelId(), firstChannel(request.channelIds()));
+        if (!hasText(channelId) || !hasText(request.receiverAccount())) {
+            return;
+        }
+        save(new ProfitSharingRelationView(
+                channelId,
+                firstText(request.receiverType(), "loginName"),
+                request.receiverAccount().trim(),
+                trimToNull(request.receiverName()),
+                trimToNull(request.memo()),
+                trimToNull(request.outRequestNo()),
+                "DISABLED",
+                null
+        ));
+    }
+
     public List<ProfitSharingRelationView> list(String channelId) {
         if (jdbcTemplate != null) {
             try {
@@ -143,13 +163,15 @@ public class ProfitSharingRelationService {
                         WHERE channel_id = ?
                           AND receiver_type = ?
                           AND receiver_account = ?
+                          AND status = 'BOUND'
                         """, Integer.class, channelId.trim(), safeType, safeAccount);
                 return count != null && count > 0;
             } catch (DataAccessException ignored) {
                 // Fall back to records captured in memory during the current process.
             }
         }
-        return memoryRelations.containsKey(key(channelId, safeType, safeAccount));
+        ProfitSharingRelationView relation = memoryRelations.get(key(channelId, safeType, safeAccount));
+        return relation != null && "BOUND".equals(relation.status());
     }
 
     private void save(ProfitSharingRelationView relation) {
