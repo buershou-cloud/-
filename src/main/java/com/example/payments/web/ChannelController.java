@@ -157,6 +157,8 @@ public class ChannelController {
                 null,
                 null,
                 null,
+                null,
+                hasText(channel.getDouyin().getMerchantCertificate()),
                 hasText(channel.getDouyin().getMerchantPrivateKey()),
                 hasText(channel.getDouyin().getPlatformCertificate()),
                 hasText(channel.getDouyin().getEncryptKey()),
@@ -207,6 +209,7 @@ public class ChannelController {
         setIfPresent(request.douyinAppId(), douyin::setAppId);
         setIfPresent(request.douyinMchId(), douyin::setMchId);
         setIfPresent(request.douyinMerchantSerialNo(), douyin::setMerchantSerialNo);
+        applyDouyinMerchantCertificate(douyin, request.douyinMerchantCertificate());
         setIfPresent(request.douyinMerchantPrivateKey(), douyin::setMerchantPrivateKey);
         setIfPresent(request.douyinPlatformCertificate(), douyin::setPlatformCertificate);
         setIfPresent(request.douyinEncryptKey(), douyin::setEncryptKey);
@@ -220,12 +223,25 @@ public class ChannelController {
         setIfPresent(request.douyinAppId(), douyin::setAppId);
         setIfPresent(request.douyinMchId(), douyin::setMchId);
         setIfPresent(request.douyinMerchantSerialNo(), douyin::setMerchantSerialNo);
+        applyDouyinMerchantCertificate(douyin, request.douyinMerchantCertificate());
         setIfPresent(request.douyinMerchantPrivateKey(), douyin::setMerchantPrivateKey);
         setIfPresent(request.douyinPlatformCertificate(), douyin::setPlatformCertificate);
         setIfPresent(request.douyinEncryptKey(), douyin::setEncryptKey);
         setIfPresent(request.douyinNotifyUrl(), douyin::setNotifyUrl);
         setIfPresent(request.douyinReturnUrl(), douyin::setReturnUrl);
         setIfPresent(request.douyinH5AppName(), douyin::setH5AppName);
+    }
+
+    private static void applyDouyinMerchantCertificate(
+            PaymentGatewayProperties.Douyin douyin,
+            String merchantCertificate
+    ) {
+        if (!hasText(merchantCertificate)) {
+            return;
+        }
+        String certificate = merchantCertificate.trim();
+        douyin.setMerchantCertificate(certificate);
+        douyin.setMerchantSerialNo(DouyinSignatureSupport.certificateSerial(certificate));
     }
 
     private static void applyDefaultCallbackUrls(
@@ -329,15 +345,25 @@ public class ChannelController {
         if (!hasText(douyin.getAppId())
                 || !hasText(douyin.getMchId())
                 || !hasText(douyin.getMerchantSerialNo())
+                || !hasText(douyin.getMerchantCertificate())
                 || !hasText(douyin.getMerchantPrivateKey())
                 || !hasText(douyin.getPlatformCertificate())) {
-            throw new IllegalArgumentException("DOUYIN channel requires appId, mchId, merchant serial number, merchant private key and platform certificate");
+            throw new IllegalArgumentException("DOUYIN channel requires appId, mchId, merchant API certificate, merchant private key and platform certificate");
         }
         if (!hasText(douyin.getEncryptKey())
                 || douyin.getEncryptKey().getBytes(StandardCharsets.UTF_8).length != 32) {
             throw new IllegalArgumentException("Douyin encrypt key must be exactly 32 bytes");
         }
-        DouyinSignatureSupport.sign("douyin-channel-configuration-check", douyin.getMerchantPrivateKey());
+        String merchantSerial = DouyinSignatureSupport.certificateSerial(douyin.getMerchantCertificate());
+        if (!merchantSerial.equalsIgnoreCase(douyin.getMerchantSerialNo())) {
+            throw new IllegalArgumentException("Douyin merchant certificate serial number does not match the configured serial number");
+        }
+        if (!DouyinSignatureSupport.privateKeyMatchesCertificate(
+                douyin.getMerchantPrivateKey(),
+                douyin.getMerchantCertificate()
+        )) {
+            throw new IllegalArgumentException("Douyin merchant private key does not match the merchant API certificate");
+        }
         DouyinSignatureSupport.certificateSerial(douyin.getPlatformCertificate());
         validateHttpsCallback(douyin.getNotifyUrl(), "Douyin notify URL");
     }
@@ -427,9 +453,11 @@ public class ChannelController {
             String douyinAppId,
             String douyinMchId,
             String douyinMerchantSerialNo,
+            String douyinMerchantCertificate,
             String douyinMerchantPrivateKey,
             String douyinPlatformCertificate,
             String douyinEncryptKey,
+            boolean hasDouyinMerchantCertificate,
             boolean hasDouyinMerchantPrivateKey,
             boolean hasDouyinPlatformCertificate,
             boolean hasDouyinEncryptKey,

@@ -182,7 +182,8 @@ public class ChannelRegistry {
                        app_cert_content, alipay_cert_content, alipay_root_cert_content,
                        app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type,
                        douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
-                       douyin_merchant_private_key, douyin_platform_certificate, douyin_encrypt_key,
+                       douyin_merchant_certificate, douyin_merchant_private_key,
+                       douyin_platform_certificate, douyin_encrypt_key,
                        douyin_notify_url, douyin_return_url, douyin_h5_app_name
                 FROM pay_channel
                 """, (rs, rowNum) -> {
@@ -218,6 +219,7 @@ public class ChannelRegistry {
             douyin.setAppId(nullIfBlank(rs.getString("douyin_app_id")));
             douyin.setMchId(nullIfBlank(rs.getString("douyin_mch_id")));
             douyin.setMerchantSerialNo(nullIfBlank(rs.getString("douyin_merchant_serial_no")));
+            douyin.setMerchantCertificate(nullIfBlank(rs.getString("douyin_merchant_certificate")));
             douyin.setMerchantPrivateKey(nullIfBlank(rs.getString("douyin_merchant_private_key")));
             douyin.setPlatformCertificate(nullIfBlank(rs.getString("douyin_platform_certificate")));
             douyin.setEncryptKey(nullIfBlank(rs.getString("douyin_encrypt_key")));
@@ -257,11 +259,12 @@ public class ChannelRegistry {
                   app_cert_content, alipay_cert_content, alipay_root_cert_content,
                   app_auth_token, sub_merchant_id, notify_url, return_url, charset_name, sign_type,
                   douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
-                  douyin_merchant_private_key, douyin_platform_certificate, douyin_encrypt_key,
+                  douyin_merchant_certificate, douyin_merchant_private_key,
+                  douyin_platform_certificate, douyin_encrypt_key,
                   douyin_notify_url, douyin_return_url, douyin_h5_app_name
                 ) VALUES (
                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 channel.getId(),
@@ -293,6 +296,7 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getDouyin().getAppId()),
                 nullIfBlank(channel.getDouyin().getMchId()),
                 nullIfBlank(channel.getDouyin().getMerchantSerialNo()),
+                nullIfBlank(channel.getDouyin().getMerchantCertificate()),
                 nullIfBlank(channel.getDouyin().getMerchantPrivateKey()),
                 nullIfBlank(channel.getDouyin().getPlatformCertificate()),
                 nullIfBlank(channel.getDouyin().getEncryptKey()),
@@ -314,7 +318,8 @@ public class ChannelRegistry {
                     app_auth_token = ?, sub_merchant_id = ?, notify_url = ?, return_url = ?,
                     charset_name = ?, sign_type = ?,
                     douyin_gateway_url = ?, douyin_app_id = ?, douyin_mch_id = ?,
-                    douyin_merchant_serial_no = ?, douyin_merchant_private_key = ?,
+                    douyin_merchant_serial_no = ?, douyin_merchant_certificate = ?,
+                    douyin_merchant_private_key = ?,
                     douyin_platform_certificate = ?, douyin_encrypt_key = ?,
                     douyin_notify_url = ?, douyin_return_url = ?, douyin_h5_app_name = ?
                 WHERE id = ?
@@ -347,6 +352,7 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getDouyin().getAppId()),
                 nullIfBlank(channel.getDouyin().getMchId()),
                 nullIfBlank(channel.getDouyin().getMerchantSerialNo()),
+                nullIfBlank(channel.getDouyin().getMerchantCertificate()),
                 nullIfBlank(channel.getDouyin().getMerchantPrivateKey()),
                 nullIfBlank(channel.getDouyin().getPlatformCertificate()),
                 nullIfBlank(channel.getDouyin().getEncryptKey()),

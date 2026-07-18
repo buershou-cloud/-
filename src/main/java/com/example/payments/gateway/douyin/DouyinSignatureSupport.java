@@ -6,6 +6,7 @@ import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
 import java.security.PrivateKey;
@@ -48,12 +49,17 @@ public final class DouyinSignatureSupport {
         }
     }
 
-    public static String certificateSerial(String platformCertificate) {
+    public static String certificateSerial(String certificateContent) {
         try {
-            return certificate(platformCertificate).getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
+            return certificate(certificateContent).getSerialNumber().toString(16).toUpperCase(Locale.ROOT);
         } catch (Exception ex) {
-            throw new GatewayException("DOUYIN_CERTIFICATE_ERROR", "Failed to parse Douyin Pay platform certificate", ex);
+            throw new GatewayException("DOUYIN_CERTIFICATE_ERROR", "Failed to parse Douyin Pay certificate", ex);
         }
+    }
+
+    public static boolean privateKeyMatchesCertificate(String merchantPrivateKey, String merchantCertificate) {
+        String challenge = "douyin-merchant-certificate-check";
+        return verify(challenge, sign(challenge, merchantPrivateKey), merchantCertificate);
     }
 
     public static String decrypt(
@@ -86,20 +92,59 @@ public final class DouyinSignatureSupport {
             throw new GatewayException("DOUYIN_PRIVATE_KEY_MISSING", "Douyin Pay merchant private key is required");
         }
         try {
+            boolean pkcs1 = content.contains("-----BEGIN RSA PRIVATE KEY-----");
             String normalized = content
                     .replace("-----BEGIN PRIVATE KEY-----", "")
                     .replace("-----END PRIVATE KEY-----", "")
+                    .replace("-----BEGIN RSA PRIVATE KEY-----", "")
+                    .replace("-----END RSA PRIVATE KEY-----", "")
                     .replaceAll("\\s", "");
             byte[] bytes = Base64.getDecoder().decode(normalized);
+            if (pkcs1) {
+                bytes = wrapPkcs1AsPkcs8(bytes);
+            }
             return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(bytes));
         } catch (Exception ex) {
             throw new GatewayException("DOUYIN_PRIVATE_KEY_INVALID", "Failed to parse Douyin Pay merchant private key", ex);
         }
     }
 
+    private static byte[] wrapPkcs1AsPkcs8(byte[] pkcs1) {
+        byte[] version = new byte[]{0x02, 0x01, 0x00};
+        byte[] rsaAlgorithm = new byte[]{
+                0x30, 0x0d, 0x06, 0x09, 0x2a, (byte) 0x86, 0x48, (byte) 0x86,
+                (byte) 0xf7, 0x0d, 0x01, 0x01, 0x01, 0x05, 0x00
+        };
+        byte[] privateKey = derValue(0x04, pkcs1);
+        ByteArrayOutputStream body = new ByteArrayOutputStream();
+        body.writeBytes(version);
+        body.writeBytes(rsaAlgorithm);
+        body.writeBytes(privateKey);
+        return derValue(0x30, body.toByteArray());
+    }
+
+    private static byte[] derValue(int tag, byte[] value) {
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        output.write(tag);
+        if (value.length < 128) {
+            output.write(value.length);
+        } else {
+            int lengthBytes = 0;
+            for (int length = value.length; length > 0; length >>>= 8) {
+                lengthBytes++;
+            }
+            output.write(0x80 | lengthBytes);
+            for (int shift = (lengthBytes - 1) * 8; shift >= 0; shift -= 8) {
+                output.write((value.length >>> shift) & 0xff);
+            }
+        }
+        output.writeBytes(value);
+        return output.toByteArray();
+    }
+
     private static X509Certificate certificate(String content) {
         if (!hasText(content)) {
-            throw new GatewayException("DOUYIN_CERTIFICATE_MISSING", "Douyin Pay platform certificate is required");
+            throw new GatewayException("DOUYIN_CERTIFICATE_MISSING", "Douyin Pay certificate is required");
         }
         try {
             byte[] bytes = content.contains("-----BEGIN CERTIFICATE-----")
@@ -108,7 +153,7 @@ public final class DouyinSignatureSupport {
             return (X509Certificate) CertificateFactory.getInstance("X.509")
                     .generateCertificate(new ByteArrayInputStream(bytes));
         } catch (Exception ex) {
-            throw new GatewayException("DOUYIN_CERTIFICATE_INVALID", "Failed to parse Douyin Pay platform certificate", ex);
+            throw new GatewayException("DOUYIN_CERTIFICATE_INVALID", "Failed to parse Douyin Pay certificate", ex);
         }
     }
 

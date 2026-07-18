@@ -23,6 +23,12 @@ To enable the Douyin H5 payment channel on an existing database, run:
 mysql -u payment_gateway -p payment_gateway < database/mysql/20260718_add_douyin_h5_payment.sql
 ```
 
+To complete Douyin Pay certificate mode on an existing database, run:
+
+```bash
+mysql -u payment_gateway -p payment_gateway < database/mysql/20260719_add_douyin_merchant_certificate.sql
+```
+
 ## Spring Boot Startup
 
 After importing the SQL, start the app with database persistence enabled:

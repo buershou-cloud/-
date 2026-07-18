@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS pay_channel (
   douyin_app_id VARCHAR(64) NULL COMMENT '抖音支付网站应用 AppID',
   douyin_mch_id VARCHAR(64) NULL COMMENT '抖音支付直连商户号',
   douyin_merchant_serial_no VARCHAR(128) NULL COMMENT '商户 API 证书序列号',
+  douyin_merchant_certificate MEDIUMTEXT NULL COMMENT '抖音支付商户 API 证书',
   douyin_merchant_private_key MEDIUMTEXT NULL COMMENT '抖音支付商户私钥',
   douyin_platform_certificate MEDIUMTEXT NULL COMMENT '抖音支付平台证书',
   douyin_encrypt_key VARCHAR(128) NULL COMMENT '抖音支付接口加密密钥',

@@ -384,6 +384,7 @@ public class PaymentGatewayProperties {
         private String appId;
         private String mchId;
         private String merchantSerialNo;
+        private String merchantCertificate;
         private String merchantPrivateKey;
         private String platformCertificate;
         private String encryptKey;
@@ -399,6 +400,8 @@ public class PaymentGatewayProperties {
         public void setMchId(String mchId) { this.mchId = mchId; }
         public String getMerchantSerialNo() { return merchantSerialNo; }
         public void setMerchantSerialNo(String merchantSerialNo) { this.merchantSerialNo = merchantSerialNo; }
+        public String getMerchantCertificate() { return merchantCertificate; }
+        public void setMerchantCertificate(String merchantCertificate) { this.merchantCertificate = merchantCertificate; }
         public String getMerchantPrivateKey() { return merchantPrivateKey; }
         public void setMerchantPrivateKey(String merchantPrivateKey) { this.merchantPrivateKey = merchantPrivateKey; }
         public String getPlatformCertificate() { return platformCertificate; }

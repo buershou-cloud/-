@@ -32,6 +32,7 @@ public record ChannelCreateRequest(
         String douyinAppId,
         String douyinMchId,
         String douyinMerchantSerialNo,
+        String douyinMerchantCertificate,
         String douyinMerchantPrivateKey,
         String douyinPlatformCertificate,
         String douyinEncryptKey,

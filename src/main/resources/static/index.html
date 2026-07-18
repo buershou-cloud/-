@@ -2005,10 +2005,14 @@
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
           <label class="douyin-channel-field hidden">抖音网站应用 AppID<input id="newDouyinAppId" placeholder="抖音支付网站应用 AppID"></label>
           <label class="douyin-channel-field hidden">抖音支付商户号<input id="newDouyinMchId" placeholder="mchid"></label>
-          <label class="douyin-channel-field hidden">商户证书序列号<input id="newDouyinMerchantSerialNo" placeholder="merchant serial_no"></label>
-          <label class="wide douyin-channel-field hidden">商户 RSA 私钥<textarea id="newDouyinMerchantPrivateKey" placeholder="PKCS#8 PEM 私钥"></textarea></label>
-          <label class="wide douyin-channel-field hidden">抖音支付平台证书<textarea id="newDouyinPlatformCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
-          <label class="wide douyin-channel-field hidden">上传抖音支付平台证书
+          <label class="douyin-channel-field hidden">商户证书序列号<input id="newDouyinMerchantSerialNo" readonly placeholder="上传商户 API 证书后自动计算"></label>
+          <label class="wide douyin-channel-field hidden">商户 RSA 私钥<textarea id="newDouyinMerchantPrivateKey" placeholder="支持 PKCS#8 或 PKCS#1 PEM 私钥"></textarea></label>
+          <label class="wide douyin-channel-field hidden">商户 API 证书<textarea id="newDouyinMerchantCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+          <label class="wide douyin-channel-field hidden">上传商户 API 证书
+            <input id="newDouyinMerchantCertificateFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
+          </label>
+          <label class="wide douyin-channel-field hidden">抖音支付平台公钥证书<textarea id="newDouyinPlatformCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+          <label class="wide douyin-channel-field hidden">上传抖音支付平台公钥证书
             <input id="newDouyinPlatformCertificateFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
           </label>
           <label class="douyin-channel-field hidden">通知加密密钥<input id="newDouyinEncryptKey" type="password" autocomplete="new-password" placeholder="必须正好 32 字节"></label>
@@ -3833,8 +3837,9 @@
   function channelSecretTags(channel) {
     if (channel.provider === "DOUYIN") {
       return [
+        `<span class="mini">${channel.hasDouyinMerchantCertificate ? "商户证书已配置" : "缺商户证书"}</span>`,
         `<span class="mini">${channel.hasDouyinMerchantPrivateKey ? "商户私钥已配置" : "缺商户私钥"}</span>`,
-        `<span class="mini">${channel.hasDouyinPlatformCertificate ? "平台证书已配置" : "缺平台证书"}</span>`,
+        `<span class="mini">${channel.hasDouyinPlatformCertificate ? "平台公钥证书已配置" : "缺平台公钥证书"}</span>`,
         `<span class="mini">${channel.hasDouyinEncryptKey ? "通知密钥已配置" : "缺通知密钥"}</span>`
       ].join("");
     }
@@ -4197,10 +4202,11 @@
     $("newChannelAppId").required = !douyin;
     $("newDouyinAppId").required = douyin;
     $("newDouyinMchId").required = douyin;
-    $("newDouyinMerchantSerialNo").required = douyin;
+    $("newDouyinMerchantSerialNo").required = false;
     $("newDouyinH5AppName").required = douyin;
     $("newDouyinGatewayUrl").required = douyin;
     $("newDouyinMerchantPrivateKey").required = douyin && !editing;
+    $("newDouyinMerchantCertificate").required = false;
     $("newDouyinPlatformCertificate").required = false;
     $("newDouyinEncryptKey").required = douyin && !editing;
 
@@ -4296,7 +4302,10 @@
     $("newDouyinGatewayUrl").value = "https://api.douyinpay.com";
     $("newDouyinH5AppName").value = "支付平台";
     $("newDouyinMerchantPrivateKey").value = "";
+    $("newDouyinMerchantCertificate").value = "";
+    $("newDouyinMerchantCertificateFile").value = "";
     $("newDouyinPlatformCertificate").value = "";
+    $("newDouyinPlatformCertificateFile").value = "";
     $("newDouyinEncryptKey").value = "";
     syncProviderFields();
   }
@@ -4335,7 +4344,10 @@
     $("newDouyinMchId").value = channel.douyinMchId || "";
     $("newDouyinMerchantSerialNo").value = channel.douyinMerchantSerialNo || "";
     $("newDouyinMerchantPrivateKey").value = "";
+    $("newDouyinMerchantCertificate").value = "";
+    $("newDouyinMerchantCertificateFile").value = "";
     $("newDouyinPlatformCertificate").value = "";
+    $("newDouyinPlatformCertificateFile").value = "";
     $("newDouyinEncryptKey").value = "";
     $("newDouyinH5AppName").value = channel.douyinH5AppName || "支付平台";
     $("newDouyinGatewayUrl").value = channel.douyinGatewayUrl || "https://api.douyinpay.com";
@@ -4352,9 +4364,12 @@
       : "应用 RSA2 私钥";
     $("newDouyinMerchantPrivateKey").placeholder = channel.hasDouyinMerchantPrivateKey
       ? "已保存，留空不修改商户私钥"
-      : "PKCS#8 PEM 私钥";
+      : "支持 PKCS#8 或 PKCS#1 PEM 私钥";
+    $("newDouyinMerchantCertificate").placeholder = channel.hasDouyinMerchantCertificate
+      ? "已保存，留空不修改商户 API 证书"
+      : "-----BEGIN CERTIFICATE-----";
     $("newDouyinPlatformCertificate").placeholder = channel.hasDouyinPlatformCertificate
-      ? "已保存，留空不修改平台证书"
+      ? "已保存，留空不修改平台公钥证书"
       : "-----BEGIN CERTIFICATE-----";
     $("newDouyinEncryptKey").placeholder = channel.hasDouyinEncryptKey
       ? "已保存，留空不修改通知密钥"
@@ -4393,12 +4408,18 @@
       }));
       const merchantPrivateKey = $("newDouyinMerchantPrivateKey").value.trim();
       const encryptKey = $("newDouyinEncryptKey").value.trim();
-      const uploadedCertificate = await readCertificateFile("newDouyinPlatformCertificateFile");
-      const platformCertificate = uploadedCertificate || $("newDouyinPlatformCertificate").value.trim();
+      const uploadedMerchantCertificate = await readCertificateFile("newDouyinMerchantCertificateFile");
+      const merchantCertificate = uploadedMerchantCertificate || $("newDouyinMerchantCertificate").value.trim();
+      const uploadedPlatformCertificate = await readCertificateFile("newDouyinPlatformCertificateFile");
+      const platformCertificate = uploadedPlatformCertificate || $("newDouyinPlatformCertificate").value.trim();
+      if (!editing && !merchantCertificate) {
+        throw new Error("请填写或上传抖音支付商户 API 证书");
+      }
       if (!editing && !platformCertificate) {
-        throw new Error("请填写或上传抖音支付平台证书");
+        throw new Error("请填写或上传抖音支付平台公钥证书");
       }
       if (!editing || merchantPrivateKey) payload.douyinMerchantPrivateKey = merchantPrivateKey;
+      if (!editing || merchantCertificate) payload.douyinMerchantCertificate = merchantCertificate;
       if (!editing || platformCertificate) payload.douyinPlatformCertificate = platformCertificate;
       if (!editing || encryptKey) payload.douyinEncryptKey = encryptKey;
       return compact(payload);
