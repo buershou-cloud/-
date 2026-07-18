@@ -29,6 +29,12 @@ To complete Douyin Pay certificate mode on an existing database, run:
 mysql -u payment_gateway -p payment_gateway < database/mysql/20260719_add_douyin_merchant_certificate.sql
 ```
 
+To add Alipay and Douyin merchant payouts on an existing database, run:
+
+```bash
+mysql -u payment_gateway -p payment_gateway < database/mysql/20260719_add_merchant_payout.sql
+```
+
 ## Spring Boot Startup
 
 After importing the SQL, start the app with database persistence enabled:
@@ -58,3 +64,4 @@ Do not commit the real database password into GitHub.
 - `onboarding_record`: Alipay direct onboarding records
 - `complaint_record`: complaint query records
 - `complaint_auto_config`: automatic complaint query settings
+- `merchant_payout`: Alipay and Douyin merchant payout records

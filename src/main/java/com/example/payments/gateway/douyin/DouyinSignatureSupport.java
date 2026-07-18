@@ -87,6 +87,24 @@ public final class DouyinSignatureSupport {
         }
     }
 
+    public static String encryptSensitive(String value, String platformCertificate) {
+        if (!hasText(value)) {
+            return value;
+        }
+        try {
+            Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding");
+            cipher.init(Cipher.ENCRYPT_MODE, certificate(platformCertificate).getPublicKey());
+            byte[] encrypted = cipher.doFinal(value.getBytes(StandardCharsets.UTF_8));
+            return Base64.getEncoder().encodeToString(encrypted);
+        } catch (Exception ex) {
+            throw new GatewayException(
+                    "DOUYIN_SENSITIVE_ENCRYPT_ERROR",
+                    "Failed to encrypt Douyin Pay sensitive field",
+                    ex
+            );
+        }
+    }
+
     private static PrivateKey privateKey(String content) {
         if (!hasText(content)) {
             throw new GatewayException("DOUYIN_PRIVATE_KEY_MISSING", "Douyin Pay merchant private key is required");

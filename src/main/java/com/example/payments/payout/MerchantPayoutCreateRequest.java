@@ -1,0 +1,23 @@
+package com.example.payments.payout;
+
+import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+
+import java.math.BigDecimal;
+
+public record MerchantPayoutCreateRequest(
+        @NotBlank String channelId,
+        String outBizNo,
+        @NotNull @DecimalMin("0.01") BigDecimal amount,
+        @NotBlank String recipientType,
+        @NotBlank String recipient,
+        String recipientName,
+        String orderTitle,
+        String remark,
+        String transferSceneId,
+        String sceneInfoType,
+        String sceneInfoContent,
+        @NotBlank String paymentPassword
+) {
+}

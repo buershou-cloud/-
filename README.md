@@ -5,6 +5,7 @@ Spring Boot payment gateway for Alipay and Douyin Pay flows.
 Douyin Pay:
 
 - 抖音 H5 支付: `POST /v1/trade/transactions/h5`, with official RSA request signing, order query/close, refund, signed encrypted notifications, and H5 cashier redirection.
+- 商家代付到抖音零钱: official merchant-transfer create/query APIs, RSA-encrypted sensitive fields, signed encrypted result notifications, and original-order reconciliation.
 
 Alipay:
 
@@ -22,6 +23,7 @@ Alipay:
 - 退款: `alipay.trade.refund`
 - 分账: `alipay.trade.order.settle`
 - 多支付通道轮询: configured in `payment.channels`
+- 支付宝商家转账: `alipay.fund.trans.uni.transfer`, with original-order query and application-gateway result notifications
 
 The channel router now borrows the common easy-pay design:
 
@@ -55,7 +57,7 @@ Default admin login:
 - Username: `admin`
 - Password: `admin123`
 
-After first startup the credential is stored in `data/admin-auth.properties`. Change it from the top-right `修改密码` button after logging in.
+After first startup the credentials are stored in `data/admin-auth.properties`. Use the `账户管理` page to add independent administrator accounts, delete non-current accounts, change the current login password, and set the global merchant-payout payment password. Existing single-account files are migrated automatically when saved.
 
 ## MySQL Schema
 
@@ -65,7 +67,13 @@ The MySQL database script is in `database/mysql/payment_gateway_schema.sql`.
 mysql -uroot -p < database/mysql/payment_gateway_schema.sql
 ```
 
-This creates the `payment_gateway` database with tables for channels, merchants, orders, refunds, profit sharing, settlements, onboarding, and complaints.
+This creates the `payment_gateway` database with tables for channels, merchants, orders, refunds, profit sharing, settlements, onboarding, complaints, and merchant payouts.
+
+For an existing database, import the merchant-payout migration once:
+
+```bash
+mysql -u payment_gateway -p payment_gateway < database/mysql/20260719_add_merchant_payout.sql
+```
 
 Enable MySQL persistence at startup with JVM arguments or environment variables:
 
@@ -91,6 +99,15 @@ When `payment.database.enabled` is false, the console still uses the built-in de
 - `POST /api/v1/payments/profit-sharing/channel`
 - `POST /api/v1/payments/complaints/query`
 - `POST /api/v1/payments/onboarding`
+- `GET /api/v1/payouts`
+- `POST /api/v1/payouts`
+- `POST /api/v1/payouts/{outBizNo}/query`
+- `POST /api/v1/payouts/notify/alipay/{channelId}`
+- `POST /api/v1/payouts/notify/douyin/{channelId}`
+- `GET /api/v1/admin-auth/security`
+- `POST /api/v1/admin-auth/accounts`
+- `DELETE /api/v1/admin-auth/accounts/{username}`
+- `POST /api/v1/admin-auth/payment-password`
 - `GET /api/v1/channels`
 - `PATCH /api/v1/channels/{channelId}`
 - `GET /api/v1/merchants/{merchantId}/cashier-qr`

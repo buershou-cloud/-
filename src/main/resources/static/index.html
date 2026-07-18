@@ -1405,6 +1405,7 @@
     <nav class="nav" aria-label="主导航">
       <div class="nav-title">概览</div>
       <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">▦</span><span>订单管理</span></button>
+      <button class="nav-btn" data-page="payouts"><span class="nav-icon">¥</span><span>商家代付</span></button>
       <div class="nav-group" data-nav-group="sharing">
         <button class="nav-group-toggle" type="button" data-nav-toggle="sharing" aria-expanded="false">
           <span class="nav-icon">$</span><span>分帐</span><span class="nav-caret">›</span>
@@ -1421,6 +1422,7 @@
       <button class="nav-btn" data-page="channels"><span class="nav-icon">◎</span><span>支付通道</span></button>
       <button class="nav-btn" data-page="merchants"><span class="nav-icon">⌂</span><span>商户管理</span></button>
       <button class="nav-btn" data-page="reports"><span class="nav-icon">▥</span><span>对账报表</span></button>
+      <button class="nav-btn" data-page="accounts"><span class="nav-icon">管</span><span>账户管理</span></button>
     </nav>
   </aside>
 
@@ -1429,7 +1431,6 @@
       <div id="pageTitle" class="top-title">订单管理</div>
       <div class="top-actions">
         <span id="serverDateText"></span>
-        <button class="top-action-btn" id="changePasswordBtn" type="button">修改密码</button>
         <button class="top-action-btn" id="logoutBtn" type="button">退出</button>
         <span class="admin-dot">管</span>
         <span id="adminUsername">admin</span>
@@ -1518,6 +1519,101 @@
             <pre id="dashboardResult" class="operation-result">等待订单操作</pre>
           </div>
         </section>
+      </section>
+
+      <section id="page-payouts" class="page">
+        <div class="work-grid">
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">发起商家代付</h2></div>
+            <div class="panel-body">
+              <form id="payoutForm">
+                <div class="form-grid">
+                  <label>代付通道
+                    <select id="payoutChannel" required>
+                      <option value="">请选择支付宝或抖音通道</option>
+                    </select>
+                  </label>
+                  <label>代付单号<input id="payoutOutBizNo" maxlength="32" placeholder="留空自动生成"></label>
+                  <label>代付金额<input id="payoutAmount" type="number" min="0.01" step="0.01" required></label>
+                  <label>收款标识类型
+                    <select id="payoutRecipientType" required></select>
+                  </label>
+                  <label class="wide">收款标识<input id="payoutRecipient" autocomplete="off" required></label>
+                  <label>收款人姓名<input id="payoutRecipientName" autocomplete="off" placeholder="登录号收款或大额抖音转账时填写"></label>
+                  <label>订单标题<input id="payoutOrderTitle" maxlength="64" value="商家代付"></label>
+                  <label class="wide">转账备注<input id="payoutRemark" maxlength="200" value="商家代付" required></label>
+                  <div id="payoutDouyinFields" class="form-grid wide hidden">
+                    <label>转账场景 ID<input id="payoutTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
+                    <label>场景报备类型<input id="payoutSceneInfoType" placeholder="例如 activity_name"></label>
+                    <label class="wide">场景报备内容<input id="payoutSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+                  </div>
+                  <label class="wide">支付密码<input id="payoutPaymentPassword" type="password" autocomplete="off" required></label>
+                </div>
+                <div class="form-actions">
+                  <button class="btn" id="submitPayoutBtn" type="submit">确认代付</button>
+                  <button class="btn secondary" id="refreshPayoutsBtn" type="button">刷新记录</button>
+                </div>
+              </form>
+              <pre id="payoutResult" class="operation-result">代付不会自动重试；结果未知时请查询原代付单。</pre>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">接入要求</h2></div>
+            <div class="panel-body">
+              <p class="muted">支付宝商家转账仅支持自研应用和公钥证书模式；应用网关需配置为下方回调地址。</p>
+              <pre id="alipayPayoutNotifyUrl" class="operation-result"></pre>
+              <p class="muted">抖音转账要求商户证书、平台公钥证书、通知密钥和已开通的转账场景。手机号和姓名会在服务端加密后发送。</p>
+            </div>
+          </section>
+          <section class="panel wide-panel">
+            <div class="panel-head"><h2 class="panel-title">代付记录</h2></div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>代付单号</th><th>平台</th><th>通道</th><th>收款人</th><th>金额</th><th>状态</th><th>平台单号</th><th>结果</th><th>时间</th><th>操作</th></tr></thead>
+                  <tbody id="payoutTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section id="page-accounts" class="page">
+        <div class="work-grid">
+          <section class="panel wide-panel">
+            <div class="panel-head">
+              <h2 class="panel-title">管理员账号</h2>
+              <button class="btn small" id="adminAccountBtn" type="button">添加管理员</button>
+            </div>
+            <div class="panel-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>管理员账号</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody id="accountTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">登录安全</h2></div>
+            <div class="panel-body">
+              <p>当前账号：<strong id="accountCurrentUsername">-</strong></p>
+              <div class="form-actions">
+                <button class="btn secondary" id="changePasswordBtn" type="button">修改登录密码</button>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <div class="panel-head"><h2 class="panel-title">代付安全</h2></div>
+            <div class="panel-body">
+              <p>支付密码：<strong id="accountPaymentPasswordStatus">未设置</strong></p>
+              <div class="form-actions">
+                <button class="btn secondary" id="paymentPasswordBtn" type="button">设置支付密码</button>
+              </div>
+            </div>
+          </section>
+        </div>
       </section>
 
       <section id="page-sharing" class="page">
@@ -2005,16 +2101,17 @@
           <label>最大金额<input id="newChannelPayMax" type="number" min="0" step="0.01" value="50000"></label>
           <label class="douyin-channel-field hidden">抖音网站应用 AppID<input id="newDouyinAppId" placeholder="抖音支付网站应用 AppID"></label>
           <label class="douyin-channel-field hidden">抖音支付商户号<input id="newDouyinMchId" placeholder="mchid"></label>
-          <label class="douyin-channel-field hidden">商户证书序列号<input id="newDouyinMerchantSerialNo" readonly placeholder="上传商户 API 证书后自动计算"></label>
+          <label class="douyin-channel-field hidden">商户证书序列号<input id="newDouyinMerchantSerialNo" readonly placeholder="上传证书并保存后自动计算"></label>
           <label class="wide douyin-channel-field hidden">商户 RSA 私钥<textarea id="newDouyinMerchantPrivateKey" placeholder="支持 PKCS#8 或 PKCS#1 PEM 私钥"></textarea></label>
-          <label class="wide douyin-channel-field hidden">商户 API 证书<textarea id="newDouyinMerchantCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+          <input id="newDouyinMerchantCertificate" type="hidden">
           <label class="wide douyin-channel-field hidden">上传商户 API 证书
             <input id="newDouyinMerchantCertificateFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
           </label>
-          <label class="wide douyin-channel-field hidden">抖音支付平台公钥证书<textarea id="newDouyinPlatformCertificate" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+          <input id="newDouyinPlatformCertificate" type="hidden">
           <label class="wide douyin-channel-field hidden">上传抖音支付平台公钥证书
             <input id="newDouyinPlatformCertificateFile" type="file" accept=".crt,.cer,.pem,text/plain,application/pkix-cert,application/x-x509-ca-cert">
           </label>
+          <p class="wide douyin-channel-field cert-upload-hint hidden">证书只需选择文件上传；编辑通道时未选择新文件，不会覆盖后台已保存的证书。</p>
           <label class="douyin-channel-field hidden">通知加密密钥<input id="newDouyinEncryptKey" type="password" autocomplete="new-password" placeholder="必须正好 32 字节"></label>
           <label class="douyin-channel-field hidden">H5 应用名称<input id="newDouyinH5AppName" value="支付平台" placeholder="支付平台"></label>
           <label class="douyin-channel-field hidden">抖音支付网关<input id="newDouyinGatewayUrl" value="https://api.douyinpay.com"></label>
@@ -2063,6 +2160,68 @@
         </div>
         <div class="form-actions"><button class="btn" type="submit">保存新密码</button></div>
         <pre id="passwordResult" class="operation-result hidden">密码修改结果</pre>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div id="adminAccountModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="adminAccountModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="adminAccountModalTitle">管理员账号</h3>
+      <button class="btn secondary small" id="closeAdminAccountModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="adminAccountForm" class="add-channel-form">
+        <div class="channel-form-grid">
+          <label class="wide">新增管理员账号<input id="newAdminUsername" minlength="3" maxlength="32" autocomplete="username" required></label>
+          <label>新管理员密码<input id="newAdminAccountPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+          <label>确认新管理员密码<input id="confirmAdminAccountPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+          <label class="wide">当前登录密码<input id="adminAccountPassword" type="password" autocomplete="current-password" required></label>
+        </div>
+        <div class="form-actions"><button class="btn" type="submit">添加管理员</button></div>
+        <pre id="adminAccountResult" class="operation-result hidden"></pre>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div id="deleteAdminModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="deleteAdminModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="deleteAdminModalTitle">删除管理员账号</h3>
+      <button class="btn secondary small" id="closeDeleteAdminModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="deleteAdminForm" class="add-channel-form">
+        <p>将删除管理员：<strong id="deleteAdminTarget">-</strong></p>
+        <label>当前登录密码<input id="deleteAdminCurrentPassword" type="password" autocomplete="current-password" required></label>
+        <div class="form-actions">
+          <button class="btn secondary" id="cancelDeleteAdminBtn" type="button">取消</button>
+          <button class="btn danger" type="submit">确认删除</button>
+        </div>
+        <pre id="deleteAdminResult" class="operation-result hidden"></pre>
+      </form>
+    </div>
+  </section>
+</div>
+
+<div id="paymentPasswordModal" class="channel-modal hidden" aria-hidden="true">
+  <section class="channel-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="paymentPasswordModalTitle">
+    <div class="channel-modal-head">
+      <h3 id="paymentPasswordModalTitle">设置代付支付密码</h3>
+      <button class="btn secondary small" id="closePaymentPasswordModalBtn" type="button">关闭</button>
+    </div>
+    <div class="channel-modal-body">
+      <form id="paymentPasswordForm" class="add-channel-form">
+        <div class="channel-form-grid">
+          <label class="wide">登录密码<input id="paymentPasswordAdminPassword" type="password" autocomplete="current-password" required></label>
+          <label id="currentPaymentPasswordField" class="wide hidden">原支付密码<input id="currentPaymentPassword" type="password" autocomplete="off"></label>
+          <label>新支付密码<input id="newPaymentPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+          <label>确认支付密码<input id="confirmPaymentPassword" type="password" minlength="6" autocomplete="new-password" required></label>
+        </div>
+        <div class="form-actions"><button class="btn" type="submit">保存支付密码</button></div>
+        <pre id="paymentPasswordResult" class="operation-result hidden"></pre>
       </form>
     </div>
   </section>
@@ -2127,6 +2286,10 @@
     complaintAuto: null,
     complaintRecords: [],
     profitSharingRelations: [],
+    payouts: [],
+    paymentPasswordConfigured: false,
+    administrators: [],
+    adminDeleteTarget: null,
     editingChannelId: null,
     editingMerchantId: null,
     productEditorChannelId: null,
@@ -2457,6 +2620,11 @@
       return;
     }
     $("adminUsername").textContent = session.username || "admin";
+    const security = await request("/api/v1/admin-auth/security");
+    state.paymentPasswordConfigured = Boolean(security.paymentPasswordConfigured);
+    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    $("adminUsername").textContent = security.username || session.username || "admin";
+    renderAccountManagement();
   }
 
   async function logoutAdmin() {
@@ -2492,6 +2660,115 @@
     });
     $("adminUsername").textContent = session.username || "admin";
     return { message: "登录密码已修改，下次请使用新密码登录" };
+  }
+
+  function openAdminAccountModal() {
+    $("adminAccountForm").reset();
+    $("adminAccountResult").classList.add("hidden");
+    $("adminAccountModal").classList.remove("hidden");
+    $("adminAccountModal").setAttribute("aria-hidden", "false");
+    $("newAdminUsername").focus();
+  }
+
+  function closeAdminAccountModal() {
+    $("adminAccountModal").classList.add("hidden");
+    $("adminAccountModal").setAttribute("aria-hidden", "true");
+  }
+
+  function renderAccountManagement() {
+    const current = $("adminUsername").textContent.trim();
+    setText("accountCurrentUsername", current || "-");
+    setText("accountPaymentPasswordStatus", state.paymentPasswordConfigured ? "已设置" : "未设置");
+    setText("paymentPasswordBtn", state.paymentPasswordConfigured ? "修改支付密码" : "设置支付密码");
+    const tableBody = $("accountTableBody");
+    if (!tableBody) return;
+    tableBody.innerHTML = state.administrators.map((username) => {
+      const active = username === current;
+      return `<tr>
+        <td>${html(username)}</td>
+        <td>${active ? '<span class="status success">当前登录</span>' : '<span class="status">可登录</span>'}</td>
+        <td>${active ? '<span class="muted">当前账号不可删除</span>' : `<button class="btn danger small" type="button" data-delete-admin="${html(username)}">删除</button>`}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  async function addAdminAccount() {
+    const newPassword = $("newAdminAccountPassword").value;
+    if (newPassword !== $("confirmAdminAccountPassword").value) {
+      throw { code: "PASSWORD_MISMATCH", message: "两次输入的新管理员密码不一致" };
+    }
+    const security = await request("/api/v1/admin-auth/accounts", {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword: $("adminAccountPassword").value,
+        username: $("newAdminUsername").value.trim(),
+        password: newPassword
+      })
+    });
+    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    renderAccountManagement();
+    return { message: "管理员账号已添加", username: $("newAdminUsername").value.trim() };
+  }
+
+  function openDeleteAdminModal(username) {
+    state.adminDeleteTarget = username;
+    $("deleteAdminForm").reset();
+    setText("deleteAdminTarget", username);
+    $("deleteAdminResult").classList.add("hidden");
+    $("deleteAdminModal").classList.remove("hidden");
+    $("deleteAdminModal").setAttribute("aria-hidden", "false");
+    $("deleteAdminCurrentPassword").focus();
+  }
+
+  function closeDeleteAdminModal() {
+    state.adminDeleteTarget = null;
+    $("deleteAdminModal").classList.add("hidden");
+    $("deleteAdminModal").setAttribute("aria-hidden", "true");
+  }
+
+  async function deleteAdminAccount() {
+    const username = state.adminDeleteTarget;
+    const security = await request(`/api/v1/admin-auth/accounts/${encodeURIComponent(username)}`, {
+      method: "DELETE",
+      body: JSON.stringify({ currentPassword: $("deleteAdminCurrentPassword").value })
+    });
+    state.administrators = Array.isArray(security.administrators) ? security.administrators : [];
+    renderAccountManagement();
+    return { message: "管理员账号已删除", username };
+  }
+
+  function openPaymentPasswordModal() {
+    $("paymentPasswordForm").reset();
+    $("paymentPasswordResult").classList.add("hidden");
+    $("currentPaymentPasswordField").classList.toggle("hidden", !state.paymentPasswordConfigured);
+    $("currentPaymentPassword").required = state.paymentPasswordConfigured;
+    $("paymentPasswordModalTitle").textContent = state.paymentPasswordConfigured ? "修改代付支付密码" : "设置代付支付密码";
+    $("paymentPasswordModal").classList.remove("hidden");
+    $("paymentPasswordModal").setAttribute("aria-hidden", "false");
+    $("paymentPasswordAdminPassword").focus();
+  }
+
+  function closePaymentPasswordModal() {
+    $("paymentPasswordModal").classList.add("hidden");
+    $("paymentPasswordModal").setAttribute("aria-hidden", "true");
+  }
+
+  async function changePaymentPassword() {
+    const newPassword = $("newPaymentPassword").value;
+    if (newPassword !== $("confirmPaymentPassword").value) {
+      throw { code: "PAYMENT_PASSWORD_MISMATCH", message: "两次输入的支付密码不一致" };
+    }
+    const security = await request("/api/v1/admin-auth/payment-password", {
+      method: "POST",
+      body: JSON.stringify({
+        adminPassword: $("paymentPasswordAdminPassword").value,
+        currentPaymentPassword: $("currentPaymentPassword").value,
+        newPaymentPassword: newPassword
+      })
+    });
+    state.paymentPasswordConfigured = Boolean(security.paymentPasswordConfigured);
+    renderAccountManagement();
+    return { message: "代付支付密码已保存" };
   }
 
   function parseJson(id, fallback) {
@@ -3782,7 +4059,163 @@
     state.channels = Array.isArray(data) ? data : data.value || [];
     renderChannelChecks();
     renderOrderChannelOptions();
+    renderPayoutChannelOptions();
     renderChannels();
+  }
+
+  function payoutChannels() {
+    return state.channels.filter((channel) => channel.enabled
+      && channel.dailyEnabled
+      && ["ALIPAY", "DOUYIN"].includes(channel.provider));
+  }
+
+  function renderPayoutChannelOptions() {
+    const select = $("payoutChannel");
+    if (!select) return;
+    const selected = select.value;
+    select.innerHTML = '<option value="">请选择支付宝或抖音通道</option>' + payoutChannels().map((channel) => `
+      <option value="${html(channel.id)}">${html(channel.id)}（${channel.provider === "DOUYIN" ? "抖音" : "支付宝"}）</option>
+    `).join("");
+    select.value = Array.from(select.options).some((option) => option.value === selected) ? selected : "";
+    syncPayoutProviderFields();
+  }
+
+  function selectedPayoutChannel() {
+    return state.channels.find((channel) => channel.id === $("payoutChannel")?.value);
+  }
+
+  function syncPayoutProviderFields() {
+    const channel = selectedPayoutChannel();
+    const douyin = channel?.provider === "DOUYIN";
+    const recipientType = $("payoutRecipientType");
+    if (!recipientType) return;
+    const selected = recipientType.value;
+    recipientType.innerHTML = douyin
+      ? '<option value="DOUYIN_OPEN_ID">抖音 OpenID</option><option value="DOUYIN_PHONE">手机号</option>'
+      : '<option value="ALIPAY_OPEN_ID">支付宝 OpenID</option><option value="ALIPAY_USER_ID">支付宝用户 ID</option><option value="ALIPAY_LOGON_ID">支付宝登录号</option>';
+    if (Array.from(recipientType.options).some((option) => option.value === selected)) {
+      recipientType.value = selected;
+    }
+    $("payoutDouyinFields").classList.toggle("hidden", !douyin);
+    ["payoutTransferSceneId", "payoutSceneInfoType", "payoutSceneInfoContent"].forEach((id) => {
+      $(id).required = douyin;
+    });
+    $("payoutRecipient").placeholder = douyin ? "填写抖音 OpenID 或手机号" : "填写支付宝 OpenID、用户 ID 或登录号";
+    const notifyChannel = encodeURIComponent(channel?.id || "通道编号");
+    setText("alipayPayoutNotifyUrl", `${window.location.origin}/api/v1/payouts/notify/alipay/${notifyChannel}`);
+  }
+
+  function payoutStatusText(status) {
+    const labels = {
+      PENDING: "待提交",
+      PROCESSING: "处理中",
+      UNKNOWN: "结果未知，需查询",
+      SUCCESS: "代付成功",
+      FAILED: "代付失败"
+    };
+    return labels[normalizeStatusCode(status)] || status || "-";
+  }
+
+  function payoutStatusBadge(status) {
+    const normalized = normalizeStatusCode(status);
+    const className = normalized === "SUCCESS"
+      ? "success"
+      : normalized === "FAILED"
+        ? "refunded"
+        : normalized === "UNKNOWN"
+          ? "frozen"
+          : "pending";
+    return `<span class="status ${className}">${html(payoutStatusText(normalized))}</span>`;
+  }
+
+  function payoutProviderText(provider) {
+    return provider === "DOUYIN" ? "抖音" : provider === "ALIPAY" ? "支付宝" : provider || "-";
+  }
+
+  function renderPayouts() {
+    const tableBody = $("payoutTableBody");
+    if (!tableBody) return;
+    if (!state.payouts.length) {
+      tableBody.innerHTML = '<tr><td colspan="10" class="muted">暂无代付记录</td></tr>';
+      return;
+    }
+    tableBody.innerHTML = state.payouts.map((payout) => `
+      <tr>
+        <td>${html(payout.outBizNo)}</td>
+        <td>${html(payoutProviderText(payout.provider))}</td>
+        <td>${html(payout.channelId || "-")}</td>
+        <td>${html(payout.recipientMasked || "-")}${payout.recipientNameMasked ? `<div class="muted">${html(payout.recipientNameMasked)}</div>` : ""}</td>
+        <td class="amount-green">${money(payout.amount)}</td>
+        <td>${payoutStatusBadge(payout.status)}</td>
+        <td>${html(payout.platformOrderNo || payout.platformFundOrderNo || "-")}</td>
+        <td>${html(payout.failReason || payout.message || payout.code || "-")}</td>
+        <td class="muted">${html(payout.updatedAt || payout.createdAt || "-")}</td>
+        <td><button class="btn secondary small" type="button" data-payout-query="${html(payout.outBizNo)}">查询原单</button></td>
+      </tr>
+    `).join("");
+  }
+
+  async function loadPayouts() {
+    const data = await request("/api/v1/payouts?limit=200");
+    state.payouts = Array.isArray(data) ? data : [];
+    renderPayouts();
+  }
+
+  function payoutPayload() {
+    return compact({
+      channelId: $("payoutChannel").value,
+      outBizNo: $("payoutOutBizNo").value.trim(),
+      amount: $("payoutAmount").value,
+      recipientType: $("payoutRecipientType").value,
+      recipient: $("payoutRecipient").value.trim(),
+      recipientName: $("payoutRecipientName").value.trim(),
+      orderTitle: $("payoutOrderTitle").value.trim(),
+      remark: $("payoutRemark").value.trim(),
+      transferSceneId: $("payoutTransferSceneId").value.trim(),
+      sceneInfoType: $("payoutSceneInfoType").value.trim(),
+      sceneInfoContent: $("payoutSceneInfoContent").value.trim(),
+      paymentPassword: $("payoutPaymentPassword").value
+    });
+  }
+
+  async function submitPayout() {
+    if (!state.paymentPasswordConfigured) {
+      openPaymentPasswordModal();
+      throw { message: "请先设置代付支付密码" };
+    }
+    const payload = payoutPayload();
+    const confirmed = await openConfirmModal({
+      title: "确认商家代付",
+      message: "代付成功后资金将直接转给收款人，请仔细核对通道、金额和收款标识。",
+      target: `${payload.channelId} · ${money(payload.amount)} · ${payload.recipientType}`,
+      okText: "确认代付"
+    });
+    if (!confirmed) return null;
+    try {
+      const data = await request("/api/v1/payouts", {
+        method: "POST",
+        timeoutMs: 60000,
+        body: JSON.stringify(payload)
+      });
+      $("payoutPaymentPassword").value = "";
+      $("payoutOutBizNo").value = "";
+      $("payoutResult").textContent = json({ message: payoutStatusText(data.status), payout: data });
+      await loadPayouts();
+      return data;
+    } catch (error) {
+      $("payoutPaymentPassword").value = "";
+      throw error;
+    }
+  }
+
+  async function queryPayout(outBizNo) {
+    const data = await request(`/api/v1/payouts/${encodeURIComponent(outBizNo)}/query`, {
+      method: "POST",
+      timeoutMs: 30000,
+      body: "{}"
+    });
+    $("payoutResult").textContent = json({ message: "代付原单查询完成", payout: data });
+    await loadPayouts();
   }
 
   function renderChannelChecks() {
@@ -4365,12 +4798,6 @@
     $("newDouyinMerchantPrivateKey").placeholder = channel.hasDouyinMerchantPrivateKey
       ? "已保存，留空不修改商户私钥"
       : "支持 PKCS#8 或 PKCS#1 PEM 私钥";
-    $("newDouyinMerchantCertificate").placeholder = channel.hasDouyinMerchantCertificate
-      ? "已保存，留空不修改商户 API 证书"
-      : "-----BEGIN CERTIFICATE-----";
-    $("newDouyinPlatformCertificate").placeholder = channel.hasDouyinPlatformCertificate
-      ? "已保存，留空不修改平台公钥证书"
-      : "-----BEGIN CERTIFICATE-----";
     $("newDouyinEncryptKey").placeholder = channel.hasDouyinEncryptKey
       ? "已保存，留空不修改通知密钥"
       : "必须正好 32 字节";
@@ -4413,10 +4840,10 @@
       const uploadedPlatformCertificate = await readCertificateFile("newDouyinPlatformCertificateFile");
       const platformCertificate = uploadedPlatformCertificate || $("newDouyinPlatformCertificate").value.trim();
       if (!editing && !merchantCertificate) {
-        throw new Error("请填写或上传抖音支付商户 API 证书");
+        throw new Error("请上传抖音支付商户 API 证书");
       }
       if (!editing && !platformCertificate) {
-        throw new Error("请填写或上传抖音支付平台公钥证书");
+        throw new Error("请上传抖音支付平台公钥证书");
       }
       if (!editing || merchantPrivateKey) payload.douyinMerchantPrivateKey = merchantPrivateKey;
       if (!editing || merchantCertificate) payload.douyinMerchantCertificate = merchantCertificate;
@@ -4741,6 +5168,10 @@
 
   $("changePasswordBtn").addEventListener("click", openPasswordModal);
 
+  $("adminAccountBtn").addEventListener("click", openAdminAccountModal);
+
+  $("paymentPasswordBtn").addEventListener("click", openPaymentPasswordModal);
+
   $("logoutBtn").addEventListener("click", async () => {
     try {
       await logoutAdmin();
@@ -4763,6 +5194,96 @@
     } catch (error) {
       $("passwordResult").textContent = json(error);
     }
+  });
+
+  $("closeAdminAccountModalBtn").addEventListener("click", closeAdminAccountModal);
+
+  $("adminAccountModal").addEventListener("click", (event) => {
+    if (event.target.id === "adminAccountModal") closeAdminAccountModal();
+  });
+
+  $("adminAccountForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("adminAccountResult").classList.remove("hidden");
+    try {
+      $("adminAccountResult").textContent = json(await addAdminAccount());
+      $("newAdminUsername").value = "";
+      $("newAdminAccountPassword").value = "";
+      $("confirmAdminAccountPassword").value = "";
+      $("adminAccountPassword").value = "";
+    } catch (error) {
+      $("adminAccountResult").textContent = json(error);
+    }
+  });
+
+  $("accountTableBody").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-delete-admin]");
+    if (button) openDeleteAdminModal(button.dataset.deleteAdmin);
+  });
+
+  $("closeDeleteAdminModalBtn").addEventListener("click", closeDeleteAdminModal);
+  $("cancelDeleteAdminBtn").addEventListener("click", closeDeleteAdminModal);
+  $("deleteAdminModal").addEventListener("click", (event) => {
+    if (event.target.id === "deleteAdminModal") closeDeleteAdminModal();
+  });
+  $("deleteAdminForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("deleteAdminResult").classList.remove("hidden");
+    try {
+      $("deleteAdminResult").textContent = json(await deleteAdminAccount());
+      $("deleteAdminCurrentPassword").value = "";
+    } catch (error) {
+      $("deleteAdminResult").textContent = json(error);
+    }
+  });
+
+  $("closePaymentPasswordModalBtn").addEventListener("click", closePaymentPasswordModal);
+
+  $("paymentPasswordModal").addEventListener("click", (event) => {
+    if (event.target.id === "paymentPasswordModal") closePaymentPasswordModal();
+  });
+
+  $("paymentPasswordForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    $("paymentPasswordResult").classList.remove("hidden");
+    try {
+      $("paymentPasswordResult").textContent = json(await changePaymentPassword());
+      $("paymentPasswordForm").reset();
+      $("currentPaymentPasswordField").classList.remove("hidden");
+      $("currentPaymentPassword").required = true;
+    } catch (error) {
+      $("paymentPasswordResult").textContent = json(error);
+    }
+  });
+
+  $("payoutChannel").addEventListener("change", syncPayoutProviderFields);
+
+  $("payoutForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await submitPayout();
+    } catch (error) {
+      $("payoutResult").textContent = json(error);
+    }
+  });
+
+  $("refreshPayoutsBtn").addEventListener("click", () => {
+    loadPayouts().catch((error) => {
+      $("payoutResult").textContent = json(error);
+    });
+  });
+
+  $("payoutTableBody").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-payout-query]");
+    if (!button) return;
+    button.disabled = true;
+    queryPayout(button.dataset.payoutQuery)
+      .catch((error) => {
+        $("payoutResult").textContent = json(error);
+      })
+      .finally(() => {
+        button.disabled = false;
+      });
   });
 
   $("closeConfirmModalBtn").addEventListener("click", () => closeConfirmModal(false));
@@ -5204,7 +5725,17 @@
   setInterval(() => loadComplaintAutoStatus().catch(() => {}), 30000);
 
   checkAdminSession()
-    .then(() => Promise.all([loadChannels(), loadOrders(), loadMerchants(), loadOnboardingRecords(), loadComplaintAutoStatus()]))
+    .then(() => Promise.all([
+      loadChannels(),
+      loadOrders(),
+      loadMerchants(),
+      loadOnboardingRecords(),
+      loadComplaintAutoStatus(),
+      loadPayouts().catch((error) => {
+        $("payoutResult").textContent = json(error);
+        renderPayouts();
+      })
+    ]))
     .then(() => setConsole({ message: "支付平台管理已连接后端", port: 18081 }))
     .catch((error) => setConsole(error));
 </script>

@@ -31,6 +31,10 @@ final class RequestUrlSupport {
         return origin(request) + "/cashier.html?channelId=" + encode(channelId);
     }
 
+    static String douyinPayoutNotifyUrl(HttpServletRequest request, String channelId) {
+        return apiBase(request) + "/payouts/notify/douyin/" + encode(channelId);
+    }
+
     static String clientIp(HttpServletRequest request) {
         String forwarded = firstHeader(request, "X-Forwarded-For");
         if (forwarded != null) {

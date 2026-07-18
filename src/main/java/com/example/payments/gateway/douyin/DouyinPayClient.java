@@ -44,8 +44,31 @@ public class DouyinPayClient {
             String path,
             Map<String, Object> body
     ) {
+        return post(channel, path, body, false);
+    }
+
+    public DouyinGatewayResponse postSensitive(
+            PaymentGatewayProperties.Channel channel,
+            String path,
+            Map<String, Object> body
+    ) {
+        return post(channel, path, body, true);
+    }
+
+    private DouyinGatewayResponse post(
+            PaymentGatewayProperties.Channel channel,
+            String path,
+            Map<String, Object> body,
+            boolean sensitive
+    ) {
         try {
-            return execute(channel, "POST", path, objectMapper.writeValueAsString(body == null ? Map.of() : body));
+            return execute(
+                    channel,
+                    "POST",
+                    path,
+                    objectMapper.writeValueAsString(body == null ? Map.of() : body),
+                    sensitive
+            );
         } catch (GatewayException ex) {
             throw ex;
         } catch (Exception ex) {
@@ -54,7 +77,7 @@ public class DouyinPayClient {
     }
 
     public DouyinGatewayResponse get(PaymentGatewayProperties.Channel channel, String pathAndQuery) {
-        return execute(channel, "GET", pathAndQuery, "");
+        return execute(channel, "GET", pathAndQuery, "", false);
     }
 
     public boolean verifyNotification(
@@ -83,7 +106,8 @@ public class DouyinPayClient {
             PaymentGatewayProperties.Channel channel,
             String method,
             String pathAndQuery,
-            String body
+            String body,
+            boolean sensitive
     ) {
         try {
             PaymentGatewayProperties.Douyin config = channel.getDouyin();
@@ -105,6 +129,12 @@ public class DouyinPayClient {
                     .timeout(REQUEST_TIMEOUT)
                     .header("Accept", "application/json")
                     .header("Authorization", authorization);
+            if (sensitive) {
+                builder.header(
+                        "Douyinpay-Serial",
+                        DouyinSignatureSupport.certificateSerial(config.getPlatformCertificate())
+                );
+            }
             if ("POST".equals(method)) {
                 builder.header("Content-Type", "application/json; charset=UTF-8")
                         .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8));

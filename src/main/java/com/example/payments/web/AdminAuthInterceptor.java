@@ -1,6 +1,7 @@
 package com.example.payments.web;
 
 import com.example.payments.auth.AdminSession;
+import com.example.payments.auth.AdminAuthService;
 import com.example.payments.merchant.MerchantSession;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -15,6 +16,12 @@ import java.util.Set;
 @Component
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
+    private final AdminAuthService authService;
+
+    public AdminAuthInterceptor(AdminAuthService authService) {
+        this.authService = authService;
+    }
+
     private static final Set<String> PUBLIC_PAGES = Set.of(
             "/login.html",
             "/merchant.html",
@@ -27,7 +34,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
         String path = normalizedPath(request);
         String method = request.getMethod();
-        if ("OPTIONS".equalsIgnoreCase(method) || isPublic(path, method, request) || AdminSession.isAuthenticated(request)) {
+        if ("OPTIONS".equalsIgnoreCase(method) || isPublic(path, method, request) || authenticated(request)) {
             return true;
         }
 
@@ -41,6 +48,11 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
 
         response.sendRedirect(request.getContextPath() + "/login.html");
         return false;
+    }
+
+    private boolean authenticated(HttpServletRequest request) {
+        return AdminSession.isAuthenticated(request)
+                && authService.hasUsername(AdminSession.username(request));
     }
 
     private static String normalizedPath(HttpServletRequest request) {
@@ -71,6 +83,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
             return true;
         }
         if (path.startsWith("/api/v1/alipay/")
+                || path.startsWith("/api/v1/payouts/notify/")
                 || path.equals("/api/v1/qrcode")
                 || ("POST".equalsIgnoreCase(method) && path.equals("/api/v1/payment-code/decode"))) {
             return true;
