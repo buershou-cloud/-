@@ -427,7 +427,8 @@
     ALIPAY_DIRECT_PAGE: "直付通PC网页",
     ALIPAY_DIRECT_ORDER_CODE: "直付通订单码",
     ALIPAY_DIRECT_JSAPI: "直付通JSAPI",
-    DOUYIN_H5: "抖音H5支付"
+    DOUYIN_H5: "抖音H5支付",
+    DOUYIN_NATIVE: "抖音Native支付"
   };
   const desktopProductPreference = [
     "ALIPAY_ORDER_CODE",
@@ -445,9 +446,14 @@
     "ALIPAY_DIRECT_PAGE",
     "ALIPAY_JSAPI",
     "ALIPAY_DIRECT_JSAPI",
+    "DOUYIN_NATIVE",
     "DOUYIN_H5"
   ];
-  const mobileProductPreference = desktopProductPreference;
+  const mobileProductPreference = [
+    ...desktopProductPreference.filter((product) => product !== "DOUYIN_NATIVE" && product !== "DOUYIN_H5"),
+    "DOUYIN_H5",
+    "DOUYIN_NATIVE"
+  ];
 
   let currentChannel;
   let currentMerchant;
@@ -698,6 +704,10 @@
     return product === "ALIPAY_ORDER_CODE" || product === "ALIPAY_DIRECT_ORDER_CODE";
   }
 
+  function isQrPollingProduct(product) {
+    return isOrderCodeProduct(product) || product === "DOUYIN_NATIVE";
+  }
+
   function isPaymentCodeProduct(product) {
     return product === "ALIPAY_PAYMENT_CODE";
   }
@@ -785,11 +795,11 @@
 
   function startOrderCodePolling(paymentResponse, payload) {
     clearPaymentPolling();
-    if (!isOrderCodeProduct(currentProduct) || !payload.outTradeNo) {
+    if (!isQrPollingProduct(currentProduct) || !payload.outTradeNo) {
       return;
     }
     const channelId = paymentChannelId(paymentResponse);
-    const maxAttempts = 120;
+    const maxAttempts = currentProduct === "DOUYIN_NATIVE" ? 24 : 120;
     const poll = async () => {
       paymentPollAttempts += 1;
       try {
@@ -1000,6 +1010,10 @@
 
   function isDouyinH5Product(product) {
     return product === "DOUYIN_H5";
+  }
+
+  function isDouyinNativeProduct(product) {
+    return product === "DOUYIN_NATIVE";
   }
 
   function channelsForCurrentProduct() {
@@ -1427,6 +1441,15 @@
       }
       if (data.qrCode) {
         startOrderCodePolling(data, payload);
+        if (isDouyinNativeProduct(currentProduct)) {
+          writeResult("抖音Native支付订单已创建，请使用抖音扫码付款。", "loading");
+          showPaymentQr(
+            data.qrCode,
+            "抖音付款二维码",
+            "请使用抖音 App 的扫一扫完成付款；二维码有效期为两分钟。"
+          );
+          return;
+        }
         if (isMobilePayClient()) {
           openAlipayQr(data.qrCode);
           return;

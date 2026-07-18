@@ -36,6 +36,7 @@ import java.util.Map;
 public class DouyinPaymentProvider implements PaymentProvider {
 
     private static final String H5_ORDER_PATH = "/v1/trade/transactions/h5";
+    private static final String NATIVE_ORDER_PATH = "/v1/trade/transactions/native";
     private static final String QUERY_BY_OUT_TRADE_NO = "/v1/trade/transactions/out-trade-no/";
     private static final String QUERY_BY_TRANSACTION_ID = "/v1/trade/transactions/id/";
     private static final String REFUND_PATH = "/v1/trade/refund/domestic/refunds";
@@ -59,20 +60,35 @@ public class DouyinPaymentProvider implements PaymentProvider {
     @Override
     public boolean supports(PaymentGatewayProperties.Channel channel, PaymentProduct product) {
         return "DOUYIN".equals(channel.getProvider())
-                && product == PaymentProduct.DOUYIN_H5
+                && product != null
+                && product.douyinPaymentProduct()
                 && (channel.getProducts().isEmpty() || channel.getProducts().contains(product));
     }
 
     @Override
     public GatewayResponse pay(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
-        if (request.product() != PaymentProduct.DOUYIN_H5) {
-            throw new GatewayException("UNSUPPORTED_PRODUCT", "Douyin channel currently supports only Douyin H5 payment");
-        }
         PaymentGatewayProperties.Douyin config = channel.getDouyin();
         String notifyUrl = firstText(config.getNotifyUrl(), request.notifyUrl());
         if (!hasText(notifyUrl)) {
             throw new GatewayException("DOUYIN_NOTIFY_URL_MISSING", "Douyin Pay notify URL is required");
         }
+
+        return switch (request.product()) {
+            case DOUYIN_H5 -> h5Pay(channel, request, config, notifyUrl);
+            case DOUYIN_NATIVE -> nativePay(channel, request, config, notifyUrl);
+            default -> throw new GatewayException(
+                    "UNSUPPORTED_PRODUCT",
+                    "Douyin channel does not support product " + request.product()
+            );
+        };
+    }
+
+    private GatewayResponse h5Pay(
+            PaymentGatewayProperties.Channel channel,
+            PayCreateRequest request,
+            PaymentGatewayProperties.Douyin config,
+            String notifyUrl
+    ) {
 
         Map<String, Object> h5Info = new LinkedHashMap<>();
         h5Info.put("type", "Wap");
@@ -116,6 +132,49 @@ public class DouyinPaymentProvider implements PaymentProvider {
                 null,
                 h5Url,
                 responseRaw(response, H5_ORDER_PATH),
+                List.of()
+        );
+    }
+
+    private GatewayResponse nativePay(
+            PaymentGatewayProperties.Channel channel,
+            PayCreateRequest request,
+            PaymentGatewayProperties.Douyin config,
+            String notifyUrl
+    ) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("appid", required(config.getAppId(), "Douyin Pay appId is required"));
+        body.put("mchid", required(config.getMchId(), "Douyin Pay mchId is required"));
+        body.put("description", request.subject());
+        body.put("out_trade_no", request.outTradeNo());
+        body.put("notify_url", notifyUrl);
+        body.put("amount", amount(request.totalAmount()));
+        body.put("settle_info", Map.of("profit_sharing", true));
+        mergeAllowedNativePayExtras(body, request.extra());
+
+        DouyinGatewayResponse response = client.post(channel, NATIVE_ORDER_PATH, body);
+        String codeUrl = firstText(
+                text(response.body(), "code_url"),
+                nestedText(response.body(), "data", "code_url")
+        );
+        if (!hasText(codeUrl)) {
+            throw new GatewayException("DOUYIN_NATIVE_CODE_URL_MISSING", "Douyin Pay did not return code_url");
+        }
+        String transactionId = firstText(
+                text(response.body(), "transaction_id"),
+                nestedText(response.body(), "data", "transaction_id")
+        );
+        return new GatewayResponse(
+                channel.getId(),
+                PaymentStatus.PENDING,
+                firstText(text(response.body(), "code"), "SUCCESS"),
+                firstText(text(response.body(), "message"), "Douyin Native order created"),
+                request.outTradeNo(),
+                transactionId,
+                codeUrl,
+                null,
+                null,
+                responseRaw(response, NATIVE_ORDER_PATH),
                 List.of()
         );
     }
@@ -563,6 +622,17 @@ public class DouyinPaymentProvider implements PaymentProvider {
         copy(extra, body, "goods_tag");
         copy(extra, body, "attach");
         copy(extra, body, "limit_pay");
+        copy(extra, body, "settle_info");
+    }
+
+    private static void mergeAllowedNativePayExtras(Map<String, Object> body, Map<String, Object> extra) {
+        if (extra == null) {
+            return;
+        }
+        copy(extra, body, "time_expire");
+        copy(extra, body, "attach");
+        copy(extra, body, "goods_tag");
+        copy(extra, body, "scene_info");
         copy(extra, body, "settle_info");
     }
 

@@ -90,6 +90,63 @@ class DouyinPaymentProviderTest {
     }
 
     @Test
+    void createsOfficialNativeOrderAndReturnsCodeUrl() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.post(any(), eq("/v1/trade/transactions/native"), anyMap())).thenReturn(new DouyinGatewayResponse(
+                200,
+                Map.of("code_url", "https://qr.douyinpay.com/native/demo"),
+                "{}",
+                Map.of()
+        ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+        PaymentGatewayProperties.Channel channel = channel();
+
+        GatewayResponse response = provider.pay(channel, new PayCreateRequest(
+                PaymentProduct.DOUYIN_NATIVE,
+                "NATIVE-1001",
+                "扫码收银台支付",
+                new BigDecimal("12.34"),
+                null,
+                null,
+                null,
+                null,
+                "10m",
+                null,
+                null,
+                null,
+                null,
+                List.of("douyin-test"),
+                Map.of("time_expire", "2026-07-19T12:30:00+08:00", "attach", "native-order"),
+                null,
+                null
+        ));
+
+        assertThat(provider.supports(channel, PaymentProduct.DOUYIN_NATIVE)).isTrue();
+        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(response.qrCode()).isEqualTo("https://qr.douyinpay.com/native/demo");
+        assertThat(response.redirectUrl()).isNull();
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
+        verify(client).post(eq(channel), eq("/v1/trade/transactions/native"), bodyCaptor.capture());
+        Map<String, Object> body = bodyCaptor.getValue();
+        assertThat(body)
+                .containsEntry("appid", "dy-app-1")
+                .containsEntry("mchid", "dy-mch-1")
+                .containsEntry("description", "扫码收银台支付")
+                .containsEntry("out_trade_no", "NATIVE-1001")
+                .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test")
+                .containsEntry("time_expire", "2026-07-19T12:30:00+08:00")
+                .containsEntry("attach", "native-order")
+                .doesNotContainKey("profit_sharing");
+        assertThat((Map<String, Object>) body.get("amount"))
+                .containsEntry("total", 1234L)
+                .containsEntry("currency", "CNY");
+        assertThat((Map<String, Object>) body.get("settle_info"))
+                .containsEntry("profit_sharing", true);
+    }
+
+    @Test
     void mapsDouyinQueryStateToGatewayStatus() {
         DouyinPayClient client = mock(DouyinPayClient.class);
         when(client.get(any(), eq("/v1/trade/transactions/out-trade-no/ORDER-1001?mchid=dy-mch-1")))
@@ -321,7 +378,7 @@ class DouyinPaymentProviderTest {
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("douyin-test");
         channel.setProvider("DOUYIN");
-        channel.setProducts(Set.of(PaymentProduct.DOUYIN_H5));
+        channel.setProducts(Set.of(PaymentProduct.DOUYIN_H5, PaymentProduct.DOUYIN_NATIVE));
         channel.getDouyin().setAppId("dy-app-1");
         channel.getDouyin().setMchId("dy-mch-1");
         channel.getDouyin().setNotifyUrl("https://merchant.example.com/api/v1/douyin/notify/douyin-test");

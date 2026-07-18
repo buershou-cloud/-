@@ -17,7 +17,8 @@ public enum PaymentProduct {
     ALIPAY_DIRECT_PAGE("直付通电脑网站支付"),
     ALIPAY_DIRECT_ORDER_CODE("直付通订单码"),
     ALIPAY_DIRECT_JSAPI("直付通JSAPI支付"),
-    DOUYIN_H5("抖音H5支付");
+    DOUYIN_H5("抖音H5支付"),
+    DOUYIN_NATIVE("抖音Native支付");
 
     private final String label;
 
@@ -57,6 +58,6 @@ public enum PaymentProduct {
     }
 
     public boolean douyinPaymentProduct() {
-        return this == DOUYIN_H5;
+        return this == DOUYIN_H5 || this == DOUYIN_NATIVE;
     }
 }
