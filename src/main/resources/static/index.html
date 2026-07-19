@@ -2505,6 +2505,7 @@
           <label>同步返回地址<input id="newChannelReturnUrl" readonly placeholder="根据当前域名自动生成"></label>
         </div>
         <div class="form-actions"><button class="btn" id="channelSubmitBtn" type="submit">添加通道</button></div>
+        <pre id="channelFormResult" class="operation-result refund-error hidden" role="alert"></pre>
       </form>
     </div>
   </section>
@@ -5496,6 +5497,7 @@
   function resetChannelForm() {
     state.editingChannelId = null;
     $("addChannelForm").reset();
+    setChannelFormResult(null);
     $("newChannelAppCertContent").value = "";
     $("newChannelAlipayCertContent").value = "";
     $("newChannelAlipayRootCertContent").value = "";
@@ -5657,17 +5659,51 @@
     return compact(payload);
   }
 
+  function channelFormErrorText(error) {
+    if (typeof error === "string") return error;
+    if (error?.message) return error.message;
+    if (error?.error) return error.error;
+    if (error?.errors && typeof error.errors === "object") {
+      return Object.entries(error.errors)
+        .map(([field, message]) => `${field}：${message}`)
+        .join("\n");
+    }
+    return error ? json(error) : "";
+  }
+
+  function setChannelFormResult(error) {
+    const element = $("channelFormResult");
+    if (!element) return;
+    const message = channelFormErrorText(error);
+    element.textContent = message;
+    element.classList.toggle("hidden", !message);
+  }
+
   async function submitChannelForm() {
-    const payload = await channelFormPayload();
     const editing = Boolean(state.editingChannelId);
-    const path = editing ? `/api/v1/channels/${encodeURIComponent(state.editingChannelId)}` : "/api/v1/channels";
-    const data = await request(path, {
-      method: editing ? "PATCH" : "POST",
-      body: JSON.stringify(payload)
-    });
-    setConsole(data);
-    closeChannelModal();
-    await loadChannels();
+    const button = $("channelSubmitBtn");
+    const buttonText = editing ? "保存修改" : "添加通道";
+    setChannelFormResult(null);
+    button.disabled = true;
+    button.textContent = editing ? "正在保存..." : "正在添加...";
+    try {
+      const payload = await channelFormPayload();
+      const path = editing ? `/api/v1/channels/${encodeURIComponent(state.editingChannelId)}` : "/api/v1/channels";
+      const data = await request(path, {
+        method: editing ? "PATCH" : "POST",
+        body: JSON.stringify(payload)
+      });
+      setConsole(data);
+      closeChannelModal();
+      await loadChannels();
+    } catch (error) {
+      setChannelFormResult(error);
+      setConsole(error);
+      $("channelFormResult").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } finally {
+      button.disabled = false;
+      button.textContent = buttonText;
+    }
   }
 
   function onboardPayload() {
@@ -6540,6 +6576,13 @@
     event.preventDefault();
     await submitChannelForm();
   });
+
+  $("addChannelForm").addEventListener("invalid", (event) => {
+    setChannelFormResult("请检查并填写所有必填项，当前未填写或格式不正确的输入框已被定位。");
+    window.setTimeout(() => {
+      event.target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }, true);
 
   $("newChannelId").addEventListener("input", syncChannelCallbackUrls);
 
