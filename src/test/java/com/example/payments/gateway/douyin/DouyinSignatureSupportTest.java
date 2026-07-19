@@ -60,6 +60,23 @@ class DouyinSignatureSupportTest {
     }
 
     @Test
+    void signsWithHeaderlessPkcs1PrivateKeyFileContent() throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        KeyPair keyPair = generator.generateKeyPair();
+        String privateKey = "\uFEFF" + Base64.getMimeEncoder(64, new byte[]{'\n'})
+                .encodeToString(pkcs1((RSAPrivateCrtKey) keyPair.getPrivate()));
+        String message = "douyin-headerless-pkcs1-check";
+
+        Signature verifier = Signature.getInstance("SHA256withRSA");
+        verifier.initVerify(keyPair.getPublic());
+        verifier.update(message.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(verifier.verify(Base64.getDecoder().decode(DouyinSignatureSupport.sign(message, privateKey))))
+                .isTrue();
+    }
+
+    @Test
     void decryptsAesGcmNotificationResource() throws Exception {
         String key = "12345678901234567890123456789012";
         String nonce = "0123456789ab";

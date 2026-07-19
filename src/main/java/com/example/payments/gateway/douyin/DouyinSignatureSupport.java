@@ -13,6 +13,7 @@ import java.security.PrivateKey;
 import java.security.Signature;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.util.Locale;
@@ -110,18 +111,23 @@ public final class DouyinSignatureSupport {
             throw new GatewayException("DOUYIN_PRIVATE_KEY_MISSING", "Douyin Pay merchant private key is required");
         }
         try {
-            boolean pkcs1 = content.contains("-----BEGIN RSA PRIVATE KEY-----");
             String normalized = content
+                    .replace("\\r", "")
+                    .replace("\\n", "\n")
+                    .replace("\uFEFF", "")
+                    .replace("\u200B", "")
                     .replace("-----BEGIN PRIVATE KEY-----", "")
                     .replace("-----END PRIVATE KEY-----", "")
                     .replace("-----BEGIN RSA PRIVATE KEY-----", "")
                     .replace("-----END RSA PRIVATE KEY-----", "")
                     .replaceAll("\\s", "");
             byte[] bytes = Base64.getDecoder().decode(normalized);
-            if (pkcs1) {
-                bytes = wrapPkcs1AsPkcs8(bytes);
+            KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            try {
+                return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(bytes));
+            } catch (InvalidKeySpecException ignored) {
+                return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(wrapPkcs1AsPkcs8(bytes)));
             }
-            return KeyFactory.getInstance("RSA").generatePrivate(new PKCS8EncodedKeySpec(bytes));
         } catch (Exception ex) {
             throw new GatewayException("DOUYIN_PRIVATE_KEY_INVALID", "Failed to parse Douyin Pay merchant private key", ex);
         }
