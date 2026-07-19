@@ -5428,6 +5428,12 @@
     $("newDouyinMerchantCertificate").required = false;
     $("newDouyinPlatformCertificate").required = false;
     $("newDouyinEncryptKey").required = douyin && !editing;
+    $("newChannelMerchantPrivateKey").required = !douyin && !editing;
+    if ($("newChannelMerchantPrivateKey").required) {
+      $("newChannelMerchantPrivateKey").setAttribute("required", "");
+    } else {
+      $("newChannelMerchantPrivateKey").removeAttribute("required");
+    }
 
     syncDirectChannelField();
     syncCredentialModeFields();
@@ -6578,7 +6584,16 @@
   });
 
   $("addChannelForm").addEventListener("invalid", (event) => {
-    setChannelFormResult("请检查并填写所有必填项，当前未填写或格式不正确的输入框已被定位。");
+    const label = event.target.closest("label");
+    const fieldName = label
+      ? Array.from(label.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent.trim())
+        .filter(Boolean)
+        .join(" ")
+      : "必填项";
+    const reason = event.target.validationMessage ? `（${event.target.validationMessage}）` : "";
+    setChannelFormResult(`请检查：${fieldName}${reason}`);
     window.setTimeout(() => {
       event.target.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 0);
