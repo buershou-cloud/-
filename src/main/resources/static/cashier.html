@@ -1012,6 +1012,12 @@
     return product === "DOUYIN_H5";
   }
 
+  function douyinH5LaunchUrl(targetUrl) {
+    const launchUrl = new URL("/douyin-h5-launch.html", location.origin);
+    launchUrl.searchParams.set("target", targetUrl);
+    return launchUrl.toString();
+  }
+
   function isDouyinNativeProduct(product) {
     return product === "DOUYIN_NATIVE";
   }
@@ -1463,12 +1469,13 @@
         if (isDouyinH5Product(currentProduct)) {
           startAppPaymentPolling(data, payload, "抖音H5支付");
           writeResult("抖音H5支付订单已创建，正在打开官方收银台...", "loading");
+          const launchUrl = douyinH5LaunchUrl(data.redirectUrl);
           if (isMobilePayClient()) {
-            window.location.href = data.redirectUrl;
+            window.location.href = launchUrl;
             return;
           }
           showPaymentQr(
-            data.redirectUrl,
+            launchUrl,
             "抖音H5支付二维码",
             "请使用手机扫码进入抖音支付官方H5收银台完成付款。"
           );
