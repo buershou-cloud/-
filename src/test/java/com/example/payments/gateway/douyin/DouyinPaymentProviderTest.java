@@ -82,9 +82,7 @@ class DouyinPaymentProviderTest {
                 .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test")
                 .containsEntry("time_expire", "2026-07-20T12:30:00+08:00")
                 .containsEntry("support_fapiao", true)
-                .doesNotContainKey("profit_sharing");
-        assertThat((Map<String, Object>) body.get("settle_info"))
-                .containsEntry("profit_sharing", true);
+                .doesNotContainKeys("profit_sharing", "settle_info");
         assertThat((Map<String, Object>) body.get("amount"))
                 .containsEntry("total", 123L)
                 .containsEntry("currency", "CNY");

@@ -109,9 +109,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("notify_url", notifyUrl);
         body.put("amount", amount(request.totalAmount()));
         body.put("scene_info", sceneInfo);
-        body.put("settle_info", request.settleInfo() == null || request.settleInfo().isEmpty()
-                ? Map.of("profit_sharing", true)
-                : request.settleInfo());
+        putIfNotEmpty(body, "settle_info", request.settleInfo());
         mergeAllowedPayExtras(body, request.extra());
 
         DouyinGatewayResponse response = client.post(channel, H5_ORDER_PATH, body);
@@ -151,9 +149,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("out_trade_no", request.outTradeNo());
         body.put("notify_url", notifyUrl);
         body.put("amount", amount(request.totalAmount()));
-        body.put("settle_info", request.settleInfo() == null || request.settleInfo().isEmpty()
-                ? Map.of("profit_sharing", true)
-                : request.settleInfo());
+        putIfNotEmpty(body, "settle_info", request.settleInfo());
         mergeAllowedNativePayExtras(body, request.extra());
 
         DouyinGatewayResponse response = client.post(channel, NATIVE_ORDER_PATH, body);
@@ -721,6 +717,12 @@ public class DouyinPaymentProvider implements PaymentProvider {
     private static void putIfText(Map<String, Object> data, String key, String value) {
         if (hasText(value)) {
             data.put(key, value.trim());
+        }
+    }
+
+    private static void putIfNotEmpty(Map<String, Object> data, String key, Map<String, Object> value) {
+        if (value != null && !value.isEmpty()) {
+            data.put(key, value);
         }
     }
 

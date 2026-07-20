@@ -153,7 +153,7 @@ public class DouyinPayClient {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new GatewayException(
                         firstText(text(parsed, "code"), "DOUYIN_HTTP_" + response.statusCode()),
-                        firstText(text(parsed, "message"), text(parsed, "msg"), response.body())
+                        gatewayErrorMessage(parsed, response.body())
                 );
             }
             return new DouyinGatewayResponse(response.statusCode(), parsed, response.body(), headers);
@@ -195,6 +195,42 @@ public class DouyinPayClient {
         }
     }
 
+    static String gatewayErrorMessage(Map<String, Object> parsed, String rawBody) {
+        String message = firstText(text(parsed, "message"), text(parsed, "msg"), rawBody, "Douyin Pay request failed");
+        Object detail = parsed == null ? null : parsed.get("detail");
+        if (!(detail instanceof Map<?, ?> detailMap) || detailMap.isEmpty()) {
+            return message;
+        }
+
+        String field = objectText(detailMap.get("field"));
+        String issue = objectText(detailMap.get("issue"));
+        String location = objectText(detailMap.get("location"));
+        StringBuilder result = new StringBuilder(message);
+        if (hasText(field) || hasText(issue) || hasText(location)) {
+            result.append("（");
+            boolean appended = false;
+            if (hasText(field)) {
+                result.append("字段：").append(field);
+                appended = true;
+            }
+            if (hasText(issue)) {
+                if (appended) {
+                    result.append("；");
+                }
+                result.append("原因：").append(issue);
+                appended = true;
+            }
+            if (hasText(location)) {
+                if (appended) {
+                    result.append("；");
+                }
+                result.append("位置：").append(location);
+            }
+            result.append("）");
+        }
+        return result.toString();
+    }
+
     static String requestMessage(String method, String pathAndQuery, String timestamp, String nonce, String body) {
         return method + "\n" + pathAndQuery + "\n" + timestamp + "\n" + nonce + "\n" + body + "\n";
     }
@@ -215,6 +251,10 @@ public class DouyinPayClient {
 
     private static String text(Map<String, Object> data, String key) {
         Object value = data == null ? null : data.get(key);
+        return value == null ? null : value.toString();
+    }
+
+    private static String objectText(Object value) {
         return value == null ? null : value.toString();
     }
 
