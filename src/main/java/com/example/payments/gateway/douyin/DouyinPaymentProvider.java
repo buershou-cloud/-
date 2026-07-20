@@ -26,6 +26,7 @@ import org.springframework.web.util.UriUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -93,7 +94,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         Map<String, Object> h5Info = new LinkedHashMap<>();
         h5Info.put("type", "Wap");
         h5Info.put("app_name", firstText(config.getH5AppName(), "Payment Gateway"));
-        putIfText(h5Info, "app_url", firstText(request.returnUrl(), config.getReturnUrl()));
+        h5Info.put("app_url", h5AppUrl(config, request));
 
         Map<String, Object> sceneInfo = new LinkedHashMap<>();
         sceneInfo.put("payer_client_ip", firstText(extraText(request.extra(), "payer_client_ip"), "127.0.0.1"));
@@ -630,6 +631,37 @@ public class DouyinPaymentProvider implements PaymentProvider {
             return amount.movePointRight(2).setScale(0, RoundingMode.UNNECESSARY).longValueExact();
         } catch (ArithmeticException ex) {
             throw new GatewayException("DOUYIN_AMOUNT_INVALID", "Douyin Pay amount must have no more than two decimals", ex);
+        }
+    }
+
+    private static String h5AppUrl(
+            PaymentGatewayProperties.Douyin config,
+            PayCreateRequest request
+    ) {
+        String value = firstText(config.getReturnUrl(), request.returnUrl());
+        if (!hasText(value)) {
+            throw new GatewayException(
+                    "DOUYIN_H5_APP_URL_MISSING",
+                    "Douyin H5 website URL is required"
+            );
+        }
+        try {
+            URI uri = URI.create(value.trim());
+            String scheme = uri.getScheme();
+            if (scheme == null
+                    || !("https".equalsIgnoreCase(scheme) || "http".equalsIgnoreCase(scheme))
+                    || uri.getHost() == null
+                    || uri.getUserInfo() != null) {
+                throw new IllegalArgumentException("Unsupported website URL");
+            }
+            String authority = uri.getRawAuthority();
+            return scheme.toLowerCase() + "://" + authority + "/";
+        } catch (IllegalArgumentException ex) {
+            throw new GatewayException(
+                    "DOUYIN_H5_APP_URL_INVALID",
+                    "Douyin H5 website URL must be a complete HTTP or HTTPS URL",
+                    ex
+            );
         }
     }
 

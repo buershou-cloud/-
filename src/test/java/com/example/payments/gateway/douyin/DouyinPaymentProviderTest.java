@@ -93,7 +93,7 @@ class DouyinPaymentProviderTest {
         assertThat((Map<String, Object>) sceneInfo.get("h5_info"))
                 .containsEntry("type", "Wap")
                 .containsEntry("app_name", "支付平台")
-                .containsEntry("app_url", "https://merchant.example.com/return");
+                .containsEntry("app_url", "https://merchant.example.com/");
     }
 
     @Test
@@ -410,7 +410,7 @@ class DouyinPaymentProviderTest {
         channel.getDouyin().setAppId("dy-app-1");
         channel.getDouyin().setMchId("dy-mch-1");
         channel.getDouyin().setNotifyUrl("https://merchant.example.com/api/v1/douyin/notify/douyin-test");
-        channel.getDouyin().setReturnUrl("https://merchant.example.com/return");
+        channel.getDouyin().setReturnUrl("https://merchant.example.com/cashier.html?channelId=douyin-test");
         channel.getDouyin().setH5AppName("支付平台");
         return channel;
     }

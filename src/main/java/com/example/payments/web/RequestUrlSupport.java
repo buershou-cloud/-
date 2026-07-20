@@ -28,7 +28,7 @@ final class RequestUrlSupport {
     }
 
     static String douyinReturnUrl(HttpServletRequest request, String channelId) {
-        return origin(request) + "/cashier.html?channelId=" + encode(channelId);
+        return origin(request) + "/";
     }
 
     static String douyinPayoutNotifyUrl(HttpServletRequest request, String channelId) {
