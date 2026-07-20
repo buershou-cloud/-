@@ -1013,16 +1013,7 @@
   }
 
   function douyinH5LaunchUrl(targetUrl) {
-    const channel = channelsForCurrentProduct()[0];
-    let launchOrigin = location.origin;
-    try {
-      if (channel?.douyinReturnUrl) {
-        launchOrigin = new URL(channel.douyinReturnUrl, location.origin).origin;
-      }
-    } catch (error) {
-      launchOrigin = location.origin;
-    }
-    const launchUrl = new URL("/douyin-h5-launch.html", launchOrigin);
+    const launchUrl = new URL("/douyin-h5-launch.html", location.origin);
     launchUrl.searchParams.set("target", targetUrl);
     return launchUrl.toString();
   }
