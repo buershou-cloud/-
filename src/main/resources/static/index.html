@@ -4317,7 +4317,8 @@
     const option = select?.selectedOptions?.[0];
     return {
       account: option?.dataset?.account || "",
-      type: option?.dataset?.type || "loginName"
+      type: option?.dataset?.type || "loginName",
+      name: option?.dataset?.name || ""
     };
   }
 
@@ -4339,7 +4340,8 @@
       return `
         <option value="${html(key)}"
                 data-account="${html(relation.receiverAccount)}"
-                data-type="${html(relation.receiverType || "loginName")}">
+                data-type="${html(relation.receiverType || "loginName")}"
+                data-name="${html(relation.receiverName || "")}">
           ${html(relationOptionText(relation))}
         </option>
       `;
@@ -4399,6 +4401,7 @@
       royalty_type: "transfer",
       trans_in_type: relation.type,
       trans_in: transIn,
+      receiver_name: relation.name,
       amount: percentage ? undefined : amount,
       amount_percentage: percentage,
       desc: $("profitShareDesc").value.trim()

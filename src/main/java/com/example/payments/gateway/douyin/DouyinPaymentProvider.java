@@ -109,7 +109,9 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("notify_url", notifyUrl);
         body.put("amount", amount(request.totalAmount()));
         body.put("scene_info", sceneInfo);
-        body.put("profit_sharing", true);
+        body.put("settle_info", request.settleInfo() == null || request.settleInfo().isEmpty()
+                ? Map.of("profit_sharing", true)
+                : request.settleInfo());
         mergeAllowedPayExtras(body, request.extra());
 
         DouyinGatewayResponse response = client.post(channel, H5_ORDER_PATH, body);
@@ -149,7 +151,9 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("out_trade_no", request.outTradeNo());
         body.put("notify_url", notifyUrl);
         body.put("amount", amount(request.totalAmount()));
-        body.put("settle_info", Map.of("profit_sharing", true));
+        body.put("settle_info", request.settleInfo() == null || request.settleInfo().isEmpty()
+                ? Map.of("profit_sharing", true)
+                : request.settleInfo());
         mergeAllowedNativePayExtras(body, request.extra());
 
         DouyinGatewayResponse response = client.post(channel, NATIVE_ORDER_PATH, body);
@@ -219,12 +223,13 @@ public class DouyinPaymentProvider implements PaymentProvider {
             throw new GatewayException("DOUYIN_ORIGINAL_AMOUNT_MISSING", "Original Douyin Pay order amount is required for refund");
         }
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("mchid", channel.getDouyin().getMchId());
+        body.put("appid", required(channel.getDouyin().getAppId(), "Douyin Pay appId is required"));
+        body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
         putIfText(body, "transaction_id", request.tradeNo());
         putIfText(body, "out_trade_no", request.outTradeNo());
         body.put("out_refund_no", request.outRequestNo());
         putIfText(body, "reason", request.refundReason());
-        body.put("notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
+        putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
         body.put("amount", Map.of(
                 "refund", fen(request.refundAmount()),
                 "total", originalTotal,
@@ -271,11 +276,11 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("mchid", required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required"));
         body.put("transaction_id", transactionId);
         body.put("out_order_no", request.outRequestNo());
-        body.put("receivers", douyinReceivers(request.royaltyParameters()));
-        body.put("unfreeze_unsplit", Boolean.toString(booleanExtra(request.extra(), "unfreeze_unsplit", false)));
+        body.put("receivers", douyinReceivers(channel, request.royaltyParameters()));
+        body.put("unfreeze_unsplit", booleanExtra(request.extra(), "unfreeze_unsplit", false));
         putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
 
-        DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_ORDER_PATH, body);
+        DouyinGatewayResponse response = client.postSensitive(channel, PROFIT_SHARING_ORDER_PATH, body);
         return profitSharingResponse(
                 channel.getId(),
                 response,
@@ -482,6 +487,9 @@ public class DouyinPaymentProvider implements PaymentProvider {
         if ("NOTPAY".equals(value) || "USERPAYING".equals(value)) {
             return PaymentStatus.PAYING;
         }
+        if ("PAYERROR".equals(value)) {
+            return PaymentStatus.FAILED;
+        }
         return PaymentStatus.UNKNOWN;
     }
 
@@ -559,7 +567,10 @@ public class DouyinPaymentProvider implements PaymentProvider {
         );
     }
 
-    private static List<Map<String, Object>> douyinReceivers(List<Map<String, Object>> royaltyParameters) {
+    private static List<Map<String, Object>> douyinReceivers(
+            PaymentGatewayProperties.Channel channel,
+            List<Map<String, Object>> royaltyParameters
+    ) {
         if (royaltyParameters == null || royaltyParameters.isEmpty()) {
             throw new GatewayException("DOUYIN_RECEIVERS_MISSING", "抖音分账至少需要一个接收方");
         }
@@ -567,6 +578,17 @@ public class DouyinPaymentProvider implements PaymentProvider {
             Map<String, Object> receiver = new LinkedHashMap<>();
             receiver.put("type", douyinReceiverType(text(parameter, "trans_in_type")));
             receiver.put("account", required(text(parameter, "trans_in"), "Douyin Pay receiver account is required"));
+            String receiverName = firstText(
+                    text(parameter, "receiver_name"),
+                    text(parameter, "receiverName"),
+                    text(parameter, "name")
+            );
+            if (hasText(receiverName)) {
+                receiver.put("name", DouyinSignatureSupport.encryptSensitive(
+                        receiverName,
+                        channel.getDouyin().getPlatformCertificate()
+                ));
+            }
             receiver.put("amount", fen(decimal(parameter.get("amount"))));
             receiver.put("description", firstText(text(parameter, "desc"), "订单分账"));
             return receiver;
@@ -619,9 +641,11 @@ public class DouyinPaymentProvider implements PaymentProvider {
         if (extra == null) {
             return;
         }
+        copy(extra, body, "time_expire");
         copy(extra, body, "goods_tag");
         copy(extra, body, "attach");
-        copy(extra, body, "limit_pay");
+        copy(extra, body, "support_fapiao");
+        copy(extra, body, "detail");
         copy(extra, body, "settle_info");
     }
 
@@ -632,6 +656,8 @@ public class DouyinPaymentProvider implements PaymentProvider {
         copy(extra, body, "time_expire");
         copy(extra, body, "attach");
         copy(extra, body, "goods_tag");
+        copy(extra, body, "support_fapiao");
+        copy(extra, body, "detail");
         copy(extra, body, "scene_info");
         copy(extra, body, "settle_info");
     }

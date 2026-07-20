@@ -148,6 +148,7 @@ public class DouyinNotifyController {
             case "SUCCESS" -> PaymentStatus.SUCCESS;
             case "CLOSED" -> PaymentStatus.CLOSED;
             case "NOTPAY", "USERPAYING" -> PaymentStatus.PAYING;
+            case "PAYERROR" -> PaymentStatus.FAILED;
             default -> PaymentStatus.UNKNOWN;
         };
     }

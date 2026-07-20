@@ -57,7 +57,12 @@ class DouyinPaymentProviderTest {
                 null,
                 null,
                 List.of("douyin-test"),
-                Map.of("payer_client_ip", "203.0.113.8", "user_agent", "test-agent"),
+                Map.of(
+                        "payer_client_ip", "203.0.113.8",
+                        "user_agent", "test-agent",
+                        "time_expire", "2026-07-20T12:30:00+08:00",
+                        "support_fapiao", true
+                ),
                 null,
                 null
         ));
@@ -74,8 +79,12 @@ class DouyinPaymentProviderTest {
                 .containsEntry("appid", "dy-app-1")
                 .containsEntry("mchid", "dy-mch-1")
                 .containsEntry("out_trade_no", "ORDER-1001")
-                .containsEntry("profit_sharing", true)
-                .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test");
+                .containsEntry("notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test")
+                .containsEntry("time_expire", "2026-07-20T12:30:00+08:00")
+                .containsEntry("support_fapiao", true)
+                .doesNotContainKey("profit_sharing");
+        assertThat((Map<String, Object>) body.get("settle_info"))
+                .containsEntry("profit_sharing", true);
         assertThat((Map<String, Object>) body.get("amount"))
                 .containsEntry("total", 123L)
                 .containsEntry("currency", "CNY");
@@ -117,7 +126,7 @@ class DouyinPaymentProviderTest {
                 null,
                 List.of("douyin-test"),
                 Map.of("time_expire", "2026-07-19T12:30:00+08:00", "attach", "native-order"),
-                null,
+                Map.of("profit_sharing", false),
                 null
         ));
 
@@ -143,7 +152,7 @@ class DouyinPaymentProviderTest {
                 .containsEntry("total", 1234L)
                 .containsEntry("currency", "CNY");
         assertThat((Map<String, Object>) body.get("settle_info"))
-                .containsEntry("profit_sharing", true);
+                .containsEntry("profit_sharing", false);
     }
 
     @Test
@@ -208,6 +217,7 @@ class DouyinPaymentProviderTest {
         verify(client).post(eq(channel), eq("/v1/trade/refund/domestic/refunds"), bodyCaptor.capture());
         Map<String, Object> body = bodyCaptor.getValue();
         assertThat(body)
+                .containsEntry("appid", "dy-app-1")
                 .containsEntry("mchid", "dy-mch-1")
                 .containsEntry("transaction_id", "DY1001")
                 .containsEntry("out_trade_no", "ORDER-1001")
@@ -221,9 +231,29 @@ class DouyinPaymentProviderTest {
     }
 
     @Test
+    void mapsDouyinPayErrorToFailedStatus() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.get(any(), eq("/v1/trade/transactions/out-trade-no/ORDER-FAILED?mchid=dy-mch-1")))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of("trade_state", "PAYERROR", "out_trade_no", "ORDER-FAILED"),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+
+        GatewayResponse response = provider.query(
+                channel(),
+                new PaymentQueryRequest("ORDER-FAILED", null, null, List.of("douyin-test"), Map.of())
+        );
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.FAILED);
+    }
+
+    @Test
     void submitsOfficialProfitSharingRequestWithFenReceiverAmount() {
         DouyinPayClient client = mock(DouyinPayClient.class);
-        when(client.post(any(), eq("/v1/trade/profitsharing/orders"), anyMap()))
+        when(client.postSensitive(any(), eq("/v1/trade/profitsharing/orders"), anyMap()))
                 .thenReturn(new DouyinGatewayResponse(
                         200,
                         Map.of(
@@ -259,14 +289,14 @@ class DouyinPaymentProviderTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Map<String, Object>> bodyCaptor = ArgumentCaptor.forClass(Map.class);
-        verify(client).post(eq(channel), eq("/v1/trade/profitsharing/orders"), bodyCaptor.capture());
+        verify(client).postSensitive(eq(channel), eq("/v1/trade/profitsharing/orders"), bodyCaptor.capture());
         Map<String, Object> body = bodyCaptor.getValue();
         assertThat(body)
                 .containsEntry("appid", "dy-app-1")
                 .containsEntry("mchid", "dy-mch-1")
                 .containsEntry("transaction_id", "DY1001")
                 .containsEntry("out_order_no", "PS_ORDER-1001")
-                .containsEntry("unfreeze_unsplit", "false");
+                .containsEntry("unfreeze_unsplit", false);
         List<Map<String, Object>> receivers = (List<Map<String, Object>>) body.get("receivers");
         assertThat(receivers).singleElement().satisfies(receiver -> assertThat(receiver)
                 .containsEntry("type", "MERCHANT_ID")
