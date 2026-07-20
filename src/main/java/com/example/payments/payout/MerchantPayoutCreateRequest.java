@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 public record MerchantPayoutCreateRequest(
         @NotBlank String channelId,
@@ -18,6 +19,38 @@ public record MerchantPayoutCreateRequest(
         String transferSceneId,
         String sceneInfoType,
         String sceneInfoContent,
+        List<MerchantPayoutSceneReportInfoRequest> sceneReportInfos,
         @NotBlank String paymentPassword
 ) {
+
+    public MerchantPayoutCreateRequest(
+            String channelId,
+            String outBizNo,
+            BigDecimal amount,
+            String recipientType,
+            String recipient,
+            String recipientName,
+            String orderTitle,
+            String remark,
+            String transferSceneId,
+            String sceneInfoType,
+            String sceneInfoContent,
+            String paymentPassword
+    ) {
+        this(
+                channelId,
+                outBizNo,
+                amount,
+                recipientType,
+                recipient,
+                recipientName,
+                orderTitle,
+                remark,
+                transferSceneId,
+                sceneInfoType,
+                sceneInfoContent,
+                List.of(),
+                paymentPassword
+        );
+    }
 }

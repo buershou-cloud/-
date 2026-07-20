@@ -23,6 +23,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +44,15 @@ public class MerchantPayoutService {
     private static final String ALIPAY_BIZ_SCENE = "DIRECT_TRANSFER";
     private static final String DOUYIN_TRANSFER_PATH = "/v1/fund_trade/mch-transfer/transfer-bills";
     private static final DateTimeFormatter ORDER_TIME = DateTimeFormatter.ofPattern("yyMMddHHmmss");
+    private static final Map<String, List<String>> DOUYIN_SCENE_REPORT_TYPES = Map.of(
+            "1001", List.of("活动名称", "奖励说明"),
+            "1002", List.of("赔付原因"),
+            "1003", List.of("岗位类型", "报酬说明"),
+            "1004", List.of("采购商品名称"),
+            "1005", List.of("回收商品名称"),
+            "1006", List.of("公益活动名称", "公益活动备案编号"),
+            "1007", List.of("补贴类型")
+    );
 
     private final JdbcTemplate jdbcTemplate;
     private final ChannelRegistry channelRegistry;
@@ -244,10 +254,7 @@ public class MerchantPayoutService {
         body.put("transfer_amount", amount.movePointRight(2).longValueExact());
         body.put("transfer_remark", limit(firstText(request.remark(), "商家代付"), 32));
         body.put("notify_url", notifyUrl);
-        body.put("transfer_scene_report_infos", List.of(Map.of(
-                "info_type", request.sceneInfoType().trim(),
-                "info_content", request.sceneInfoContent().trim()
-        )));
+        body.put("transfer_scene_report_infos", douyinSceneReportInfos(request));
         return douyinClient.postSensitive(channel, DOUYIN_TRANSFER_PATH, body);
     }
 
@@ -462,11 +469,53 @@ public class MerchantPayoutService {
         if (!hasText(douyinNotifyUrl) || !douyinNotifyUrl.startsWith("https://")) {
             throw new IllegalArgumentException("抖音代付通知地址必须是公网 HTTPS 地址");
         }
-        if (!hasText(request.transferSceneId())
-                || !hasText(request.sceneInfoType())
-                || !hasText(request.sceneInfoContent())) {
+        if (!hasText(request.transferSceneId())) {
             throw new IllegalArgumentException("抖音代付必须填写已开通的转账场景 ID 和场景报备信息");
         }
+        douyinSceneReportInfos(request);
+    }
+
+    static List<Map<String, String>> douyinSceneReportInfos(MerchantPayoutCreateRequest request) {
+        List<MerchantPayoutSceneReportInfoRequest> source = request.sceneReportInfos();
+        if (source == null || source.isEmpty()) {
+            if (!hasText(request.sceneInfoType()) || !hasText(request.sceneInfoContent())) {
+                throw new IllegalArgumentException("抖音代付必须完整填写转账场景报备信息");
+            }
+            source = List.of(new MerchantPayoutSceneReportInfoRequest(
+                    request.sceneInfoType(),
+                    request.sceneInfoContent()
+            ));
+        }
+
+        List<Map<String, String>> result = new ArrayList<>();
+        for (MerchantPayoutSceneReportInfoRequest info : source) {
+            if (info == null || !hasText(info.infoType()) || !hasText(info.infoContent())) {
+                throw new IllegalArgumentException("抖音代付的每条场景报备信息都必须填写类型和内容");
+            }
+            String infoType = info.infoType().trim();
+            String infoContent = info.infoContent().trim();
+            if (infoType.length() > 15) {
+                throw new IllegalArgumentException("抖音代付场景报备类型不能超过 15 个字符");
+            }
+            if (infoContent.length() > 32) {
+                throw new IllegalArgumentException("抖音代付场景报备内容不能超过 32 个字符");
+            }
+            result.add(Map.of("info_type", infoType, "info_content", infoContent));
+        }
+
+        List<String> expectedTypes = DOUYIN_SCENE_REPORT_TYPES.get(request.transferSceneId().trim());
+        if (expectedTypes != null) {
+            List<String> actualTypes = result.stream().map(item -> item.get("info_type")).toList();
+            if (actualTypes.size() != expectedTypes.size()
+                    || !actualTypes.containsAll(expectedTypes)
+                    || !expectedTypes.containsAll(actualTypes)) {
+                throw new IllegalArgumentException(
+                        "抖音转账场景 " + request.transferSceneId().trim()
+                                + " 必须填写以下报备类型：" + String.join("、", expectedTypes)
+                );
+            }
+        }
+        return List.copyOf(result);
     }
 
     static String normalizedRecipientType(String provider, String value) {

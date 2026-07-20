@@ -813,6 +813,44 @@
       gap: 14px;
     }
 
+    .scene-report-editor {
+      display: grid;
+      gap: 10px;
+      padding-top: 2px;
+    }
+
+    .scene-report-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      color: #334155;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .scene-report-heading span {
+      color: #64748b;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .scene-report-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .scene-report-row {
+      display: grid;
+      grid-template-columns: minmax(160px, 0.45fr) minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .scene-report-row input[readonly] {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
     .order-filter-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -1608,6 +1646,10 @@
         grid-template-columns: 1fr;
       }
 
+      .scene-report-row {
+        grid-template-columns: 1fr;
+      }
+
       .channel-form-grid {
         grid-template-columns: 1fr;
       }
@@ -1782,9 +1824,22 @@
                     <label>订单标题<input id="payoutOrderTitle" maxlength="64" value="商家代付"></label>
                     <label class="wide">转账备注<input id="payoutRemark" maxlength="200" value="商家代付" required></label>
                     <div id="payoutDouyinFields" class="form-grid wide hidden">
-                      <label>转账场景 ID<input id="payoutTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
-                      <label>场景报备类型<input id="payoutSceneInfoType" placeholder="例如 activity_name"></label>
-                      <label class="wide">场景报备内容<input id="payoutSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+                      <label>转账场景
+                        <input id="payoutTransferSceneId" list="douyinPayoutSceneOptions" placeholder="填写抖音平台已开通的场景 ID">
+                      </label>
+                      <datalist id="douyinPayoutSceneOptions">
+                        <option value="1001">现金营销</option>
+                        <option value="1002">企业赔付</option>
+                        <option value="1003">佣金报酬</option>
+                        <option value="1004">采购货款</option>
+                        <option value="1005">二手回收</option>
+                        <option value="1006">公益补助</option>
+                        <option value="1007">行政补贴</option>
+                      </datalist>
+                      <div class="scene-report-editor wide">
+                        <div class="scene-report-heading">场景报备明细<span id="payoutSceneReportHint">输入场景 ID 后自动生成必填项</span></div>
+                        <div id="payoutSceneReportRows" class="scene-report-list"></div>
+                      </div>
                     </div>
                     <label class="wide">支付密码<input id="payoutPaymentPassword" type="password" autocomplete="off" required></label>
                   </div>
@@ -1806,9 +1861,13 @@
                     <label>统一订单标题<input id="payoutBatchOrderTitle" maxlength="64" value="商家代付"></label>
                     <label class="wide">统一转账备注<input id="payoutBatchRemark" maxlength="200" value="商家代付" required></label>
                     <div id="payoutBatchDouyinFields" class="form-grid wide hidden">
-                      <label>转账场景 ID<input id="payoutBatchTransferSceneId" placeholder="抖音平台已开通的场景 ID"></label>
-                      <label>场景报备类型<input id="payoutBatchSceneInfoType" placeholder="例如 activity_name"></label>
-                      <label class="wide">场景报备内容<input id="payoutBatchSceneInfoContent" placeholder="与已开通场景一致的报备内容"></label>
+                      <label>转账场景
+                        <input id="payoutBatchTransferSceneId" list="douyinPayoutSceneOptions" placeholder="填写抖音平台已开通的场景 ID">
+                      </label>
+                      <div class="scene-report-editor wide">
+                        <div class="scene-report-heading">统一场景报备明细<span id="payoutBatchSceneReportHint">输入场景 ID 后自动生成必填项</span></div>
+                        <div id="payoutBatchSceneReportRows" class="scene-report-list"></div>
+                      </div>
                     </div>
                   </div>
                   <div class="batch-toolbar">
@@ -4713,6 +4772,88 @@
       && ["ALIPAY", "DOUYIN"].includes(channel.provider));
   }
 
+  const DOUYIN_PAYOUT_SCENES = {
+    "1001": {
+      name: "现金营销",
+      fields: [
+        ["活动名称", "例如：新会员推广活动"],
+        ["奖励说明", "例如：完成推广任务奖励"]
+      ]
+    },
+    "1002": {
+      name: "企业赔付",
+      fields: [["赔付原因", "例如：商品质量问题赔付"]]
+    },
+    "1003": {
+      name: "佣金报酬",
+      fields: [
+        ["岗位类型", "例如：推广员、销售、团长或主播"],
+        ["报酬说明", "例如：7 月推广佣金"]
+      ]
+    },
+    "1004": {
+      name: "采购货款",
+      fields: [["采购商品名称", "填写实际采购的商品或服务名称"]]
+    },
+    "1005": {
+      name: "二手回收",
+      fields: [["回收商品名称", "填写实际回收的商品名称"]]
+    },
+    "1006": {
+      name: "公益补助",
+      fields: [
+        ["公益活动名称", "填写民政部门备案的公益活动名称"],
+        ["公益活动备案编号", "填写公益活动备案编号"]
+      ]
+    },
+    "1007": {
+      name: "行政补贴",
+      fields: [["补贴类型", "例如：购车补贴"]]
+    }
+  };
+
+  function renderPayoutSceneReportRows(batch = false) {
+    const sceneInput = $(batch ? "payoutBatchTransferSceneId" : "payoutTransferSceneId");
+    const rows = $(batch ? "payoutBatchSceneReportRows" : "payoutSceneReportRows");
+    const hint = $(batch ? "payoutBatchSceneReportHint" : "payoutSceneReportHint");
+    if (!sceneInput || !rows || !hint) return;
+
+    const previousValues = new Map(Array.from(rows.querySelectorAll(".scene-report-row")).map((row) => [
+      row.querySelector('[data-scene-report-field="type"]')?.value || "",
+      row.querySelector('[data-scene-report-field="content"]')?.value || ""
+    ]));
+    const scene = DOUYIN_PAYOUT_SCENES[sceneInput.value.trim()];
+    const fields = scene?.fields || [["", "填写该场景要求的报备内容"]];
+    rows.innerHTML = fields.map(([type, placeholder]) => `
+      <div class="scene-report-row">
+        <label>报备类型
+          <input data-scene-report-field="type" maxlength="15" value="${html(type)}" placeholder="按场景要求填写"${type ? " readonly" : ""}>
+        </label>
+        <label>报备内容
+          <input data-scene-report-field="content" maxlength="32" value="${html(previousValues.get(type) || "")}" placeholder="${html(placeholder)}">
+        </label>
+      </div>
+    `).join("");
+    hint.textContent = scene
+      ? `${sceneInput.value.trim()} ${scene.name}，共 ${fields.length} 条必填报备信息`
+      : "非标准场景请按抖音平台要求填写类型和内容";
+  }
+
+  function setPayoutSceneReportRequired(batch, required) {
+    const rows = $(batch ? "payoutBatchSceneReportRows" : "payoutSceneReportRows");
+    rows?.querySelectorAll("input").forEach((input) => {
+      input.required = required;
+    });
+  }
+
+  function payoutSceneReportInfos(batch = false) {
+    const rows = $(batch ? "payoutBatchSceneReportRows" : "payoutSceneReportRows");
+    return Array.from(rows?.querySelectorAll(".scene-report-row") || []).map((row) => ({
+      infoType: row.querySelector('[data-scene-report-field="type"]').value.trim(),
+      infoContent: row.querySelector('[data-scene-report-field="content"]').value.trim()
+    })).filter((item) => item.infoType || item.infoContent);
+  }
+
   function renderPayoutChannelOptions() {
     ["payoutChannel", "payoutBatchChannel"].forEach((id) => {
       const select = $(id);
@@ -4760,9 +4901,9 @@
     const selected = recipientType.value;
     recipientType.innerHTML = payoutRecipientTypeOptions(channel, selected);
     $("payoutDouyinFields").classList.toggle("hidden", !douyin);
-    ["payoutTransferSceneId", "payoutSceneInfoType", "payoutSceneInfoContent"].forEach((id) => {
-      $(id).required = douyin;
-    });
+    renderPayoutSceneReportRows(false);
+    $("payoutTransferSceneId").required = douyin;
+    setPayoutSceneReportRequired(false, douyin);
     $("payoutRecipient").placeholder = douyin ? "填写抖音 OpenID 或手机号" : "填写支付宝 OpenID、用户 ID 或登录号";
     const notifyChannel = encodeURIComponent(channel?.id || "通道编号");
     setText("alipayPayoutNotifyUrl", `${window.location.origin}/api/v1/payouts/notify/alipay/${notifyChannel}`);
@@ -4772,9 +4913,9 @@
     const channel = selectedPayoutChannel("payoutBatchChannel");
     const douyin = channel?.provider === "DOUYIN";
     $("payoutBatchDouyinFields").classList.toggle("hidden", !douyin);
-    ["payoutBatchTransferSceneId", "payoutBatchSceneInfoType", "payoutBatchSceneInfoContent"].forEach((id) => {
-      $(id).required = douyin;
-    });
+    renderPayoutSceneReportRows(true);
+    $("payoutBatchTransferSceneId").required = douyin;
+    setPayoutSceneReportRequired(true, douyin);
     document.querySelectorAll('#payoutBatchRows [data-batch-field="recipientType"]').forEach((select) => {
       select.innerHTML = payoutRecipientTypeOptions(channel, select.value);
     });
@@ -4891,8 +5032,7 @@
       orderTitle: $("payoutOrderTitle").value.trim(),
       remark: $("payoutRemark").value.trim(),
       transferSceneId: $("payoutTransferSceneId").value.trim(),
-      sceneInfoType: $("payoutSceneInfoType").value.trim(),
-      sceneInfoContent: $("payoutSceneInfoContent").value.trim(),
+      sceneReportInfos: payoutSceneReportInfos(false),
       paymentPassword: $("payoutPaymentPassword").value
     });
   }
@@ -4905,8 +5045,7 @@
       orderTitle: $("payoutBatchOrderTitle").value.trim(),
       remark: $("payoutBatchRemark").value.trim(),
       transferSceneId: $("payoutBatchTransferSceneId").value.trim(),
-      sceneInfoType: $("payoutBatchSceneInfoType").value.trim(),
-      sceneInfoContent: $("payoutBatchSceneInfoContent").value.trim()
+      sceneReportInfos: payoutSceneReportInfos(true)
     };
     const items = Array.from($("payoutBatchRows").querySelectorAll("tr")).map((row) => compact({
       ...common,
@@ -6089,7 +6228,17 @@
 
   $("payoutChannel").addEventListener("change", syncPayoutProviderFields);
 
+  $("payoutTransferSceneId").addEventListener("input", () => {
+    renderPayoutSceneReportRows(false);
+    setPayoutSceneReportRequired(false, selectedPayoutChannel()?.provider === "DOUYIN");
+  });
+
   $("payoutBatchChannel").addEventListener("change", syncPayoutBatchProviderFields);
+
+  $("payoutBatchTransferSceneId").addEventListener("input", () => {
+    renderPayoutSceneReportRows(true);
+    setPayoutSceneReportRequired(true, selectedPayoutChannel("payoutBatchChannel")?.provider === "DOUYIN");
+  });
 
   document.querySelectorAll("[data-payout-mode]").forEach((button) => {
     button.addEventListener("click", () => switchPayoutMode(button.dataset.payoutMode));
