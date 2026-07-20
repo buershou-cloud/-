@@ -100,6 +100,42 @@ class ChannelSelectorTest {
         assertThat(selected).extracting(PaymentGatewayProperties.Channel::getId).containsExactly("ali-direct");
     }
 
+    @Test
+    void douyinPaymentProductSelectsDouyinChannel() {
+        PaymentGatewayProperties.Channel alipay = channel("ali-standard", true, 10);
+        PaymentGatewayProperties.Channel douyin = channel("douyin-h5", true, 20);
+        douyin.setProvider("DOUYIN");
+        douyin.setProducts(Set.of(PaymentProduct.DOUYIN_H5, PaymentProduct.DOUYIN_NATIVE));
+        PaymentGatewayProperties properties = properties(alipay, douyin);
+        ChannelSelector selector = new ChannelSelector(new ChannelRegistry(properties));
+
+        List<PaymentGatewayProperties.Channel> selected = selector.select(
+                PaymentProduct.DOUYIN_H5,
+                List.of("douyin-h5"),
+                1,
+                new BigDecimal("1.00"),
+                RoutingMode.PRIORITY
+        );
+        List<PaymentGatewayProperties.Channel> nativeSelected = selector.select(
+                PaymentProduct.DOUYIN_NATIVE,
+                List.of("douyin-h5"),
+                1,
+                new BigDecimal("1.00"),
+                RoutingMode.PRIORITY
+        );
+        List<PaymentGatewayProperties.Channel> operationSelected = selector.select(
+                null,
+                List.of("douyin-h5"),
+                1,
+                null,
+                RoutingMode.PRIORITY
+        );
+
+        assertThat(selected).extracting(PaymentGatewayProperties.Channel::getId).containsExactly("douyin-h5");
+        assertThat(nativeSelected).extracting(PaymentGatewayProperties.Channel::getId).containsExactly("douyin-h5");
+        assertThat(operationSelected).extracting(PaymentGatewayProperties.Channel::getId).containsExactly("douyin-h5");
+    }
+
     private static PaymentGatewayProperties properties(PaymentGatewayProperties.Channel... channels) {
         PaymentGatewayProperties properties = new PaymentGatewayProperties();
         properties.setChannels(List.of(channels));

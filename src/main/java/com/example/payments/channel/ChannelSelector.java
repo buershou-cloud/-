@@ -53,7 +53,8 @@ public class ChannelSelector {
                 .filter(channel -> product == null || channel.getProducts().isEmpty() || channel.getProducts().contains(product))
                 .filter(channel -> amountFits(channel, amount))
                 .filter(channel -> Objects.equals("ALIPAY", channel.getProvider())
-                        || Objects.equals("ALIPAY_DIRECT", channel.getProvider()))
+                        || Objects.equals("ALIPAY_DIRECT", channel.getProvider())
+                        || Objects.equals("DOUYIN", channel.getProvider()))
                 .toList();
         if (eligible.isEmpty()) {
             throw new IllegalStateException("No enabled payment channel matches the request");
