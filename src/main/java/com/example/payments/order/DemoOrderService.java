@@ -22,6 +22,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -380,7 +381,7 @@ public class DemoOrderService {
         if (!databaseBacked()) {
             throw new IllegalStateException("Douyin refund notifications require database mode");
         }
-        String localStatus = "SUCCESS".equals(refundStatus) ? "SUCCESS" : "FAILED";
+        String localStatus = normalizeDouyinRefundStatus(refundStatus);
         String outTradeNo;
         try {
             outTradeNo = jdbcTemplate.queryForObject(
@@ -393,12 +394,25 @@ public class DemoOrderService {
         }
         jdbcTemplate.update("""
                 UPDATE refund_order
-                SET status = ?, code = ?, message = ?, completed_at = CURRENT_TIMESTAMP
+                SET code = CASE WHEN status = 'SUCCESS' THEN code ELSE ? END,
+                    message = CASE WHEN status = 'SUCCESS' THEN message ELSE ? END,
+                    completed_at = CASE
+                        WHEN status = 'SUCCESS' THEN completed_at
+                        WHEN ? IN ('SUCCESS', 'FAILED') THEN CURRENT_TIMESTAMP
+                        ELSE completed_at
+                    END,
+                    status = CASE
+                        WHEN status = 'SUCCESS' THEN status
+                        WHEN ? = 'PENDING' THEN status
+                        ELSE ?
+                    END
                 WHERE out_request_no = ?
                 """,
-                localStatus,
                 nullIfBlank(refundId),
                 nullIfBlank(refundStatus),
+                localStatus,
+                localStatus,
+                localStatus,
                 outRefundNo
         );
         DemoOrder order = order(outTradeNo);
@@ -1249,5 +1263,24 @@ public class DemoOrderService {
 
     private static boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
+    }
+
+    static String normalizeDouyinRefundStatus(String value) {
+        String status = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if ("SUCCESS".equals(status)
+                || "REFUNDED".equals(status)
+                || status.endsWith(".SUCCESS")
+                || status.endsWith("_SUCCESS")) {
+            return "SUCCESS";
+        }
+        if ("FAILED".equals(status)
+                || "FAIL".equals(status)
+                || "CLOSED".equals(status)
+                || "ABNORMAL".equals(status)
+                || status.endsWith(".FAILED")
+                || status.endsWith("_FAILED")) {
+            return "FAILED";
+        }
+        return "PENDING";
     }
 }

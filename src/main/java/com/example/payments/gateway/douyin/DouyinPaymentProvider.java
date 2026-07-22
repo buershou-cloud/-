@@ -31,6 +31,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -234,14 +235,28 @@ public class DouyinPaymentProvider implements PaymentProvider {
         ));
 
         DouyinGatewayResponse response = client.post(channel, REFUND_PATH, body);
-        String refundStatus = firstText(text(response.body(), "status"), text(response.body(), "refund_status"));
-        String transactionId = firstText(text(response.body(), "transaction_id"), request.tradeNo());
+        Map<String, Object> responseBody = response.body();
+        String refundStatus = firstText(
+                text(responseBody, "refund_status"),
+                text(responseBody, "refund_state"),
+                nestedText(responseBody, "data", "refund_status"),
+                nestedText(responseBody, "data", "refund_state"),
+                nestedText(responseBody, "data", "status"),
+                nestedText(responseBody, "data", "state"),
+                text(responseBody, "status"),
+                text(responseBody, "state")
+        );
+        String transactionId = firstText(
+                text(responseBody, "transaction_id"),
+                nestedText(responseBody, "data", "transaction_id"),
+                request.tradeNo()
+        );
         return new GatewayResponse(
                 channel.getId(),
                 refundStatus(refundStatus),
-                firstText(text(response.body(), "code"), "SUCCESS"),
-                firstText(text(response.body(), "message"), "Douyin Pay refund accepted"),
-                firstText(text(response.body(), "out_trade_no"), request.outTradeNo()),
+                firstText(text(responseBody, "code"), nestedText(responseBody, "data", "code"), "SUCCESS"),
+                firstText(text(responseBody, "message"), nestedText(responseBody, "data", "message"), "Douyin Pay refund accepted"),
+                firstText(text(responseBody, "out_trade_no"), nestedText(responseBody, "data", "out_trade_no"), request.outTradeNo()),
                 transactionId,
                 null,
                 null,
@@ -482,10 +497,19 @@ public class DouyinPaymentProvider implements PaymentProvider {
     }
 
     private static PaymentStatus refundStatus(String value) {
-        if ("SUCCESS".equals(value)) {
+        String status = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if ("SUCCESS".equals(status)
+                || "REFUNDED".equals(status)
+                || status.endsWith(".SUCCESS")
+                || status.endsWith("_SUCCESS")) {
             return PaymentStatus.SUCCESS;
         }
-        if ("CLOSED".equals(value) || "ABNORMAL".equals(value)) {
+        if ("CLOSED".equals(status)
+                || "ABNORMAL".equals(status)
+                || "FAILED".equals(status)
+                || "FAIL".equals(status)
+                || status.endsWith(".FAILED")
+                || status.endsWith("_FAILED")) {
             return PaymentStatus.FAILED;
         }
         return PaymentStatus.PENDING;

@@ -142,6 +142,39 @@ class DemoOrderServiceTest {
     }
 
     @Test
+    void paymentQueryDoesNotOverwriteRefundedStatus() {
+        DemoOrderService service = new DemoOrderService();
+        service.recordPaymentCreated(
+                "DOUYIN-REFUNDED-001",
+                "DOUYIN-TRADE-001",
+                "douyin-main",
+                "M10001",
+                "merchant",
+                "DOUYIN_H5",
+                new BigDecimal("3.00"),
+                false,
+                PaymentStatus.SUCCESS
+        );
+        RefundCreateRequest refund = refundRequest(
+                "DOUYIN-REFUNDED-001",
+                "DOUYIN-TRADE-001",
+                "3.00",
+                "DOUYIN-REFUND-001"
+        );
+        service.recordRefund(refund, refundResponse(refund));
+
+        DemoOrderView queried = service.recordPaymentResult(
+                "DOUYIN-REFUNDED-001",
+                "DOUYIN-TRADE-001",
+                "douyin-main",
+                PaymentStatus.SUCCESS
+        );
+
+        assertThat(queried.status()).isEqualTo(DemoOrderStatus.REFUNDED);
+        assertThat(queried.refundedAmount()).isEqualByComparingTo("3.00");
+    }
+
+    @Test
     void preauthCaptureNotifyUpdatesOriginalOrderInsteadOfCreatingCaptureOrder() {
         DemoOrderService service = new DemoOrderService();
         service.recordPaymentCreated(
@@ -229,6 +262,14 @@ class DemoOrderServiceTest {
 
         assertThatThrownBy(() -> service.ensureRefundable("ORDER-OVER-001", null, new BigDecimal("20.01")))
                 .hasMessageContaining("cannot exceed remaining refundable amount");
+    }
+
+    @Test
+    void normalizesDouyinRefundStatuses() {
+        assertThat(DemoOrderService.normalizeDouyinRefundStatus("refund_success")).isEqualTo("SUCCESS");
+        assertThat(DemoOrderService.normalizeDouyinRefundStatus("REFUNDED")).isEqualTo("SUCCESS");
+        assertThat(DemoOrderService.normalizeDouyinRefundStatus("processing")).isEqualTo("PENDING");
+        assertThat(DemoOrderService.normalizeDouyinRefundStatus("refund_failed")).isEqualTo("FAILED");
     }
 
     private static RefundCreateRequest refundRequest(String outTradeNo, String tradeNo, String amount, String outRequestNo) {

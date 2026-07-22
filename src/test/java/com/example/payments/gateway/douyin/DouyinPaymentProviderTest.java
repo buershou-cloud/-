@@ -255,6 +255,71 @@ class DouyinPaymentProviderTest {
     }
 
     @Test
+    void mapsNestedDouyinRefundSuccessToGatewayStatus() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.post(any(), eq("/v1/trade/refund/domestic/refunds"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of(
+                                "code", "0",
+                                "message", "accepted",
+                                "data", Map.of(
+                                        "refund_status", "refund_success",
+                                        "out_trade_no", "ORDER-1002",
+                                        "transaction_id", "DY1002"
+                                )
+                        ),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+
+        GatewayResponse response = provider.refund(channel(), new RefundCreateRequest(
+                "ORDER-1002",
+                "DY1002",
+                new BigDecimal("1.00"),
+                "REFUND-1002",
+                "test refund",
+                null,
+                List.of("douyin-test"),
+                Map.of("douyin_total_amount_fen", 500L)
+        ));
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(response.outTradeNo()).isEqualTo("ORDER-1002");
+        assertThat(response.tradeNo()).isEqualTo("DY1002");
+    }
+
+    @Test
+    void prefersNestedRefundStateOverEnvelopeStatus() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.post(any(), eq("/v1/trade/refund/domestic/refunds"), anyMap()))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of(
+                                "status", "SUCCESS",
+                                "data", Map.of("refund_status", "PROCESSING")
+                        ),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+
+        GatewayResponse response = provider.refund(channel(), new RefundCreateRequest(
+                "ORDER-1003",
+                "DY1003",
+                new BigDecimal("1.00"),
+                "REFUND-1003",
+                "test refund",
+                null,
+                List.of("douyin-test"),
+                Map.of("douyin_total_amount_fen", 500L)
+        ));
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.PENDING);
+    }
+
+    @Test
     void mapsDouyinPayErrorToFailedStatus() {
         DouyinPayClient client = mock(DouyinPayClient.class);
         when(client.get(any(), eq("/v1/trade/transactions/out-trade-no/ORDER-FAILED?mchid=dy-mch-1")))

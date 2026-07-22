@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Locale;
 import java.util.Map;
 
 @RestController
@@ -93,15 +94,22 @@ public class DouyinNotifyController {
 
         String eventType = text(event, "event_type");
         String originalType = text(resource, "original_type");
-        if ("REFUND.SUCCESS".equals(eventType) || "refund".equalsIgnoreCase(originalType)) {
-            String refundStatus = firstText(text(payload, "refund_status"), text(payload, "status"), "SUCCESS");
+        if (isRefundNotification(eventType, originalType, payload)) {
+            String outRefundNo = firstText(text(payload, "out_refund_no"), text(payload, "out_request_no"));
+            if (!hasText(outRefundNo)) {
+                throw new GatewayException(
+                        "DOUYIN_NOTIFY_FIELD_MISSING",
+                        "Douyin Pay refund notification is missing out_refund_no"
+                );
+            }
+            String refundStatus = refundNotificationStatus(eventType, payload);
             orderService.recordDouyinRefundNotify(
-                    required(payload, "out_refund_no"),
+                    outRefundNo,
                     refundStatus,
-                    text(payload, "refund_id")
+                    firstText(text(payload, "refund_id"), text(payload, "refund_no"))
             );
             log.info("Processed Douyin refund notification channel={} outRefundNo={} status={}",
-                    channelId, text(payload, "out_refund_no"), refundStatus);
+                    channelId, outRefundNo, refundStatus);
             return ResponseEntity.ok().build();
         }
 
@@ -175,6 +183,43 @@ public class DouyinNotifyController {
                     && !payload.containsKey("trade_state"));
     }
 
+    private static boolean isRefundNotification(
+            String eventType,
+            String originalType,
+            Map<String, Object> payload
+    ) {
+        String event = upper(eventType);
+        String original = upper(originalType);
+        return event.contains("REFUND")
+                || original.contains("REFUND")
+                || hasText(text(payload, "out_refund_no"))
+                || hasText(text(payload, "out_request_no"));
+    }
+
+    private static String refundNotificationStatus(String eventType, Map<String, Object> payload) {
+        String status = firstText(
+                text(payload, "refund_status"),
+                text(payload, "refund_state"),
+                text(payload, "status"),
+                text(payload, "state")
+        );
+        if (hasText(status)) {
+            return status;
+        }
+        String event = upper(eventType);
+        if (event.contains("SUCCESS")) {
+            return "SUCCESS";
+        }
+        if (event.contains("FAILED") || event.contains("CLOSED") || event.contains("ABNORMAL")) {
+            return "FAILED";
+        }
+        return "PROCESSING";
+    }
+
+    private static String upper(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
     private static String required(Map<String, Object> data, String key) {
         String value = text(data, key);
         if (value == null || value.isBlank()) {
@@ -197,5 +242,9 @@ public class DouyinNotifyController {
             }
         }
         return null;
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 }
