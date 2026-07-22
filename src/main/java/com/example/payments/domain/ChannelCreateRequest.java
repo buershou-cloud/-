@@ -38,7 +38,6 @@ public record ChannelCreateRequest(
         String douyinEncryptKey,
         String douyinNotifyUrl,
         String douyinReturnUrl,
-        String douyinH5AppName,
-        String douyinTransferRequestIp
+        String douyinH5AppName
 ) {
 }

@@ -17,9 +17,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
@@ -257,7 +254,6 @@ public class MerchantPayoutService {
         body.put("transfer_amount", amount.movePointRight(2).longValueExact());
         body.put("transfer_remark", limit(firstText(request.remark(), "商家代付"), 32));
         body.put("notify_url", notifyUrl);
-        body.put("transfer_request_ip", normalizedTransferRequestIp(channel.getDouyin().getTransferRequestIp()));
         body.put("transfer_scene_report_infos", douyinSceneReportInfos(request));
         return douyinClient.postSensitive(channel, DOUYIN_TRANSFER_PATH, body);
     }
@@ -476,43 +472,7 @@ public class MerchantPayoutService {
         if (!hasText(request.transferSceneId())) {
             throw new IllegalArgumentException("抖音代付必须填写已开通的转账场景 ID 和场景报备信息");
         }
-        normalizedTransferRequestIp(channel.getDouyin().getTransferRequestIp());
         douyinSceneReportInfos(request);
-    }
-
-    static String normalizedTransferRequestIp(String value) {
-        if (!hasText(value)) {
-            throw new IllegalArgumentException("抖音商家代付必须配置转账请求 IP");
-        }
-        String ip = value.trim();
-        if (ip.contains(":")) {
-            if (!ip.matches("[0-9A-Fa-f:]+")) {
-                throw new IllegalArgumentException("抖音转账请求 IP 格式不正确");
-            }
-            try {
-                if (!(InetAddress.getByName(ip) instanceof Inet6Address)) {
-                    throw new IllegalArgumentException("抖音转账请求 IP 格式不正确");
-                }
-            } catch (UnknownHostException ex) {
-                throw new IllegalArgumentException("抖音转账请求 IP 格式不正确", ex);
-            }
-            return ip;
-        }
-
-        String[] parts = ip.split("\\.", -1);
-        if (parts.length != 4) {
-            throw new IllegalArgumentException("抖音转账请求 IP 格式不正确");
-        }
-        for (String part : parts) {
-            if (!part.matches("\\d{1,3}")) {
-                throw new IllegalArgumentException("抖音转账请求 IP 格式不正确");
-            }
-            int octet = Integer.parseInt(part);
-            if (octet > 255) {
-                throw new IllegalArgumentException("抖音转账请求 IP 格式不正确");
-            }
-        }
-        return ip;
     }
 
     static List<Map<String, String>> douyinSceneReportInfos(MerchantPayoutCreateRequest request) {

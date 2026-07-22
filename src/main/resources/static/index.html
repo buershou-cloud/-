@@ -2540,7 +2540,6 @@
           <p class="wide douyin-channel-field cert-upload-hint hidden">证书只需选择文件上传；编辑通道时未选择新文件，不会覆盖后台已保存的证书。</p>
           <label class="douyin-channel-field hidden">通知加密密钥<input id="newDouyinEncryptKey" type="password" autocomplete="new-password" placeholder="必须正好 32 字节"></label>
           <label class="douyin-channel-field hidden">H5 应用名称<input id="newDouyinH5AppName" value="支付平台" placeholder="支付平台"></label>
-          <label class="douyin-channel-field hidden">商家代付请求 IP<input id="newDouyinTransferRequestIp" placeholder="例如 121.43.135.6"></label>
           <label class="douyin-channel-field hidden">抖音支付网关<input id="newDouyinGatewayUrl" value="https://api.douyinpay.com"></label>
           <label class="douyin-channel-field hidden">抖音异步通知地址<input id="newDouyinNotifyUrl" readonly></label>
           <label class="douyin-channel-field hidden">H5 应用网址（网站首页）<input id="newDouyinReturnUrl" readonly></label>
@@ -5671,7 +5670,6 @@
     $("newChannelGatewayUrl").value = "https://openapi.alipay.com/gateway.do";
     $("newDouyinGatewayUrl").value = "https://api.douyinpay.com";
     $("newDouyinH5AppName").value = "支付平台";
-    $("newDouyinTransferRequestIp").value = "";
     $("newDouyinMerchantPrivateKeyFile").value = "";
     $("newDouyinMerchantCertificate").value = "";
     $("newDouyinMerchantCertificateFile").value = "";
@@ -5721,7 +5719,6 @@
     $("newDouyinPlatformCertificateFile").value = "";
     $("newDouyinEncryptKey").value = "";
     $("newDouyinH5AppName").value = channel.douyinH5AppName || "支付平台";
-    $("newDouyinTransferRequestIp").value = channel.douyinTransferRequestIp || "";
     $("newDouyinGatewayUrl").value = channel.douyinGatewayUrl || "https://api.douyinpay.com";
     syncChannelCallbackUrls();
     $("newChannelAlipayPublicKey").required = false;
@@ -5767,8 +5764,7 @@
         douyinMerchantSerialNo: $("newDouyinMerchantSerialNo").value,
         douyinNotifyUrl: $("newDouyinNotifyUrl").value,
         douyinReturnUrl: $("newDouyinReturnUrl").value,
-        douyinH5AppName: $("newDouyinH5AppName").value,
-        douyinTransferRequestIp: $("newDouyinTransferRequestIp").value
+        douyinH5AppName: $("newDouyinH5AppName").value
       }));
       const merchantPrivateKey = await readCertificateFile("newDouyinMerchantPrivateKeyFile");
       const encryptKey = $("newDouyinEncryptKey").value.trim();

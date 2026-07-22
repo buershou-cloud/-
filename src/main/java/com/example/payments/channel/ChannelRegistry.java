@@ -184,8 +184,7 @@ public class ChannelRegistry {
                        douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
                        douyin_merchant_certificate, douyin_merchant_private_key,
                        douyin_platform_certificate, douyin_encrypt_key,
-                       douyin_notify_url, douyin_return_url, douyin_h5_app_name,
-                       douyin_transfer_request_ip
+                       douyin_notify_url, douyin_return_url, douyin_h5_app_name
                 FROM pay_channel
                 """, (rs, rowNum) -> {
             PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
@@ -227,7 +226,6 @@ public class ChannelRegistry {
             douyin.setNotifyUrl(nullIfBlank(rs.getString("douyin_notify_url")));
             douyin.setReturnUrl(nullIfBlank(rs.getString("douyin_return_url")));
             douyin.setH5AppName(firstText(rs.getString("douyin_h5_app_name"), "支付平台"));
-            douyin.setTransferRequestIp(nullIfBlank(rs.getString("douyin_transfer_request_ip")));
             channel.setProducts(loadProducts(channel.getId()));
             return channel;
         });
@@ -263,11 +261,10 @@ public class ChannelRegistry {
                   douyin_gateway_url, douyin_app_id, douyin_mch_id, douyin_merchant_serial_no,
                   douyin_merchant_certificate, douyin_merchant_private_key,
                   douyin_platform_certificate, douyin_encrypt_key,
-                  douyin_notify_url, douyin_return_url, douyin_h5_app_name,
-                  douyin_transfer_request_ip
+                  douyin_notify_url, douyin_return_url, douyin_h5_app_name
                 ) VALUES (
                   ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+                  ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
                 )
                 """,
                 channel.getId(),
@@ -305,8 +302,7 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getDouyin().getEncryptKey()),
                 nullIfBlank(channel.getDouyin().getNotifyUrl()),
                 nullIfBlank(channel.getDouyin().getReturnUrl()),
-                firstText(channel.getDouyin().getH5AppName(), "支付平台"),
-                nullIfBlank(channel.getDouyin().getTransferRequestIp())
+                firstText(channel.getDouyin().getH5AppName(), "支付平台")
         );
         replaceProducts(channel);
     }
@@ -325,8 +321,7 @@ public class ChannelRegistry {
                     douyin_merchant_serial_no = ?, douyin_merchant_certificate = ?,
                     douyin_merchant_private_key = ?,
                     douyin_platform_certificate = ?, douyin_encrypt_key = ?,
-                    douyin_notify_url = ?, douyin_return_url = ?, douyin_h5_app_name = ?,
-                    douyin_transfer_request_ip = ?
+                    douyin_notify_url = ?, douyin_return_url = ?, douyin_h5_app_name = ?
                 WHERE id = ?
                 """,
                 firstText(channel.getProvider(), "ALIPAY"),
@@ -364,7 +359,6 @@ public class ChannelRegistry {
                 nullIfBlank(channel.getDouyin().getNotifyUrl()),
                 nullIfBlank(channel.getDouyin().getReturnUrl()),
                 firstText(channel.getDouyin().getH5AppName(), "支付平台"),
-                nullIfBlank(channel.getDouyin().getTransferRequestIp()),
                 channel.getId()
         );
         replaceProducts(channel);

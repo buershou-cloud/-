@@ -13,6 +13,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class PaymentGatewayApplication {
 
     public static void main(String[] args) {
+        if (System.getProperty("java.net.preferIPv4Stack") == null
+                && System.getProperty("java.net.preferIPv6Addresses") == null) {
+            System.setProperty("java.net.preferIPv4Stack", "true");
+        }
         SpringApplication.run(PaymentGatewayApplication.class, args);
     }
 }

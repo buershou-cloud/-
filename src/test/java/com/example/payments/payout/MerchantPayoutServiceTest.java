@@ -27,18 +27,6 @@ class MerchantPayoutServiceTest {
     }
 
     @Test
-    void validatesDouyinTransferRequestIp() {
-        assertThat(MerchantPayoutService.normalizedTransferRequestIp("121.43.135.6"))
-                .isEqualTo("121.43.135.6");
-        assertThat(MerchantPayoutService.normalizedTransferRequestIp("2001:db8::1"))
-                .isEqualTo("2001:db8::1");
-        assertThatThrownBy(() -> MerchantPayoutService.normalizedTransferRequestIp("api.example.com"))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> MerchantPayoutService.normalizedTransferRequestIp("121.43.135.999"))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    @Test
     void onlyAcceptsRecipientTypesForTheSelectedProvider() {
         assertThat(MerchantPayoutService.normalizedRecipientType("ALIPAY", "alipay_open_id"))
                 .isEqualTo("ALIPAY_OPEN_ID");
