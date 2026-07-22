@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS pay_channel (
   douyin_notify_url VARCHAR(512) NULL COMMENT '抖音支付异步通知地址',
   douyin_return_url VARCHAR(512) NULL COMMENT '抖音 H5 支付完成返回地址',
   douyin_h5_app_name VARCHAR(127) NULL DEFAULT '支付平台' COMMENT 'H5 场景应用名称',
+  douyin_transfer_request_ip VARCHAR(45) NULL COMMENT '抖音商家转账请求出口 IP',
   remark VARCHAR(255) NULL COMMENT '备注',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

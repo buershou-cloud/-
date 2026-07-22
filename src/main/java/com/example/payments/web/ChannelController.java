@@ -164,7 +164,8 @@ public class ChannelController {
                 hasText(channel.getDouyin().getEncryptKey()),
                 channel.getDouyin().getNotifyUrl(),
                 channel.getDouyin().getReturnUrl(),
-                channel.getDouyin().getH5AppName()
+                channel.getDouyin().getH5AppName(),
+                channel.getDouyin().getTransferRequestIp()
         );
     }
 
@@ -216,6 +217,7 @@ public class ChannelController {
         setIfPresent(request.douyinNotifyUrl(), douyin::setNotifyUrl);
         setIfPresent(request.douyinReturnUrl(), douyin::setReturnUrl);
         setIfPresent(request.douyinH5AppName(), douyin::setH5AppName);
+        setIfPresent(request.douyinTransferRequestIp(), douyin::setTransferRequestIp);
     }
 
     private void applyDouyinConfig(PaymentGatewayProperties.Douyin douyin, ChannelUpdateRequest request) {
@@ -230,6 +232,7 @@ public class ChannelController {
         setIfPresent(request.douyinNotifyUrl(), douyin::setNotifyUrl);
         setIfPresent(request.douyinReturnUrl(), douyin::setReturnUrl);
         setIfPresent(request.douyinH5AppName(), douyin::setH5AppName);
+        setIfPresent(request.douyinTransferRequestIp(), douyin::setTransferRequestIp);
     }
 
     private static void applyDouyinMerchantCertificate(
@@ -463,7 +466,8 @@ public class ChannelController {
             boolean hasDouyinEncryptKey,
             String douyinNotifyUrl,
             String douyinReturnUrl,
-            String douyinH5AppName
+            String douyinH5AppName,
+            String douyinTransferRequestIp
     ) {
     }
 

@@ -390,6 +390,7 @@ public class PaymentGatewayProperties {
         private String encryptKey;
         private String notifyUrl;
         private String returnUrl;
+        private String transferRequestIp;
         private String h5AppName = "支付平台";
 
         public String getGatewayUrl() { return gatewayUrl; }
@@ -414,5 +415,7 @@ public class PaymentGatewayProperties {
         public void setReturnUrl(String returnUrl) { this.returnUrl = returnUrl; }
         public String getH5AppName() { return h5AppName; }
         public void setH5AppName(String h5AppName) { this.h5AppName = h5AppName; }
+        public String getTransferRequestIp() { return transferRequestIp; }
+        public void setTransferRequestIp(String transferRequestIp) { this.transferRequestIp = transferRequestIp; }
     }
 }
