@@ -5023,7 +5023,8 @@
   }
 
   function payoutPayload() {
-    return compact({
+    const channel = selectedPayoutChannel();
+    const payload = {
       channelId: $("payoutChannel").value,
       outBizNo: $("payoutOutBizNo").value.trim(),
       amount: $("payoutAmount").value,
@@ -5032,22 +5033,28 @@
       recipientName: $("payoutRecipientName").value.trim(),
       orderTitle: $("payoutOrderTitle").value.trim(),
       remark: $("payoutRemark").value.trim(),
-      transferSceneId: $("payoutTransferSceneId").value.trim(),
-      sceneReportInfos: payoutSceneReportInfos(false),
       paymentPassword: $("payoutPaymentPassword").value
-    });
+    };
+    if (channel?.provider === "DOUYIN") {
+      payload.transferSceneId = $("payoutTransferSceneId").value.trim();
+      payload.sceneReportInfos = payoutSceneReportInfos(false);
+    }
+    return compact(payload);
   }
 
   function payoutBatchPayload() {
     const channelId = $("payoutBatchChannel").value;
     if (!channelId) throw { message: "请选择批量代付通道" };
+    const channel = selectedPayoutChannel("payoutBatchChannel");
     const common = {
       channelId,
       orderTitle: $("payoutBatchOrderTitle").value.trim(),
-      remark: $("payoutBatchRemark").value.trim(),
-      transferSceneId: $("payoutBatchTransferSceneId").value.trim(),
-      sceneReportInfos: payoutSceneReportInfos(true)
+      remark: $("payoutBatchRemark").value.trim()
     };
+    if (channel?.provider === "DOUYIN") {
+      common.transferSceneId = $("payoutBatchTransferSceneId").value.trim();
+      common.sceneReportInfos = payoutSceneReportInfos(true);
+    }
     const items = Array.from($("payoutBatchRows").querySelectorAll("tr")).map((row) => compact({
       ...common,
       outBizNo: row.querySelector('[data-batch-field="outBizNo"]').value.trim(),

@@ -316,7 +316,7 @@ public class MerchantPayoutService {
                     amount,
                     limit(firstText(request.orderTitle(), "商家代付"), 64),
                     limit(firstText(request.remark(), "商家代付"), provider.equals(PROVIDER_DOUYIN) ? 32 : 200),
-                    trimToNull(request.transferSceneId()),
+                    persistedTransferSceneId(provider, request.transferSceneId()),
                     STATUS_PENDING,
                     json(auditRequest)
             );
@@ -529,6 +529,10 @@ public class MerchantPayoutService {
             return type;
         }
         throw new IllegalArgumentException("收款标识类型与所选代付通道不匹配");
+    }
+
+    static String persistedTransferSceneId(String provider, String value) {
+        return PROVIDER_DOUYIN.equals(provider) ? trimToNull(value) : null;
     }
 
     static String alipayStatus(String value) {

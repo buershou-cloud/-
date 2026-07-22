@@ -34,6 +34,14 @@ class MerchantPayoutServiceTest {
                 .isEqualTo("DOUYIN_PHONE");
         assertThatThrownBy(() -> MerchantPayoutService.normalizedRecipientType("ALIPAY", "DOUYIN_OPEN_ID"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> MerchantPayoutService.normalizedRecipientType("DOUYIN", "ALIPAY_OPEN_ID"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void onlyPersistsTransferSceneIdForDouyinPayouts() {
+        assertThat(MerchantPayoutService.persistedTransferSceneId("ALIPAY", "1003")).isNull();
+        assertThat(MerchantPayoutService.persistedTransferSceneId("DOUYIN", " 1003 ")).isEqualTo("1003");
     }
 
     @Test
