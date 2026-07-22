@@ -99,6 +99,29 @@ public class DemoOrderService {
                 .toList();
     }
 
+    public synchronized List<DouyinPendingRefund> pendingDouyinRefunds(int limit) {
+        if (!databaseBacked()) {
+            return List.of();
+        }
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        return jdbcTemplate.query("""
+                        SELECT r.channel_id, r.out_trade_no, r.out_request_no
+                        FROM refund_order r
+                        INNER JOIN pay_channel c ON c.id = r.channel_id
+                        WHERE r.status = 'PENDING'
+                          AND UPPER(c.provider) = 'DOUYIN'
+                        ORDER BY r.updated_at ASC, r.id ASC
+                        LIMIT ?
+                        """,
+                (resultSet, rowNum) -> new DouyinPendingRefund(
+                        resultSet.getString("channel_id"),
+                        resultSet.getString("out_trade_no"),
+                        resultSet.getString("out_request_no")
+                ),
+                safeLimit
+        );
+    }
+
     public synchronized List<DemoOrderView> search(
             String beginTime,
             String endTime,
@@ -1128,7 +1151,11 @@ public class DemoOrderService {
             GatewayResponse response,
             BigDecimal refundAmount
     ) {
-        String refundStatus = response.status() == PaymentStatus.SUCCESS ? "SUCCESS" : "PENDING";
+        String refundStatus = switch (response.status()) {
+            case SUCCESS -> "SUCCESS";
+            case FAILED, CLOSED -> "FAILED";
+            default -> "PENDING";
+        };
         jdbcTemplate.update("""
                 INSERT INTO refund_order (
                     out_request_no, out_trade_no, trade_no, merchant_id, channel_id, refund_amount,

@@ -320,6 +320,29 @@ class DouyinPaymentProviderTest {
     }
 
     @Test
+    void queriesRefundByMerchantRefundNumber() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.get(any(), eq("/v1/trade/refund/domestic/refunds/REFUND-QUERY-1?mchid=dy-mch-1")))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of("data", Map.of(
+                                "refund_status", "SUCCESS",
+                                "out_trade_no", "ORDER-QUERY-1",
+                                "refund_id", "DY-REFUND-1"
+                        )),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+
+        GatewayResponse response = provider.queryRefund(channel(), "REFUND-QUERY-1");
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(response.outTradeNo()).isEqualTo("ORDER-QUERY-1");
+        assertThat(response.tradeNo()).isEqualTo("DY-REFUND-1");
+    }
+
+    @Test
     void mapsDouyinPayErrorToFailedStatus() {
         DouyinPayClient client = mock(DouyinPayClient.class);
         when(client.get(any(), eq("/v1/trade/transactions/out-trade-no/ORDER-FAILED?mchid=dy-mch-1")))

@@ -265,6 +265,44 @@ public class DouyinPaymentProvider implements PaymentProvider {
         );
     }
 
+    public GatewayResponse queryRefund(
+            PaymentGatewayProperties.Channel channel,
+            String outRefundNo
+    ) {
+        String normalizedOutRefundNo = required(outRefundNo, "Douyin Pay outRefundNo is required");
+        String mchId = required(channel.getDouyin().getMchId(), "Douyin Pay mchId is required");
+        String requestPath = REFUND_PATH + "/" + path(normalizedOutRefundNo) + "?mchid=" + query(mchId);
+        DouyinGatewayResponse response = client.get(channel, requestPath);
+        Map<String, Object> responseBody = response.body();
+        String state = firstText(
+                text(responseBody, "refund_status"),
+                text(responseBody, "refund_state"),
+                nestedText(responseBody, "data", "refund_status"),
+                nestedText(responseBody, "data", "refund_state"),
+                nestedText(responseBody, "data", "status"),
+                nestedText(responseBody, "data", "state"),
+                text(responseBody, "status"),
+                text(responseBody, "state")
+        );
+        return new GatewayResponse(
+                channel.getId(),
+                refundStatus(state),
+                firstText(text(responseBody, "code"), nestedText(responseBody, "data", "code"), "SUCCESS"),
+                firstText(
+                        text(responseBody, "message"),
+                        nestedText(responseBody, "data", "message"),
+                        state,
+                        "Douyin Pay refund queried"
+                ),
+                firstText(text(responseBody, "out_trade_no"), nestedText(responseBody, "data", "out_trade_no")),
+                firstText(text(responseBody, "refund_id"), nestedText(responseBody, "data", "refund_id")),
+                null,
+                null,
+                responseRaw(response, requestPath),
+                List.of()
+        );
+    }
+
     @Override
     public GatewayResponse preauthQuery(PaymentGatewayProperties.Channel channel, PaymentQueryRequest request) {
         throw unsupported("pre-authorization query");
