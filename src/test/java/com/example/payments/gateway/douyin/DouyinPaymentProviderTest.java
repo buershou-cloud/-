@@ -179,6 +179,32 @@ class DouyinPaymentProviderTest {
     }
 
     @Test
+    void mapsNestedDouyinQueryStateToGatewayStatus() {
+        DouyinPayClient client = mock(DouyinPayClient.class);
+        when(client.get(any(), eq("/v1/trade/transactions/out-trade-no/ORDER-NESTED?mchid=dy-mch-1")))
+                .thenReturn(new DouyinGatewayResponse(
+                        200,
+                        Map.of("data", Map.of(
+                                "trade_state", " success ",
+                                "out_trade_no", "ORDER-NESTED",
+                                "transaction_id", "DY-NESTED"
+                        )),
+                        "{}",
+                        Map.of()
+                ));
+        DouyinPaymentProvider provider = new DouyinPaymentProvider(client);
+
+        GatewayResponse response = provider.query(
+                channel(),
+                new PaymentQueryRequest("ORDER-NESTED", null, null, List.of("douyin-test"), Map.of())
+        );
+
+        assertThat(response.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(response.outTradeNo()).isEqualTo("ORDER-NESTED");
+        assertThat(response.tradeNo()).isEqualTo("DY-NESTED");
+    }
+
+    @Test
     void submitsOfficialRefundRequestWithFenAmountsAndCallback() {
         DouyinPayClient client = mock(DouyinPayClient.class);
         when(client.post(any(), eq("/v1/trade/refund/domestic/refunds"), anyMap()))

@@ -55,6 +55,49 @@ public class DemoOrderService {
         return search(null, null, null, null, null);
     }
 
+    public synchronized List<DemoOrderView> pendingDouyinOrders(int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 100));
+        if (databaseBacked()) {
+            return jdbcTemplate.query("""
+                            SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
+                                   COALESCE(m.name, o.merchant_id) AS merchant_name,
+                                   o.product, o.subject, o.amount, o.status, o.created_at,
+                                   o.pre_authorization, o.supplemented, o.profit_shared,
+                                   COALESCE((
+                                       SELECT SUM(r.refund_amount)
+                                       FROM refund_order r
+                                       WHERE r.out_trade_no = o.out_trade_no
+                                         AND r.status = 'SUCCESS'
+                                   ), 0) AS refunded_amount,
+                                   COALESCE((
+                                       SELECT SUM(u.amount)
+                                       FROM preauth_unfreeze_order u
+                                       WHERE u.out_trade_no = o.out_trade_no
+                                         AND u.status = 'SUCCESS'
+                                   ), 0) AS preauth_unfrozen_amount
+                            FROM pay_order o
+                            LEFT JOIN merchant m ON m.merchant_id = o.merchant_id
+                            INNER JOIN pay_channel c ON c.id = o.channel_id
+                            WHERE o.status = 'UNPAID'
+                              AND c.provider = 'DOUYIN'
+                              AND o.created_at >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY)
+                            ORDER BY o.created_at DESC, o.out_trade_no DESC
+                            LIMIT ?
+                            """,
+                            this::mapOrder,
+                            safeLimit)
+                    .stream()
+                    .map(DemoOrderView::from)
+                    .toList();
+        }
+        return orders.values().stream()
+                .filter(order -> order.getStatus() == DemoOrderStatus.UNPAID)
+                .filter(order -> hasText(order.getProductName()) && order.getProductName().contains("抖音"))
+                .limit(safeLimit)
+                .map(DemoOrderView::from)
+                .toList();
+    }
+
     public synchronized List<DemoOrderView> search(
             String beginTime,
             String endTime,

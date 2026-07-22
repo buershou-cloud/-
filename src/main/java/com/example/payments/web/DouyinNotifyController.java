@@ -11,6 +11,8 @@ import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,10 +23,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/v1/douyin")
 public class DouyinNotifyController {
+
+    private static final Logger log = LoggerFactory.getLogger(DouyinNotifyController.class);
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
     };
@@ -79,11 +84,12 @@ public class DouyinNotifyController {
                 required(resource, "ciphertext"),
                 channel.getDouyin().getEncryptKey()
         );
-        Map<String, Object> payload = json(
+        Map<String, Object> decryptedPayload = json(
                 plainText,
                 "DOUYIN_NOTIFY_RESOURCE_INVALID",
                 "Invalid encrypted Douyin Pay notification resource"
         );
+        Map<String, Object> payload = bodyOrData(decryptedPayload);
         validateMerchant(channel, payload);
 
         String eventType = text(event, "event_type");
@@ -95,13 +101,15 @@ public class DouyinNotifyController {
                     refundStatus,
                     text(payload, "refund_id")
             );
-            return ResponseEntity.noContent().build();
+            log.info("Processed Douyin refund notification channel={} outRefundNo={} status={}",
+                    channelId, text(payload, "out_refund_no"), refundStatus);
+            return ResponseEntity.ok().build();
         }
 
         if (isProfitSharingNotification(eventType, originalType, payload)) {
             // Profit-sharing is asynchronous. Its final state remains queryable with out_order_no,
             // and acknowledging the verified notification prevents unnecessary platform retries.
-            return ResponseEntity.noContent().build();
+            return ResponseEntity.ok().build();
         }
 
         String outTradeNo = required(payload, "out_trade_no");
@@ -113,7 +121,9 @@ public class DouyinNotifyController {
                 paymentStatus(tradeState)
         );
         merchantNotifyService.notifyPayment(order, tradeState);
-        return ResponseEntity.noContent().build();
+        log.info("Processed Douyin payment notification channel={} outTradeNo={} tradeState={} localStatus={}",
+                channelId, outTradeNo, tradeState, order.status());
+        return ResponseEntity.ok().build();
     }
 
     private void validateMerchant(PaymentGatewayProperties.Channel channel, Map<String, Object> payload) {
@@ -143,10 +153,20 @@ public class DouyinNotifyController {
         throw new GatewayException("DOUYIN_NOTIFY_RESOURCE_MISSING", "Douyin Pay notification resource is missing");
     }
 
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> bodyOrData(Map<String, Object> payload) {
+        Object nested = payload == null ? null : payload.get("data");
+        if (nested instanceof Map<?, ?> result) {
+            return (Map<String, Object>) result;
+        }
+        return payload;
+    }
+
     private static PaymentStatus paymentStatus(String tradeState) {
-        return switch (tradeState) {
+        String state = tradeState == null ? "" : tradeState.trim().toUpperCase(Locale.ROOT);
+        return switch (state) {
             case "SUCCESS" -> PaymentStatus.SUCCESS;
-            case "CLOSED" -> PaymentStatus.CLOSED;
+            case "CLOSED", "REVOKED" -> PaymentStatus.CLOSED;
             case "NOTPAY", "USERPAYING" -> PaymentStatus.PAYING;
             case "PAYERROR" -> PaymentStatus.FAILED;
             default -> PaymentStatus.UNKNOWN;

@@ -15,6 +15,35 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class DemoOrderServiceTest {
 
     @Test
+    void douyinPaymentSuccessMarksOriginalOrderCompleted() {
+        DemoOrderService service = new DemoOrderService();
+        service.recordPaymentCreated(
+                "DOUYIN-ORDER-001",
+                null,
+                "douyin-main",
+                "M10001",
+                "merchant",
+                "DOUYIN_H5",
+                new BigDecimal("3.00"),
+                false,
+                PaymentStatus.CREATED
+        );
+
+        DemoOrderView completed = service.recordPaymentResult(
+                "DOUYIN-ORDER-001",
+                "DOUYIN-TRANSACTION-001",
+                "douyin-main",
+                PaymentStatus.SUCCESS
+        );
+
+        assertThat(completed.status()).isEqualTo(DemoOrderStatus.COMPLETED);
+        assertThat(completed.tradeNo()).isEqualTo("DOUYIN-TRANSACTION-001");
+        assertThat(service.recent())
+                .extracting(DemoOrderView::outTradeNo)
+                .containsExactly("DOUYIN-ORDER-001");
+    }
+
+    @Test
     void recordPaymentCreatedKeepsCashierSubjectSeparateFromProductName() {
         DemoOrderService service = new DemoOrderService();
 

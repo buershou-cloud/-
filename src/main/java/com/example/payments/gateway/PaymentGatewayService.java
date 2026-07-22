@@ -33,6 +33,8 @@ import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.MerchantRouting;
 import com.example.payments.onboarding.OnboardingRecordService;
 import com.example.payments.sharing.ProfitSharingRelationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -47,6 +49,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class PaymentGatewayService {
+
+    private static final Logger log = LoggerFactory.getLogger(PaymentGatewayService.class);
 
     private final PaymentGatewayProperties properties;
     private final ChannelSelector channelSelector;
@@ -709,13 +713,21 @@ public class PaymentGatewayService {
     }
 
     private void syncLocalPaymentStatus(String outTradeNo, GatewayResponse response) {
-        if (!hasText(outTradeNo) || response == null || response.status() == PaymentStatus.FAILED) {
+        if (response == null || response.status() == PaymentStatus.FAILED) {
+            return;
+        }
+        String localOutTradeNo = firstText(outTradeNo, response.outTradeNo());
+        if (!hasText(localOutTradeNo)) {
+            log.warn("Skipped local payment status sync because outTradeNo is missing: channel={}, tradeNo={}, status={}",
+                    response.channelId(), response.tradeNo(), response.status());
             return;
         }
         try {
-            orderService.recordPaymentResult(outTradeNo, response.tradeNo(), response.channelId(), response.status());
-        } catch (RuntimeException ignored) {
-            // Alipay is authoritative; a local demo order sync error must not hide the gateway response.
+            orderService.recordPaymentResult(localOutTradeNo, response.tradeNo(), response.channelId(), response.status());
+        } catch (RuntimeException ex) {
+            // The payment platform remains authoritative; keep returning its response while exposing the local sync error.
+            log.warn("Failed to sync payment result locally: outTradeNo={}, channel={}, tradeNo={}, status={}",
+                    localOutTradeNo, response.channelId(), response.tradeNo(), response.status(), ex);
         }
     }
 

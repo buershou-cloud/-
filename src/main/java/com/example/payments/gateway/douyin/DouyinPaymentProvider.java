@@ -31,6 +31,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -460,13 +461,20 @@ public class DouyinPaymentProvider implements PaymentProvider {
             String fallbackOutTradeNo,
             String path
     ) {
+        Map<String, Object> body = response.body();
+        String tradeState = firstText(text(body, "trade_state"), nestedText(body, "data", "trade_state"));
         return new GatewayResponse(
                 channelId,
-                tradeStatus(text(response.body(), "trade_state")),
-                firstText(text(response.body(), "code"), "SUCCESS"),
-                firstText(text(response.body(), "trade_state_desc"), text(response.body(), "message")),
-                firstText(text(response.body(), "out_trade_no"), fallbackOutTradeNo),
-                text(response.body(), "transaction_id"),
+                tradeStatus(tradeState),
+                firstText(text(body, "code"), nestedText(body, "data", "code"), "SUCCESS"),
+                firstText(
+                        text(body, "trade_state_desc"),
+                        nestedText(body, "data", "trade_state_desc"),
+                        text(body, "message"),
+                        nestedText(body, "data", "message")
+                ),
+                firstText(text(body, "out_trade_no"), nestedText(body, "data", "out_trade_no"), fallbackOutTradeNo),
+                firstText(text(body, "transaction_id"), nestedText(body, "data", "transaction_id")),
                 null,
                 null,
                 responseRaw(response, path),
@@ -475,16 +483,17 @@ public class DouyinPaymentProvider implements PaymentProvider {
     }
 
     private static PaymentStatus tradeStatus(String value) {
-        if ("SUCCESS".equals(value)) {
+        String state = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+        if ("SUCCESS".equals(state)) {
             return PaymentStatus.SUCCESS;
         }
-        if ("CLOSED".equals(value)) {
+        if ("CLOSED".equals(state) || "REVOKED".equals(state)) {
             return PaymentStatus.CLOSED;
         }
-        if ("NOTPAY".equals(value) || "USERPAYING".equals(value)) {
+        if ("NOTPAY".equals(state) || "USERPAYING".equals(state)) {
             return PaymentStatus.PAYING;
         }
-        if ("PAYERROR".equals(value)) {
+        if ("PAYERROR".equals(state)) {
             return PaymentStatus.FAILED;
         }
         return PaymentStatus.UNKNOWN;
