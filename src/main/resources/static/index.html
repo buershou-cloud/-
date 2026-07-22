@@ -997,7 +997,20 @@
     }
 
     .channel-main .stat-row {
-      margin-bottom: 16px;
+      grid-template-columns: repeat(2, minmax(160px, 240px));
+      justify-content: start;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .channel-main .small-stat {
+      min-height: 70px;
+      padding: 12px 14px;
+    }
+
+    .channel-main .small-stat strong {
+      margin-top: 5px;
+      font-size: 20px;
     }
 
     .add-channel-form {
@@ -1182,16 +1195,16 @@
     }
 
     .channel-actions {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
       gap: 8px;
-      align-items: center;
+      min-width: 176px;
+      align-items: stretch;
     }
 
     .cashier-product-picker {
       display: grid;
       gap: 4px;
-      min-width: 132px;
+      min-width: 0;
       font-size: 12px;
       font-weight: 800;
       color: var(--muted);
@@ -1209,6 +1222,16 @@
 
     .cashier-product-picker.empty {
       color: #ef4444;
+    }
+
+    .channel-action-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .channel-action-grid .btn {
+      width: 100%;
     }
 
     .channel-modal {
@@ -1886,9 +1909,20 @@
 
     .content {
       width: 100%;
-      max-width: 1840px;
-      margin: 0 auto;
-      padding: 20px 24px 40px;
+      max-width: none;
+      margin: 0;
+      padding: 18px 18px 36px;
+    }
+
+    .channel-table th,
+    .channel-table td {
+      padding-left: 12px;
+      padding-right: 12px;
+      vertical-align: top;
+    }
+
+    .channel-table td:last-child {
+      min-width: 200px;
     }
 
     .overview-grid {
@@ -5798,10 +5832,12 @@
         <td>
           <div class="channel-actions">
             ${cashierProductPickerHtml(channel)}
-            <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
-            <button class="btn secondary small" type="button" data-channel-save="${html(channel.id)}">保存</button>
-            <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">二维码</button>
-            <button class="btn danger small" type="button" data-channel-delete="${html(channel.id)}">删除</button>
+            <div class="channel-action-grid">
+              <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
+              <button class="btn secondary small" type="button" data-channel-save="${html(channel.id)}">保存</button>
+              <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">二维码</button>
+              <button class="btn danger small" type="button" data-channel-delete="${html(channel.id)}">删除</button>
+            </div>
           </div>
         </td>
       </tr>
