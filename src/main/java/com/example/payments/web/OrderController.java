@@ -4,6 +4,7 @@ import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.gateway.PaymentGatewayService;
+import com.example.payments.gateway.douyin.DouyinPaymentReconciliationService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
 import jakarta.validation.Valid;
@@ -24,10 +25,16 @@ public class OrderController {
 
     private final DemoOrderService orderService;
     private final PaymentGatewayService paymentGatewayService;
+    private final DouyinPaymentReconciliationService douyinReconciliationService;
 
-    public OrderController(DemoOrderService orderService, PaymentGatewayService paymentGatewayService) {
+    public OrderController(
+            DemoOrderService orderService,
+            PaymentGatewayService paymentGatewayService,
+            DouyinPaymentReconciliationService douyinReconciliationService
+    ) {
         this.orderService = orderService;
         this.paymentGatewayService = paymentGatewayService;
+        this.douyinReconciliationService = douyinReconciliationService;
     }
 
     @GetMapping("/recent")
@@ -36,9 +43,15 @@ public class OrderController {
             @RequestParam(required = false) String endTime,
             @RequestParam(required = false) String outTradeNo,
             @RequestParam(required = false) String tradeNo,
-            @RequestParam(required = false) String channelId
+            @RequestParam(required = false) String channelId,
+            @RequestParam(defaultValue = "false") boolean refreshStatuses
     ) {
-        return orderService.search(beginTime, endTime, outTradeNo, tradeNo, channelId);
+        List<DemoOrderView> orders = orderService.search(beginTime, endTime, outTradeNo, tradeNo, channelId);
+        if (refreshStatuses) {
+            douyinReconciliationService.reconcileVisibleOrders(orders);
+            return orderService.search(beginTime, endTime, outTradeNo, tradeNo, channelId);
+        }
+        return orders;
     }
 
     @PostMapping("/{outTradeNo}/complete")

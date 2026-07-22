@@ -2,10 +2,10 @@ package com.example.payments.web;
 
 import com.example.payments.channel.ChannelRegistry;
 import com.example.payments.config.PaymentGatewayProperties;
-import com.example.payments.domain.PaymentStatus;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.douyin.DouyinPayClient;
 import com.example.payments.gateway.douyin.DouyinSignatureSupport;
+import com.example.payments.gateway.douyin.DouyinTradeState;
 import com.example.payments.merchant.api.MerchantNotifyService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
@@ -23,7 +23,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
-import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/v1/douyin")
@@ -118,7 +117,7 @@ public class DouyinNotifyController {
                 outTradeNo,
                 text(payload, "transaction_id"),
                 channelId,
-                paymentStatus(tradeState)
+                DouyinTradeState.toPaymentStatus(tradeState)
         );
         merchantNotifyService.notifyPayment(order, tradeState);
         log.info("Processed Douyin payment notification channel={} outTradeNo={} tradeState={} localStatus={}",
@@ -160,17 +159,6 @@ public class DouyinNotifyController {
             return (Map<String, Object>) result;
         }
         return payload;
-    }
-
-    private static PaymentStatus paymentStatus(String tradeState) {
-        String state = tradeState == null ? "" : tradeState.trim().toUpperCase(Locale.ROOT);
-        return switch (state) {
-            case "SUCCESS" -> PaymentStatus.SUCCESS;
-            case "CLOSED", "REVOKED" -> PaymentStatus.CLOSED;
-            case "NOTPAY", "USERPAYING" -> PaymentStatus.PAYING;
-            case "PAYERROR" -> PaymentStatus.FAILED;
-            default -> PaymentStatus.UNKNOWN;
-        };
     }
 
     private static boolean isProfitSharingNotification(

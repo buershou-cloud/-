@@ -3867,6 +3867,7 @@
       if (value && value.trim()) params.set(key, value.trim());
     });
     if (forceFresh) {
+      params.set("refreshStatuses", "true");
       params.set("_", String(Date.now()));
     }
     const query = params.toString();
@@ -6412,7 +6413,7 @@
 
   $("orderFilterForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await loadOrders(true);
+    await loadOrders(true, true);
     setDashboardResult({ message: `已查询到 ${state.orders.length} 笔订单` });
   });
 

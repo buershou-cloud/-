@@ -31,7 +31,6 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 @Component
@@ -465,7 +464,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         String tradeState = firstText(text(body, "trade_state"), nestedText(body, "data", "trade_state"));
         return new GatewayResponse(
                 channelId,
-                tradeStatus(tradeState),
+                DouyinTradeState.toPaymentStatus(tradeState),
                 firstText(text(body, "code"), nestedText(body, "data", "code"), "SUCCESS"),
                 firstText(
                         text(body, "trade_state_desc"),
@@ -480,23 +479,6 @@ public class DouyinPaymentProvider implements PaymentProvider {
                 responseRaw(response, path),
                 List.of()
         );
-    }
-
-    private static PaymentStatus tradeStatus(String value) {
-        String state = value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-        if ("SUCCESS".equals(state)) {
-            return PaymentStatus.SUCCESS;
-        }
-        if ("CLOSED".equals(state) || "REVOKED".equals(state)) {
-            return PaymentStatus.CLOSED;
-        }
-        if ("NOTPAY".equals(state) || "USERPAYING".equals(state)) {
-            return PaymentStatus.PAYING;
-        }
-        if ("PAYERROR".equals(state)) {
-            return PaymentStatus.FAILED;
-        }
-        return PaymentStatus.UNKNOWN;
     }
 
     private static PaymentStatus refundStatus(String value) {

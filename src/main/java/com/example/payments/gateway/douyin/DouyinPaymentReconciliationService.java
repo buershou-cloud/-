@@ -1,10 +1,13 @@
 package com.example.payments.gateway.douyin;
 
+import com.example.payments.channel.ChannelRegistry;
+import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PaymentQueryRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.order.DemoOrderService;
+import com.example.payments.order.DemoOrderStatus;
 import com.example.payments.order.DemoOrderView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,18 +29,22 @@ public class DouyinPaymentReconciliationService {
     private static final Logger log = LoggerFactory.getLogger(DouyinPaymentReconciliationService.class);
     private static final int PENDING_SCAN_LIMIT = 100;
     private static final int QUERY_LIMIT_PER_RUN = 10;
+    private static final int QUERY_LIMIT_PER_REFRESH = 10;
 
     private final DemoOrderService orderService;
     private final PaymentGatewayService gatewayService;
+    private final ChannelRegistry channelRegistry;
     private final AtomicBoolean running = new AtomicBoolean();
     private final Map<String, RetryState> retries = new HashMap<>();
 
     public DouyinPaymentReconciliationService(
             DemoOrderService orderService,
-            PaymentGatewayService gatewayService
+            PaymentGatewayService gatewayService,
+            ChannelRegistry channelRegistry
     ) {
         this.orderService = orderService;
         this.gatewayService = gatewayService;
+        this.channelRegistry = channelRegistry;
     }
 
     @Scheduled(
@@ -54,6 +61,24 @@ public class DouyinPaymentReconciliationService {
             log.warn("Failed to scan pending Douyin payment orders", ex);
         } finally {
             running.set(false);
+        }
+    }
+
+    public void reconcileVisibleOrders(List<DemoOrderView> orders) {
+        if (orders == null || orders.isEmpty()) {
+            return;
+        }
+        int queried = 0;
+        for (DemoOrderView order : orders) {
+            if (queried >= QUERY_LIMIT_PER_REFRESH) {
+                return;
+            }
+            if (order.status() != DemoOrderStatus.UNPAID
+                    || !isDouyinChannel(order.channelId())) {
+                continue;
+            }
+            queried++;
+            queryOrder(order, true);
         }
     }
 
@@ -79,6 +104,16 @@ public class DouyinPaymentReconciliationService {
     }
 
     private void reconcile(DemoOrderView order, Instant now, int attempts) {
+        if (queryOrder(order, false)) {
+            retries.remove(order.outTradeNo());
+            return;
+        }
+
+        int nextAttempts = attempts + 1;
+        retries.put(order.outTradeNo(), new RetryState(nextAttempts, now.plus(backoff(nextAttempts))));
+    }
+
+    private boolean queryOrder(DemoOrderView order, boolean userRequested) {
         try {
             GatewayResponse response = gatewayService.query(new PaymentQueryRequest(
                     order.outTradeNo(),
@@ -95,19 +130,34 @@ public class DouyinPaymentReconciliationService {
                         order.channelId(),
                         response.status()
                 );
-                return;
+                return true;
             }
+            return false;
         } catch (RuntimeException ex) {
-            log.debug(
-                    "Douyin payment reconciliation query failed outTradeNo={} channel={}",
-                    order.outTradeNo(),
-                    order.channelId(),
-                    ex
-            );
+            if (userRequested) {
+                log.warn(
+                        "Douyin payment status refresh failed outTradeNo={} channel={} message={}",
+                        order.outTradeNo(),
+                        order.channelId(),
+                        ex.getMessage()
+                );
+            } else {
+                log.debug(
+                        "Douyin payment reconciliation query failed outTradeNo={} channel={}",
+                        order.outTradeNo(),
+                        order.channelId(),
+                        ex
+                );
+            }
+            return false;
         }
+    }
 
-        int nextAttempts = attempts + 1;
-        retries.put(order.outTradeNo(), new RetryState(nextAttempts, now.plus(backoff(nextAttempts))));
+    private boolean isDouyinChannel(String channelId) {
+        return channelRegistry.find(channelId)
+                .map(PaymentGatewayProperties.Channel::getProvider)
+                .map(provider -> "DOUYIN".equalsIgnoreCase(provider))
+                .orElse(false);
     }
 
     private static boolean terminal(PaymentStatus status) {
