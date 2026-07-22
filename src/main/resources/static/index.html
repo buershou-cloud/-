@@ -1667,42 +1667,578 @@
         font-size: 25px;
       }
     }
+
+    /* 2026 admin visual system */
+    :root {
+      --sidebar: #111827;
+      --sidebar-soft: #1f2937;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --page: #f5f7fa;
+      --surface: #ffffff;
+      --surface-subtle: #f8fafc;
+      --line: #e2e8f0;
+      --line-strong: #cbd5e1;
+      --text: #111827;
+      --muted: #64748b;
+      --green: #15803d;
+      --green-soft: #f0fdf4;
+      --red: #dc2626;
+      --red-soft: #fef2f2;
+      --yellow: #b45309;
+      --yellow-soft: #fffbeb;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.035);
+    }
+
+    html {
+      background: var(--page);
+    }
+
+    body {
+      min-width: 1180px;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    button,
+    [role="button"] {
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid rgba(37, 99, 235, 0.24);
+      outline-offset: 2px;
+    }
+
+    .app {
+      grid-template-columns: 236px minmax(0, 1fr);
+    }
+
+    .sidebar {
+      z-index: 30;
+      scrollbar-width: thin;
+      scrollbar-color: #475569 transparent;
+      border-right: 1px solid rgba(255, 255, 255, 0.06);
+      background: var(--sidebar);
+    }
+
+    .brand {
+      height: 64px;
+      gap: 11px;
+      padding: 0 18px;
+      border-bottom-color: rgba(255, 255, 255, 0.07);
+      font-size: 17px;
+      font-weight: 750;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: #2563eb;
+      font-size: 0;
+    }
+
+    .brand-mark svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .nav {
+      padding: 12px 10px 24px;
+    }
+
+    .nav-title {
+      padding: 15px 10px 6px;
+      color: #728197;
+      font-size: 11px;
+      font-weight: 750;
+      letter-spacing: 0;
+    }
+
+    .nav-btn,
+    .nav-group-toggle {
+      grid-template-columns: 24px minmax(0, 1fr);
+      min-height: 42px;
+      margin: 2px 0;
+      padding: 0 11px;
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-size: 14px;
+      font-weight: 650;
+      transition: color 0.16s ease, background 0.16s ease;
+    }
+
+    .nav-group-toggle {
+      grid-template-columns: 24px minmax(0, 1fr) auto;
+    }
+
+    .nav-btn:hover,
+    .nav-group-toggle:hover {
+      background: rgba(255, 255, 255, 0.065);
+    }
+
+    .nav-btn.active,
+    .nav-group-toggle.active {
+      background: #263b63;
+      color: #fff;
+      box-shadow: inset 3px 0 0 #60a5fa;
+    }
+
+    .nav-icon {
+      width: 18px;
+      height: 18px;
+      font-size: 0;
+    }
+
+    .nav-icon svg,
+    .metric-icon svg,
+    .nav-caret svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .nav-caret {
+      width: 16px;
+      height: 16px;
+      font-size: 0;
+    }
+
+    .nav-children {
+      margin: 2px 0 6px;
+      padding: 2px 0 2px 24px;
+      background: transparent;
+    }
+
+    .nav-child {
+      min-height: 38px;
+      padding-left: 12px;
+      font-size: 13px;
+    }
+
+    .shell {
+      min-height: 100vh;
+    }
+
+    .topbar {
+      min-height: 64px;
+      padding: 0 24px;
+      background: rgba(255, 255, 255, 0.97);
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.02);
+    }
+
+    .topbar-left {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+    }
+
+    .top-title {
+      overflow: hidden;
+      color: #0f172a;
+      font-size: 17px;
+      font-weight: 750;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .top-actions {
+      gap: 10px;
+      font-size: 13px;
+    }
+
+    .top-action-btn {
+      min-height: 36px;
+      padding: 7px 12px;
+      border-color: var(--line);
+      border-radius: 6px;
+      color: #334155;
+      transition: border-color 0.16s ease, background 0.16s ease;
+    }
+
+    .top-action-btn:hover {
+      border-color: var(--line-strong);
+      background: var(--surface-subtle);
+    }
+
+    .admin-dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 12px;
+    }
+
+    .content {
+      width: 100%;
+      max-width: 1840px;
+      margin: 0 auto;
+      padding: 20px 24px 40px;
+    }
+
+    .overview-grid {
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .metric-card {
+      grid-template-columns: 44px minmax(0, 1fr);
+      min-height: 88px;
+      padding: 16px;
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .metric-icon {
+      width: 36px;
+      height: 36px;
+      padding: 8px;
+      border-radius: 7px;
+      font-size: 0;
+    }
+
+    .metric-title {
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .metric-value {
+      margin-top: 5px;
+      color: #0f172a;
+      font-size: 23px;
+      font-weight: 780;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-sub {
+      margin-top: 5px;
+      font-size: 12px;
+    }
+
+    .panel {
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+
+    .panel + .panel {
+      margin-top: 14px;
+    }
+
+    .panel-head {
+      min-height: 52px;
+      padding: 0 16px;
+      border-bottom-color: var(--line);
+      background: #fff;
+    }
+
+    .panel-title {
+      color: #0f172a;
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .panel-body {
+      padding: 16px;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+
+    table {
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      height: 42px;
+      background: var(--surface-subtle);
+      color: #475569;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    td {
+      height: 46px;
+      color: #334155;
+    }
+
+    tbody tr {
+      transition: background 0.14s ease;
+    }
+
+    tbody tr:hover {
+      background: #f8fbff;
+    }
+
+    .pagination {
+      margin-top: 12px;
+      padding-top: 10px;
+    }
+
+    .pagination button,
+    .page-size-select,
+    .page-jump-input {
+      min-height: 36px;
+      border-radius: 6px;
+    }
+
+    label,
+    .field-label {
+      gap: 6px;
+      color: #475569;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    textarea,
+    .add-channel-form input,
+    .add-channel-form select,
+    .add-channel-form textarea {
+      min-height: 42px;
+      border-color: var(--line-strong);
+      border-radius: 6px;
+      padding: 9px 11px;
+      color: #0f172a;
+      font-weight: 550;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #94a3b8;
+    }
+
+    input:focus,
+    select:focus,
+    textarea:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+
+    textarea,
+    .add-channel-form textarea {
+      min-height: 96px;
+    }
+
+    .form-grid,
+    .channel-form-grid {
+      gap: 12px 14px;
+    }
+
+    .form-actions {
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .btn {
+      min-height: 40px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      background: var(--primary);
+      font-size: 13px;
+      font-weight: 700;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+    }
+
+    .btn:hover {
+      filter: none;
+      background: var(--primary-hover);
+    }
+
+    .btn.secondary {
+      border-color: var(--line-strong);
+      color: #334155;
+    }
+
+    .btn.secondary:hover {
+      border-color: #94a3b8;
+      background: var(--surface-subtle);
+    }
+
+    .btn.danger {
+      background: var(--red);
+    }
+
+    .btn.danger:hover {
+      background: #b91c1c;
+    }
+
+    .btn.small {
+      min-height: 34px;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+
+    .status {
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .status.success {
+      color: var(--green);
+    }
+
+    .status.partial-refunded,
+    .status.frozen {
+      color: var(--yellow);
+    }
+
+    .operation-result {
+      border-radius: 6px;
+      background: var(--surface-subtle);
+    }
+
+    .work-grid {
+      gap: 14px;
+    }
+
+    .segmented-control {
+      border-radius: 7px;
+      background: #f1f5f9;
+    }
+
+    .segmented-btn {
+      min-height: 34px;
+      border-radius: 5px;
+    }
+
+    .order-action-menu {
+      border-radius: 7px;
+      box-shadow: 0 16px 32px rgba(15, 23, 42, 0.12);
+    }
+
+    .channel-modal {
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.56);
+      backdrop-filter: blur(2px);
+    }
+
+    .channel-dialog {
+      max-height: calc(100dvh - 32px);
+      border-radius: 8px;
+      box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22);
+    }
+
+    .channel-modal-head {
+      min-height: 60px;
+      padding: 14px 18px;
+      background: #fff;
+    }
+
+    .channel-modal-head h3 {
+      font-size: 17px;
+      font-weight: 750;
+    }
+
+    .channel-modal-body {
+      padding: 18px;
+      background: #fff;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+
+    .confirm-target,
+    .refund-summary {
+      border-radius: 6px;
+    }
+
+    @media (max-width: 1400px) and (min-width: 961px) {
+      .overview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+    }
   </style>
 </head>
 <body>
+<svg aria-hidden="true" style="display:none">
+  <symbol id="icon-brand" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="icon-orders" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></symbol>
+  <symbol id="icon-banknote" viewBox="0 0 24 24"><path d="M3 6h18v12H3zM7 9.5h.01M17 14.5h.01M12 9v6M10 10.5h3a1.5 1.5 0 0 1 0 3h-3"/></symbol>
+  <symbol id="icon-split" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 7.5 11 16M16 7.5 13 16"/></symbol>
+  <symbol id="icon-complaint" viewBox="0 0 24 24"><path d="M5 5h14v11H9l-4 3zM8 9h8M8 12h5"/></symbol>
+  <symbol id="icon-onboard" viewBox="0 0 24 24"><circle cx="10" cy="8" r="3"/><path d="M4 19c.8-4 3-6 6-6s5.2 2 6 6M19 8v6M16 11h6"/></symbol>
+  <symbol id="icon-channel" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><path d="M12 4v5M12 15v5M4 12h5M15 12h5"/></symbol>
+  <symbol id="icon-merchants" viewBox="0 0 24 24"><path d="M4 10h16M5 10v10h14V10M3 10l2-6h14l2 6M9 14h6v6"/></symbol>
+  <symbol id="icon-report" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 16v-3M12 16V8M16 16v-5"/></symbol>
+  <symbol id="icon-account" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"/><path d="M5 20c.8-4.7 3.1-7 7-7s6.2 2.3 7 7"/></symbol>
+  <symbol id="icon-revenue" viewBox="0 0 24 24"><path d="M12 3v18M7 7h7a3 3 0 0 1 0 6H10a3 3 0 0 0 0 6h7"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.7 2.7L16.5 9"/></symbol>
+  <symbol id="icon-refund" viewBox="0 0 24 24"><path d="M8 7H4v-4M4.5 7A8 8 0 1 1 4 16M9 12h6"/></symbol>
+  <symbol id="icon-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2"/><path d="M3 20c.7-4.7 2.7-7 6-7s5.3 2.3 6 7M15 14c3.2.2 5 2.2 5.5 6"/></symbol>
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+</svg>
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
-      <div class="brand-mark">◆</div>
+      <div class="brand-mark"><svg aria-hidden="true"><use href="#icon-brand"></use></svg></div>
       <span>支付平台管理</span>
     </div>
     <nav class="nav" aria-label="主导航">
       <div class="nav-title">概览</div>
-      <button class="nav-btn active" data-page="dashboard"><span class="nav-icon">▦</span><span>订单管理</span></button>
-      <button class="nav-btn" data-page="payouts"><span class="nav-icon">¥</span><span>商家代付</span></button>
+      <button class="nav-btn active" data-page="dashboard"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-orders"></use></svg></span><span>订单管理</span></button>
+      <button class="nav-btn" data-page="payouts"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-banknote"></use></svg></span><span>商家代付</span></button>
       <div class="nav-group" data-nav-group="sharing">
         <button class="nav-group-toggle" type="button" data-nav-toggle="sharing" aria-expanded="false">
-          <span class="nav-icon">$</span><span>分账</span><span class="nav-caret">›</span>
+          <span class="nav-icon"><svg aria-hidden="true"><use href="#icon-split"></use></svg></span><span>分账</span><span class="nav-caret"><svg aria-hidden="true"><use href="#icon-chevron"></use></svg></span>
         </button>
         <div class="nav-children">
           <button class="nav-btn nav-child" data-page="sharing"><span>分账处理</span></button>
           <button class="nav-btn nav-child" data-page="sharing-relations"><span>分账关系</span></button>
         </div>
       </div>
-      <button class="nav-btn" data-page="complaints"><span class="nav-icon"></span><span>投诉查询</span></button>
+      <button class="nav-btn" data-page="complaints"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-complaint"></use></svg></span><span>投诉查询</span></button>
       <div class="nav-title">直付通</div>
-      <button class="nav-btn" data-page="onboard"><span class="nav-icon">♧</span><span>子商户进件</span></button>
+      <button class="nav-btn" data-page="onboard"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-onboard"></use></svg></span><span>子商户进件</span></button>
       <div class="nav-title">系统</div>
-      <button class="nav-btn" data-page="channels"><span class="nav-icon">◎</span><span>支付通道</span></button>
-      <button class="nav-btn" data-page="merchants"><span class="nav-icon">⌂</span><span>商户管理</span></button>
-      <button class="nav-btn" data-page="reports"><span class="nav-icon">▥</span><span>对账报表</span></button>
-      <button class="nav-btn" data-page="accounts"><span class="nav-icon">管</span><span>账户管理</span></button>
+      <button class="nav-btn" data-page="channels"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-channel"></use></svg></span><span>支付通道</span></button>
+      <button class="nav-btn" data-page="merchants"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-merchants"></use></svg></span><span>商户管理</span></button>
+      <button class="nav-btn" data-page="reports"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-report"></use></svg></span><span>对账报表</span></button>
+      <button class="nav-btn" data-page="accounts"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-account"></use></svg></span><span>账户管理</span></button>
     </nav>
   </aside>
 
   <section class="shell">
     <header class="topbar">
-      <div id="pageTitle" class="top-title">订单管理</div>
+      <div class="topbar-left">
+        <div id="pageTitle" class="top-title">订单管理</div>
+      </div>
       <div class="top-actions">
         <span id="serverDateText"></span>
         <button class="top-action-btn" id="logoutBtn" type="button">退出</button>
@@ -1715,7 +2251,7 @@
       <section id="page-dashboard" class="page active">
         <div class="overview-grid">
           <article class="metric-card">
-            <div class="metric-icon blue">$</div>
+            <div class="metric-icon blue"><svg aria-hidden="true"><use href="#icon-revenue"></use></svg></div>
             <div>
               <div class="metric-title">今日交易额</div>
               <div class="metric-value" id="todayTradeAmount">¥0.00</div>
@@ -1723,7 +2259,7 @@
             </div>
           </article>
           <article class="metric-card">
-            <div class="metric-icon green">✓</div>
+            <div class="metric-icon green"><svg aria-hidden="true"><use href="#icon-check"></use></svg></div>
             <div>
               <div class="metric-title">本月交易额</div>
               <div class="metric-value" id="monthTradeAmount">¥0.00</div>
@@ -1731,7 +2267,7 @@
             </div>
           </article>
           <article class="metric-card">
-            <div class="metric-icon red">↺</div>
+            <div class="metric-icon red"><svg aria-hidden="true"><use href="#icon-refund"></use></svg></div>
             <div>
               <div class="metric-title">今日退款额</div>
               <div class="metric-value" id="todayRefundAmount">¥0.00</div>
@@ -1739,7 +2275,7 @@
             </div>
           </article>
           <article class="metric-card">
-            <div class="metric-icon yellow">♙</div>
+            <div class="metric-icon yellow"><svg aria-hidden="true"><use href="#icon-users"></use></svg></div>
             <div>
               <div class="metric-title">商户总数</div>
               <div class="metric-value" id="merchantTotal">0</div>
