@@ -1442,6 +1442,11 @@
       if (data.qrCode) {
         startOrderCodePolling(data, payload);
         if (isDouyinNativeProduct(currentProduct)) {
+          if (isMobilePayClient()) {
+            writeResult("抖音Native支付订单已创建，正在打开抖音官方支付页面...", "loading");
+            window.location.href = data.qrCode;
+            return;
+          }
           writeResult("抖音Native支付订单已创建，请使用抖音扫码付款。", "loading");
           showPaymentQr(
             data.qrCode,
