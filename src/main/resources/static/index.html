@@ -5559,9 +5559,40 @@
     return `<span class="status ${className}">${html(payoutStatusText(normalized))}</span>`;
   }
 
-  function payoutProviderText(provider) {
-    return provider === "DOUYIN" ? "抖音" : provider === "ALIPAY" ? "支付宝" : provider || "-";
-  }
+    function payoutProviderText(provider) {
+      return provider === "DOUYIN" ? "抖音" : provider === "ALIPAY" ? "支付宝" : provider || "-";
+    }
+
+    function stripPayoutDiagnosticId(value) {
+      return String(value ?? "")
+        .replace(/["']?(?:log\s*id|logid|log_id)["']?\s*[:：=]\s*["']?[A-Za-z0-9._:/-]+["']?/gi, "")
+        .replace(/\s*[,，;；]\s*(?=$|[,，;；])/g, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+    }
+
+    function payoutBusinessText(value, fallback = "-") {
+      return stripPayoutDiagnosticId(value) || fallback;
+    }
+
+    function payoutOperationSummary(payout, heading) {
+      const lines = [
+        heading,
+        `代付单号：${payout?.outBizNo || "-"}`,
+        `状态：${payoutStatusText(payout?.status)}`,
+        `平台单号：${payout?.platformOrderNo || payout?.platformFundOrderNo || "-"}`
+      ];
+      const result = payout?.failReason || payout?.message || payout?.code;
+      if (result) lines.push(`结果：${payoutBusinessText(result)}`);
+      return lines.join("\n");
+    }
+
+    function payoutErrorSummary(error) {
+      const message = typeof error === "string"
+        ? error
+        : error?.message || error?.error || error?.failReason || error?.code;
+      return `操作失败：${payoutBusinessText(message, "请稍后重试")}`;
+    }
 
   function renderPayouts() {
     const tableBody = $("payoutTableBody");
@@ -5579,7 +5610,7 @@
         <td class="amount-green">${money(payout.amount)}</td>
         <td>${payoutStatusBadge(payout.status)}</td>
         <td>${html(payout.platformOrderNo || payout.platformFundOrderNo || "-")}</td>
-        <td>${html(payout.failReason || payout.message || payout.code || "-")}</td>
+            <td>${html(payoutBusinessText(payout.failReason || payout.message || payout.code))}</td>
         <td class="muted">${html(payout.updatedAt || payout.createdAt || "-")}</td>
         <td><button class="btn secondary small" type="button" data-payout-query="${html(payout.outBizNo)}">查询原单</button></td>
       </tr>
@@ -5664,7 +5695,7 @@
       });
       $("payoutPaymentPassword").value = "";
       $("payoutOutBizNo").value = "";
-      $("payoutResult").textContent = json({ message: payoutStatusText(data.status), payout: data });
+      $("payoutResult").textContent = payoutOperationSummary(data, "代付提交完成");
       await loadPayouts();
       return data;
     } catch (error) {
@@ -5700,7 +5731,7 @@
         const number = result.payout?.outBizNo || result.requestedOutBizNo || `第 ${Number(result.index) + 1} 笔`;
         return result.payout
           ? `${number}：${payoutStatusText(result.payout.status)}`
-          : `${number}：未提交 - ${result.error || "未知错误"}`;
+          : `${number}：未提交 - ${payoutBusinessText(result.error, "未知错误")}`;
       });
       $("payoutResult").textContent = [
         `批量代付处理完成：共 ${data.total} 笔，已受理 ${data.processed} 笔，未提交 ${data.rejected} 笔`,
@@ -5720,7 +5751,7 @@
       timeoutMs: 30000,
       body: "{}"
     });
-    $("payoutResult").textContent = json({ message: "代付原单查询完成", payout: data });
+      $("payoutResult").textContent = payoutOperationSummary(data, "代付原单查询完成");
     await loadPayouts();
   }
 
@@ -6840,7 +6871,7 @@
     try {
       await submitPayout();
     } catch (error) {
-      $("payoutResult").textContent = json(error);
+      $("payoutResult").textContent = payoutErrorSummary(error);
     } finally {
       button.disabled = false;
     }
@@ -6853,7 +6884,7 @@
     try {
       await submitPayoutBatch();
     } catch (error) {
-      $("payoutResult").textContent = json(error);
+      $("payoutResult").textContent = payoutErrorSummary(error);
     } finally {
       button.disabled = false;
     }
@@ -6861,7 +6892,7 @@
 
   $("refreshPayoutsBtn").addEventListener("click", () => {
     loadPayouts().catch((error) => {
-      $("payoutResult").textContent = json(error);
+      $("payoutResult").textContent = payoutErrorSummary(error);
     });
   });
 
@@ -6871,7 +6902,7 @@
     button.disabled = true;
     queryPayout(button.dataset.payoutQuery)
       .catch((error) => {
-        $("payoutResult").textContent = json(error);
+        $("payoutResult").textContent = payoutErrorSummary(error);
       })
       .finally(() => {
         button.disabled = false;
@@ -7390,7 +7421,7 @@
       loadOnboardingRecords(),
       loadComplaintAutoStatus(),
       loadPayouts().catch((error) => {
-        $("payoutResult").textContent = json(error);
+        $("payoutResult").textContent = payoutErrorSummary(error);
         renderPayouts();
       })
     ]))
