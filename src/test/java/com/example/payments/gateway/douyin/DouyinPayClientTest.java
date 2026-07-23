@@ -24,4 +24,23 @@ class DouyinPayClientTest {
                 "参数错误（字段：out_trade_no；原因：OutTradeNo is invalid.；位置：body）"
         );
     }
+    @Test
+    void extractsDiagnosticLogIdFromResponseHeader() {
+        String logId = DouyinPayClient.extractResponseLogId(
+                Map.of("X-Tt-Logid", "20260723ABC123"),
+                Map.of("log_id", "body-log-id")
+        );
+
+        assertThat(logId).isEqualTo("20260723ABC123");
+    }
+
+    @Test
+    void fallsBackToDiagnosticLogIdInResponseBody() {
+        String logId = DouyinPayClient.extractResponseLogId(
+                Map.of(),
+                Map.of("logId", "20260723BODY456")
+        );
+
+        assertThat(logId).isEqualTo("20260723BODY456");
+    }
 }

@@ -150,6 +150,14 @@ public class DouyinPayClient {
             Map<String, String> headers = responseHeaders(response);
             verifyResponseIfPresent(channel, headers, response.body());
             Map<String, Object> parsed = parseBody(response.body());
+            log.info(
+                    "Received Douyin Pay response method={} path={} status={} logId={} channel={}",
+                    method,
+                    normalizedPath,
+                    response.statusCode(),
+                    firstText(extractResponseLogId(headers, parsed), "-"),
+                    channel.getId()
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new GatewayException(
                         firstText(text(parsed, "code"), "DOUYIN_HTTP_" + response.statusCode()),
@@ -247,6 +255,31 @@ public class DouyinPayClient {
             }
         });
         return result;
+    }
+
+    static String extractResponseLogId(Map<String, String> headers, Map<String, Object> body) {
+        return firstText(
+                headerText(headers, "x-tt-logid"),
+                headerText(headers, "x-tt-log-id"),
+                headerText(headers, "logid"),
+                headerText(headers, "log-id"),
+                headerText(headers, "x-log-id"),
+                text(body, "log_id"),
+                text(body, "logId"),
+                text(body, "logid")
+        );
+    }
+
+    private static String headerText(Map<String, String> headers, String name) {
+        if (headers == null || headers.isEmpty() || !hasText(name)) {
+            return null;
+        }
+        for (Map.Entry<String, String> entry : headers.entrySet()) {
+            if (name.equalsIgnoreCase(entry.getKey())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static String text(Map<String, Object> data, String key) {
