@@ -1847,9 +1847,14 @@
     }
 
     .nav-child {
+      grid-template-columns: minmax(0, 1fr);
       min-height: 38px;
       padding-left: 12px;
       font-size: 13px;
+    }
+
+    .nav-child > span {
+      white-space: nowrap;
     }
 
     .shell {
