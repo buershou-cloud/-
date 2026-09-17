@@ -2572,7 +2572,7 @@
                 <details class="advanced-options">
                   <summary>高级选项</summary>
                   <div class="form-grid">
-                    <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS"></label>
+                    <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS" maxlength="16" pattern="[A-Za-z0-9_]+"></label>
                     <label>操作员 ID<input id="profitShareOperatorId" placeholder="可选"></label>
                     <label>App Auth Token<input id="profitShareAppAuthToken" placeholder="服务商模式填写"></label>
                     <label id="profitShareUnfreezeField" class="hidden">抖音剩余资金
@@ -2589,8 +2589,12 @@
                 </details>
                 <div class="form-actions">
                   <button class="btn secondary" id="refreshProfitRelationsBtn" type="button">刷新已绑定关系</button>
-                  <button class="btn" id="shareSingleBtn" type="button">提交分账</button>
+                  <button class="btn" id="shareSingleBtn" type="button">新增单笔分账</button>
+                  <button class="btn secondary" id="retrySingleProfitShareBtn" type="button">重试原单笔分账</button>
+                  <button class="btn secondary" id="reviewSingleProfitShareBtn" type="button">已人工核对原请求</button>
                 </div>
+                <p class="hint">新增分账会生成新请求号并产生额外划拨；网络超时请重试原请求，不要更换请求号。重试不采用修改后的表单。刷新页面后需恢复原参数；关闭标签页或换浏览器前，请先保存请求号并核对结果。</p>
+                <label>本标签页最近单笔请求号<input id="profitShareLastRequestNo" readonly placeholder="提交前自动生成，可复制用于核对"></label>
               </form>
               <details id="profitShareResultDetails" class="result-details">
                 <summary>最近操作结果</summary>
@@ -3289,6 +3293,8 @@
     complaintAuto: null,
     complaintRecords: [],
     profitSharingRelations: [],
+    singleProfitShareBusy: false,
+    singleProfitShareBodies: new Map(),
     payouts: [],
     paymentPasswordConfigured: false,
     superAdministrator: false,
@@ -5107,7 +5113,6 @@
     return compact({
       outTradeNo,
       tradeNo: order?.tradeNo,
-      outRequestNo: `${$("profitShareOutRequestPrefix").value || "PS"}_${outTradeNo}`,
       royaltyParameters: [profitShareRoyaltyParameter(
         mode === "AMOUNT" ? value : undefined,
         mode === "PERCENTAGE" ? value : undefined
@@ -5152,18 +5157,150 @@
   }
 
   async function submitSingleProfitShare() {
-    const payload = profitShareSinglePayload();
-    const data = await request("/api/v1/payments/profit-sharing", {
-      method: "POST",
-      body: JSON.stringify(payload)
-    });
-    if (gatewayFailed(data)) {
-      throw gatewayFailure("分账", data);
+    return sendSingleProfitShare(false);
+  }
+
+  function singleProfitShareKey() {
+    const outTradeNo = $("profitShareOutTradeNo").value.trim();
+    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    const channelId = order?.channelId || $("profitShareChannel").value;
+    if (!outTradeNo || !channelId) throw { message: "请先填写订单号并选择支付通道" };
+    return `payment.single-profit-share.v1:${JSON.stringify([channelId, outTradeNo])}`;
+  }
+
+  function readSingleProfitShare(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const attempt = JSON.parse(raw);
+      if (!/^[A-Za-z0-9_]{1,64}$/.test(attempt.outRequestNo || "")
+          || !/^[a-f0-9]{64}$/.test(attempt.fingerprint || "")
+          || !["UNCONFIRMED", "ACCEPTED", "REVIEWED"].includes(attempt.status)) throw new Error();
+      return attempt;
+    } catch (error) {
+      throw { message: "无法读取原分账请求记录，已停止提交。请先核对支付宝/抖音分账结果，不要清除记录后直接重试。" };
     }
-    $("profitShareTradeNo").value = payload.tradeNo || data.tradeNo || "";
-    $("profitShareQueryOutRequestNo").value = payload.outRequestNo;
-    setProfitShareResult({ message: "分账请求已提交", response: data });
-    await loadOrders();
+  }
+
+  function saveSingleProfitShare(key, attempt) {
+    // Persist only the request ID, status and digest. Do not store receiver data,
+    // appAuthToken or arbitrary extra parameters in browser storage.
+    try {
+      sessionStorage.setItem(key, JSON.stringify(attempt));
+    } catch (error) {
+      throw { message: "无法保存分账请求号，已停止后续操作。请允许本页面使用会话存储，并先核对已显示的请求号。" };
+    }
+  }
+
+  function newSingleProfitShareRequestNo() {
+    const prefix = $("profitShareOutRequestPrefix").value.trim() || "PS";
+    if (!/^[A-Za-z0-9_]{1,16}$/.test(prefix)) {
+      throw { message: "请求号前缀只允许 1–16 位字母、数字或下划线" };
+    }
+    if (!window.crypto?.getRandomValues) throw { message: "浏览器不支持安全请求号生成，请使用新版浏览器" };
+    const bytes = window.crypto.getRandomValues(new Uint8Array(16));
+    return `${prefix}_${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+  }
+
+  function canonicalProfitShare(value) {
+    if (Array.isArray(value)) return value.map(canonicalProfitShare);
+    if (value && typeof value === "object") {
+      return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonicalProfitShare(value[key])]));
+    }
+    return value;
+  }
+
+  async function singleProfitShareFingerprint(payload) {
+    if (!window.crypto?.subtle) throw { message: "安全重试需要 HTTPS（本地测试可用 localhost），请使用安全地址打开后台" };
+    const bytes = new TextEncoder().encode(JSON.stringify(canonicalProfitShare(payload)));
+    const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  }
+
+  function singleProfitShareSummary(payload) {
+    const receiver = payload.royaltyParameters[0];
+    const allocation = receiver.amount_percentage != null ? `${receiver.amount_percentage}%（按订单总金额）` : `${receiver.amount} 元`;
+    return `订单：${payload.outTradeNo}\n收入方：${receiver.trans_in}\n本次分账：${allocation}`;
+  }
+
+  function setSingleProfitShareBusy(busy) {
+    state.singleProfitShareBusy = busy;
+    ["shareSingleBtn", "retrySingleProfitShareBtn", "reviewSingleProfitShareBtn", "shareChannelBtn"].forEach(id => {
+      $(id).disabled = busy;
+    });
+  }
+
+  async function sendSingleProfitShare(retry) {
+    if (state.singleProfitShareBusy) return;
+    setSingleProfitShareBusy(true);
+    let attempt;
+    try {
+      const key = singleProfitShareKey();
+      attempt = readSingleProfitShare(key);
+      if (attempt) $("profitShareLastRequestNo").value = attempt.outRequestNo;
+      let body;
+      if (retry) {
+        if (!attempt) throw { message: "本标签页没有该订单的原单笔请求记录。旧版本请求请先人工核对，不要当作新增分账重试。" };
+        if (attempt.status === "ACCEPTED") throw { message: "原请求已被接口受理，无需再次提交。若确需额外分账，请点击“新增单笔分账”。" };
+        body = state.singleProfitShareBodies.get(attempt.outRequestNo);
+        if (!body) {
+          const restored = { ...profitShareSinglePayload(), outRequestNo: attempt.outRequestNo };
+          if (await singleProfitShareFingerprint(restored) !== attempt.fingerprint) {
+            throw { message: "页面刷新后，当前参数与原请求不一致。请恢复原金额/比例、收入方、说明、授权及扩展参数后重试；不能使用原请求号提交不同明细。" };
+          }
+          body = JSON.stringify(restored);
+        }
+        if (!window.confirm(`重试原分账（不是新增）\n请求号：${attempt.outRequestNo}\n${singleProfitShareSummary(JSON.parse(body))}\n将使用原参数，忽略当前表单中的修改。`)) return;
+      } else {
+        if (attempt?.status === "UNCONFIRMED") {
+          throw { message: "该订单上一笔分账结果未确认，请先“重试原单笔分账”。如已在支付平台核对结果，再点击“已人工核对原请求”，不要直接换号重试。" };
+        }
+        const payload = profitShareSinglePayload();
+        payload.outRequestNo = newSingleProfitShareRequestNo();
+        if (!window.confirm(`确认新增一笔分账？\n${singleProfitShareSummary(payload)}\n这会产生额外划拨，不是重试。请确认历史分账及剩余额度。`)) return;
+        body = JSON.stringify(payload);
+        attempt = { outRequestNo: payload.outRequestNo, fingerprint: await singleProfitShareFingerprint(payload), status: "UNCONFIRMED" };
+      }
+      attempt.status = "UNCONFIRMED";
+      // Record the immutable identity before sending, including after a page reload.
+      saveSingleProfitShare(key, attempt);
+      state.singleProfitShareBodies.set(attempt.outRequestNo, body);
+      const payload = JSON.parse(body);
+      $("profitShareLastRequestNo").value = attempt.outRequestNo;
+      $("profitShareQueryOutRequestNo").value = attempt.outRequestNo;
+      $("profitShareTradeNo").value = payload.tradeNo || "";
+      setProfitShareResult({ message: `正在${retry ? "重试原" : "提交新"}分账，请勿重复操作。请求号：${attempt.outRequestNo}` });
+      const data = await request("/api/v1/payments/profit-sharing", { method: "POST", body });
+      if (!data || typeof data !== "object" || !["SUCCESS", "PENDING", "PAYING", "FAILED", "UNKNOWN", "CREATED", "CLOSED"].includes(data.status)) {
+        throw { message: "分账响应格式异常，结果待核对" };
+      }
+      if (data.status === "SUCCESS") {
+        attempt.status = "ACCEPTED";
+        saveSingleProfitShare(key, attempt);
+      }
+      if (gatewayFailed(data)) throw gatewayFailure("分账", data);
+      setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n${data.status === "SUCCESS" ? "分账接口已受理；如需额外分账，请明确新增一笔。" : "分账结果尚未确认，请核对原请求，不要重新生成请求号。"}`, response: data });
+      // Refresh failure must not turn an accepted transfer into a failed transfer.
+      try { await loadOrders(); } catch (error) {
+        setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n分账返回状态：${data.status}；订单列表刷新失败，请单独刷新列表，不要因此重复分账。`, response: data });
+      }
+    } catch (error) {
+      throw { message: `${error?.message || "分账操作异常"}${attempt ? `\n原请求号：${attempt.outRequestNo}。结果不明时请核对或重试原请求。` : ""}`, response: error?.response };
+    } finally {
+      setSingleProfitShareBusy(false);
+    }
+  }
+
+  function reviewSingleProfitShare() {
+    if (state.singleProfitShareBusy) return;
+    const key = singleProfitShareKey();
+    const attempt = readSingleProfitShare(key);
+    if (!attempt) throw { message: "本标签页没有该订单的原单笔请求记录" };
+    $("profitShareLastRequestNo").value = attempt.outRequestNo;
+    if (!window.confirm(`请求号：${attempt.outRequestNo}\n只有已在支付宝/抖音核对该请求最终结果及剩余额度后，才能确认。\n此操作不查询、不撤销原分账，只解除本页面的新增限制。结果仍不明请取消。\n确认已经核对？`)) return;
+    attempt.status = "REVIEWED";
+    saveSingleProfitShare(key, attempt);
+    setProfitShareResult({ message: `已记录人工核对：${attempt.outRequestNo}。不会自动提交；新增单笔分账将使用新请求号。` });
   }
 
   async function submitChannelProfitShare() {
@@ -7116,6 +7253,14 @@
     } catch (error) {
       setProfitShareResult(error);
     }
+  });
+
+  $("retrySingleProfitShareBtn").addEventListener("click", async () => {
+    try { await sendSingleProfitShare(true); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("reviewSingleProfitShareBtn").addEventListener("click", () => {
+    try { reviewSingleProfitShare(); } catch (error) { setProfitShareResult(error); }
   });
 
   $("queryProfitShareBtn").addEventListener("click", async () => {
