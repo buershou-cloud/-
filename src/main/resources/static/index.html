@@ -2341,7 +2341,7 @@
                 </label>
               </div>
               <div class="form-actions">
-                <button class="btn" type="submit">查询订单</button>
+                <button class="btn" id="queryOrdersBtn" type="submit">查询订单</button>
                 <button class="btn secondary" id="resetOrderFilterBtn" type="button">重置</button>
               </div>
             </form>
@@ -3281,6 +3281,7 @@
   const state = {
     channels: [],
     orders: [],
+    orderLoadSequence: 0,
     orderPage: 1,
     orderPageSize: 10,
     merchants: [],
@@ -4094,15 +4095,56 @@
     `;
   }
 
-  async function loadOrders(resetPage = false, forceFresh = false) {
-    const query = orderQueryString(forceFresh);
-    state.orders = await request(`/api/v1/orders/recent${query}`);
+  async function loadOrders(resetPage = false, refreshStatuses = false) {
+    const sequence = ++state.orderLoadSequence;
+    const query = orderQueryString(refreshStatuses);
+    let orders;
+    try {
+      orders = await request(`/api/v1/orders/recent${query}`);
+    } catch (error) {
+      if (sequence !== state.orderLoadSequence) return false;
+      throw error;
+    }
+    // A slower, older request must not overwrite a newer query's results.
+    if (sequence !== state.orderLoadSequence) return false;
+    if (!Array.isArray(orders)) {
+      throw { code: "INVALID_ORDER_RESPONSE", message: "订单列表返回格式异常，请重新查询" };
+    }
+    state.orders = orders.slice().sort((left, right) =>
+      String(right.createdAt || "").localeCompare(String(left.createdAt || ""))
+      || String(right.outTradeNo || "").localeCompare(String(left.outTradeNo || ""))
+    );
     if (resetPage) {
       state.orderPage = 1;
     }
     renderOrders();
     renderProfitShareOrders();
     refreshSummaryViews();
+    return true;
+  }
+
+  async function queryOrders(resetFilters = false) {
+    const queryButton = $("queryOrdersBtn");
+    const resetButton = $("resetOrderFilterBtn");
+    if (queryButton.disabled) return;
+    queryButton.disabled = true;
+    resetButton.disabled = true;
+    queryButton.textContent = "查询中…";
+    setDashboardResult({ message: "正在查询最新订单…" });
+    try {
+      if (resetFilters) $("orderFilterForm").reset();
+      // Refresh the local list immediately, as on page load. Payment-provider
+      // reconciliation is independent and must not block a list query.
+      if (await loadOrders(true)) {
+        setDashboardResult({ message: `${resetFilters ? "筛选已重置，" : ""}已查询到 ${state.orders.length} 笔订单` });
+      }
+    } catch (error) {
+      setDashboardResult({ message: `订单查询失败：${error?.message || (typeof error === "string" ? error : "网络异常，请重试")}` });
+    } finally {
+      queryButton.disabled = false;
+      resetButton.disabled = false;
+      queryButton.textContent = "查询订单";
+    }
   }
 
   function sleep(ms) {
@@ -4429,7 +4471,7 @@
     window.location.href = `/merchant.html?merchantId=${encodeURIComponent(merchantId)}&demoLogin=1`;
   }
 
-  function orderQueryString(forceFresh = false) {
+  function orderQueryString(refreshStatuses = false) {
     const params = new URLSearchParams();
     const values = {
       beginTime: $("orderBeginTime")?.value,
@@ -4441,10 +4483,10 @@
     Object.entries(values).forEach(([key, value]) => {
       if (value && value.trim()) params.set(key, value.trim());
     });
-    if (forceFresh) {
+    if (refreshStatuses) {
       params.set("refreshStatuses", "true");
-      params.set("_", String(Date.now()));
     }
+    params.set("_", `${Date.now()}_${state.orderLoadSequence}`);
     const query = params.toString();
     return query ? `?${query}` : "";
   }
@@ -7028,14 +7070,11 @@
 
   $("orderFilterForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    await loadOrders(true, true);
-    setDashboardResult({ message: `已查询到 ${state.orders.length} 笔订单` });
+    await queryOrders();
   });
 
   $("resetOrderFilterBtn").addEventListener("click", async () => {
-    $("orderFilterForm").reset();
-    await loadOrders(true);
-    setDashboardResult({ message: "订单筛选已重置" });
+    await queryOrders(true);
   });
 
   $("profitShareForm").addEventListener("submit", (event) => {
