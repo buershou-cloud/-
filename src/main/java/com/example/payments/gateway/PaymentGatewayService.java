@@ -51,6 +51,7 @@ import java.util.stream.Collectors;
 public class PaymentGatewayService {
 
     private static final Logger log = LoggerFactory.getLogger(PaymentGatewayService.class);
+    private static final BigDecimal ONE_HUNDRED = BigDecimal.valueOf(100);
 
     private final PaymentGatewayProperties properties;
     private final ChannelSelector channelSelector;
@@ -179,8 +180,9 @@ public class PaymentGatewayService {
 
     public GatewayResponse profitSharing(ProfitSharingRequest request) {
         GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> {
-            validateProfitSharingRelations(channel.getId(), request.royaltyParameters());
-            return provider(channel).profitSharing(channel, request);
+            ProfitSharingRequest effectiveRequest = normalizeAlipayPercentageRequest(channel, request);
+            validateProfitSharingRelations(channel.getId(), effectiveRequest.royaltyParameters());
+            return provider(channel).profitSharing(channel, effectiveRequest);
         });
         if (response.status() == PaymentStatus.SUCCESS && hasText(request.outTradeNo())) {
             orderService.markProfitShared(request.outTradeNo());
@@ -750,12 +752,109 @@ public class PaymentGatewayService {
         parameter.put("trans_in", request.transIn());
         if (request.percentage() != null) {
             validatePercentage(request.percentage());
-            parameter.put("amount_percentage", percentage(request.percentage()));
+            parameter.put("amount", amount(percentageAmount(order.amount(), request.percentage())));
         } else {
             parameter.put("amount", amount(firstAmount(request.amount(), order.amount())));
         }
         parameter.put("desc", firstText(request.desc(), "通道批量分账 " + order.outTradeNo()));
         return parameter;
+    }
+
+    /**
+     * The current Alipay merchant-settlement flow settles a concrete amount.  Keep the
+     * percentage option as a UI convenience, but resolve it against the locally recorded
+     * order before sending the request to Alipay.
+     */
+    private ProfitSharingRequest normalizeAlipayPercentageRequest(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingRequest request
+    ) {
+        if (!isAlipayChannel(channel) || !containsAmountPercentage(request.royaltyParameters())) {
+            return request;
+        }
+
+        BigDecimal orderAmount = orderService.amountByIdentifier(request.outTradeNo(), request.tradeNo());
+        if (orderAmount == null || orderAmount.signum() <= 0) {
+            throw new IllegalArgumentException("按比例分账需要一笔金额大于 0 的本地订单");
+        }
+
+        List<Map<String, Object>> normalized = new ArrayList<>();
+        BigDecimal requestedTotal = BigDecimal.ZERO;
+        for (Map<String, Object> original : request.royaltyParameters()) {
+            if (original == null) {
+                throw new IllegalArgumentException("分账明细不能为空");
+            }
+            Map<String, Object> parameter = new LinkedHashMap<>(original);
+            boolean hasPercentage = parameter.containsKey("amount_percentage");
+            Object percentageValue = parameter.remove("amount_percentage");
+            BigDecimal allocation;
+            if (hasPercentage) {
+                if (parameter.containsKey("amount")) {
+                    throw new IllegalArgumentException("分账明细不能同时填写金额和比例");
+                }
+                BigDecimal percentage = decimalValue(percentageValue, "分账比例");
+                validatePercentage(percentage);
+                allocation = percentageAmount(orderAmount, percentage);
+            } else {
+                allocation = decimalValue(parameter.get("amount"), "分账金额");
+                if (allocation.signum() <= 0) {
+                    throw new IllegalArgumentException("分账金额必须大于 0");
+                }
+                allocation = allocation.setScale(2, RoundingMode.HALF_UP);
+            }
+            parameter.put("amount", amount(allocation));
+            requestedTotal = requestedTotal.add(allocation);
+            normalized.add(parameter);
+        }
+        if (requestedTotal.compareTo(orderAmount) > 0) {
+            throw new IllegalArgumentException("本次分账金额不能超过订单金额 " + amount(orderAmount));
+        }
+
+        return new ProfitSharingRequest(
+                request.outTradeNo(),
+                request.tradeNo(),
+                request.outRequestNo(),
+                List.copyOf(normalized),
+                request.operatorId(),
+                request.appAuthToken(),
+                request.channelIds(),
+                request.extra()
+        );
+    }
+
+    private static boolean containsAmountPercentage(List<Map<String, Object>> royaltyParameters) {
+        return royaltyParameters != null && royaltyParameters.stream()
+                .filter(java.util.Objects::nonNull)
+                .anyMatch(parameter -> parameter.containsKey("amount_percentage"));
+    }
+
+    private static boolean isAlipayChannel(PaymentGatewayProperties.Channel channel) {
+        return channel != null && ("ALIPAY".equals(channel.getProvider()) || "ALIPAY_DIRECT".equals(channel.getProvider()));
+    }
+
+    private static BigDecimal percentageAmount(BigDecimal orderAmount, BigDecimal percentage) {
+        BigDecimal result = orderAmount.multiply(percentage).divide(ONE_HUNDRED, 2, RoundingMode.HALF_UP);
+        if (result.signum() <= 0) {
+            throw new IllegalArgumentException("分账比例换算后不足 0.01 元");
+        }
+        return result;
+    }
+
+    private static BigDecimal decimalValue(Object value, String fieldName) {
+        if (value == null) {
+            throw new IllegalArgumentException(fieldName + "不能为空");
+        }
+        try {
+            BigDecimal result = value instanceof BigDecimal decimal
+                    ? decimal
+                    : new BigDecimal(value.toString().trim());
+            if (result.signum() <= 0) {
+                throw new IllegalArgumentException(fieldName + "必须大于 0");
+            }
+            return result;
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(fieldName + "格式无效", ex);
+        }
     }
 
     private void validateProfitSharingRelations(String channelId, List<Map<String, Object>> royaltyParameters) {
@@ -793,10 +892,6 @@ public class PaymentGatewayService {
 
     private static String amount(BigDecimal amount) {
         return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
-    }
-
-    private static String percentage(BigDecimal value) {
-        return value.stripTrailingZeros().toPlainString();
     }
 
     private static void validatePercentage(BigDecimal value) {

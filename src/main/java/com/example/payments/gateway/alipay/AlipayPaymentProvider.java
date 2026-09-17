@@ -190,12 +190,20 @@ public class AlipayPaymentProvider implements PaymentProvider {
     @Override
     public GatewayResponse profitSharing(PaymentGatewayProperties.Channel channel, ProfitSharingRequest request) {
         Map<String, Object> bizContent = new LinkedHashMap<>();
+        merge(bizContent, request.extra());
+        // Keep the request identity and the validated detail list authoritative.  Advanced
+        // parameters may add supported Alipay options (for example royalty_mode), but they
+        // must not replace the fields constructed by the gateway.
+        bizContent.remove("out_trade_no");
+        bizContent.remove("trade_no");
+        bizContent.remove("out_request_no");
+        bizContent.remove("royalty_parameters");
+        bizContent.remove("operator_id");
         putIfText(bizContent, "out_trade_no", request.outTradeNo());
         putIfText(bizContent, "trade_no", request.tradeNo());
         bizContent.put("out_request_no", request.outRequestNo());
         bizContent.put("royalty_parameters", request.royaltyParameters());
         putIfText(bizContent, "operator_id", request.operatorId());
-        merge(bizContent, request.extra());
         AlipayGatewayResponse response = client.execute(channel, METHOD_ORDER_SETTLE, bizContent, options(request.appAuthToken(), null, null));
         return apiResponse(channel.getId(), response, request.outTradeNo(), null, bizContent);
     }
