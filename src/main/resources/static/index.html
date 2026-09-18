@@ -2207,6 +2207,107 @@
       border-radius: 6px;
     }
 
+    .profit-confirm {
+      width: min(560px, calc(100vw - 32px));
+      max-height: calc(100dvh - 32px);
+      margin: auto;
+      padding: 0;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      color: var(--text);
+      background: #fff;
+      box-shadow: 0 28px 90px rgba(15, 23, 42, 0.24);
+      overflow: auto;
+    }
+
+    .profit-confirm::backdrop {
+      background: rgba(15, 23, 42, 0.48);
+      backdrop-filter: blur(3px);
+    }
+
+    .profit-confirm[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+
+    .profit-confirm-head {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 24px 24px 20px;
+    }
+
+    .profit-confirm-icon {
+      display: grid;
+      place-items: center;
+      flex: 0 0 44px;
+      height: 44px;
+      border: 1px solid #dbeafe;
+      border-radius: 12px;
+      background: #eff6ff;
+      color: #2563eb;
+    }
+
+    .profit-confirm svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+    .profit-confirm-heading { flex: 1; min-width: 0; }
+    .profit-confirm-heading h3 { margin: 0 0 5px; font-size: 19px; line-height: 1.5; font-weight: 700; }
+    .profit-confirm-heading p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.6; }
+    .profit-confirm-close { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #64748b; cursor: pointer; }
+    .profit-confirm-close:hover { background: #f1f5f9; color: #0f172a; }
+    .profit-confirm-body { min-height: 0; overflow-y: auto; padding: 0 24px 24px; }
+    .profit-confirm-total { padding: 18px 20px; border: 1px solid #dbeafe; border-radius: 10px; background: #f7faff; }
+    .profit-confirm-total-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; color: #475569; }
+    .profit-confirm-badge { border: 1px solid #bfdbfe; border-radius: 5px; padding: 3px 8px; color: #1d4ed8; background: #eff6ff; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .profit-confirm-value { display: block; margin: 8px 0 4px; font-size: 34px; line-height: 1.3; font-weight: 750; letter-spacing: -0.7px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .profit-confirm-value-note { margin: 0; font-size: 12px; color: #64748b; line-height: 1.6; }
+    .profit-confirm-details { margin: 18px 0; }
+    .profit-confirm-details > div { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 14px; padding: 9px 0; font-size: 13px; line-height: 1.65; }
+    .profit-confirm-details dt { color: #64748b; }
+    .profit-confirm-details dd { margin: 0; min-width: 0; color: #1e293b; overflow-wrap: anywhere; }
+    .profit-confirm-details dd strong { display: block; font-weight: 600; }
+    .profit-confirm-account { display: block; color: #64748b; font-size: 12px; }
+    .profit-confirm-request { border-top: 1px solid #eef2f6; margin-top: 7px; padding-top: 14px !important; }
+    .profit-confirm-request dd { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .profit-confirm-notice { display: flex; align-items: flex-start; gap: 10px; padding: 13px 14px; border: 1px solid #fde5b8; border-radius: 8px; background: #fffbeb; color: #92400e; }
+    .profit-confirm-notice svg { flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px; }
+    .profit-confirm-notice strong { display: block; margin-bottom: 4px; font-size: 13px; font-weight: 650; }
+    .profit-confirm-notice p { margin: 0; font-size: 12px; line-height: 1.75; }
+    .profit-confirm[data-kind="retry"] .profit-confirm-notice { border-color: #dbeafe; background: #eff6ff; color: #1e40af; }
+    .profit-confirm[data-kind="review"] .profit-confirm-value { font-size: 25px; }
+    .profit-confirm-review { display: flex; align-items: flex-start; gap: 9px; margin-top: 16px; font-size: 13px; line-height: 1.7; color: #334155; cursor: pointer; }
+    .profit-confirm-review input { flex: 0 0 16px; width: 16px; height: 16px; margin: 3px 0 0; accent-color: #2563eb; }
+    .profit-confirm-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 24px; border-top: 1px solid #e8edf3; background: #f8fafc; }
+    .profit-confirm-footer .btn { min-width: 100px; min-height: 40px; border-radius: 7px; }
+    .profit-confirm :focus-visible { outline: 3px solid #93c5fd; outline-offset: 3px; }
+    .profit-share-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+    .profit-batch-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; }
+    .profit-batch-toolbar .form-actions { margin: 0; }
+    .profit-selection-count { color: #475569; font-size: 14px; }
+    .profit-selection-count strong { color: #2563eb; }
+    .profit-order-check { width: 17px; height: 17px; margin: 0; vertical-align: middle; accent-color: #2563eb; cursor: pointer; }
+    .profit-order-check:disabled { cursor: not-allowed; }
+    .profit-order-selected { background: #eff6ff; }
+    .profit-batch-confirm-list { max-height: 200px; overflow: auto; margin-bottom: 18px; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .profit-batch-confirm-list table { min-width: 0; width: 100%; font-size: 12px; }
+    .profit-batch-confirm-list td, .profit-batch-confirm-list th { padding: 9px 12px; white-space: normal; overflow-wrap: anywhere; }
+    .profit-batch-confirm-list td:last-child { white-space: nowrap; text-align: right; }
+    .profit-batch-progress { margin: 14px 0; color: #475569; font-size: 13px; line-height: 1.7; }
+    .profit-batch-request { font-family: ui-monospace, Consolas, monospace; font-size: 12px; overflow-wrap: anywhere; }
+    .profit-confirm[data-kind="batch"] { width: min(660px, calc(100vw - 32px)); }
+    .profit-confirm[data-kind="batch"] .profit-confirm-total { padding: 12px 18px; }
+    .profit-confirm[data-kind="batch"] .profit-confirm-value { font-size: 28px; margin: 5px 0; }
+    .profit-confirm[data-kind="batch"] .profit-confirm-details { display: grid; grid-template-columns: 1fr 1fr; gap: 0 20px; margin: 10px 0; }
+    .profit-confirm[data-kind="batch"] .profit-confirm-details > div { grid-template-columns: 64px minmax(0, 1fr); padding: 5px 0; }
+    .profit-confirm[data-kind="batch"] #profitShareConfirmReceiverRow,
+    .profit-confirm[data-kind="batch"] .profit-confirm-request { grid-column: 1 / -1; }
+    .profit-confirm[data-kind="batch"] .profit-confirm-request { margin-top: 4px; padding-top: 9px !important; }
+
+    @media (max-width: 520px) {
+      .profit-confirm-head { padding: 20px 18px 16px; gap: 10px; }
+      .profit-confirm-body { padding: 0 18px 18px; }
+      .profit-confirm-footer { padding: 14px 18px; }
+      .profit-confirm-footer .btn { flex: 1; min-width: 0; }
+      .profit-confirm-details > div { grid-template-columns: 70px minmax(0, 1fr); gap: 10px; }
+      .profit-confirm[data-kind="batch"] .profit-confirm-details { grid-template-columns: 1fr; }
+    }
+
     @media (max-width: 1400px) and (min-width: 961px) {
       .overview-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2542,6 +2643,7 @@
             <div class="panel-head"><h2 class="panel-title">发起分账</h2></div>
             <div class="panel-body">
               <form id="profitShareForm">
+                <fieldset id="profitShareFormFields" class="profit-share-fields">
                 <div class="form-grid">
                   <label>订单号<input id="profitShareOutTradeNo" placeholder="填写或从右侧订单中选择"></label>
                   <label>支付通道
@@ -2583,9 +2685,6 @@
                     </label>
                     <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
                   </div>
-                  <div class="form-actions">
-                    <button class="btn secondary" id="shareChannelBtn" type="button">批量处理当前通道订单</button>
-                  </div>
                 </details>
                 <div class="form-actions">
                   <button class="btn secondary" id="refreshProfitRelationsBtn" type="button">刷新已绑定关系</button>
@@ -2595,6 +2694,7 @@
                 </div>
                 <p class="hint">新增分账会生成新请求号并产生额外划拨；网络超时请重试原请求，不要更换请求号。重试不采用修改后的表单。刷新页面后需恢复原参数；关闭标签页或换浏览器前，请先保存请求号并核对结果。</p>
                 <label>本标签页最近单笔请求号<input id="profitShareLastRequestNo" readonly placeholder="提交前自动生成，可复制用于核对"></label>
+                </fieldset>
               </form>
               <details id="profitShareResultDetails" class="result-details">
                 <summary>最近操作结果</summary>
@@ -2623,12 +2723,30 @@
           <section class="panel wide-panel">
             <div class="panel-head"><h2 class="panel-title">可分账订单</h2></div>
             <div class="panel-body">
+              <div class="profit-batch-toolbar">
+                <div id="profitShareSelectionSummary" class="profit-selection-count" aria-live="polite">已选 0 笔订单</div>
+                <div class="form-actions">
+                  <button class="btn secondary" id="refreshProfitShareOrdersBtn" type="button">刷新订单</button>
+                  <button class="btn secondary" id="clearProfitShareSelectionBtn" type="button">清空选择</button>
+                  <button class="btn" id="shareChannelBtn" type="button" disabled>分账所选订单（0）</button>
+                  <button class="btn secondary hidden" id="stopProfitShareBatchBtn" type="button">停止后续订单</button>
+                </div>
+              </div>
+              <p class="hint">先选择上方支付通道，再勾选订单。所选订单统一使用上方收入方、比例／每单金额和说明，每批最多 50 笔。表头全选只勾选当前列表中未分账的订单；已分账订单须单独勾选。</p>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>订单号</th><th>通道</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
+                  <thead><tr><th><input id="selectAllProfitShareOrders" class="profit-order-check" type="checkbox" aria-label="全选当前列表未分账订单"></th><th>订单号</th><th>通道</th><th>金额</th><th>状态</th><th>操作</th></tr></thead>
                   <tbody id="profitShareOrders"></tbody>
                 </table>
               </div>
+              <section id="profitShareBatchResultsPanel" class="hidden" aria-label="批量分账结果">
+                <p id="profitShareBatchProgress" class="profit-batch-progress" role="status" aria-live="polite"></p>
+                <div class="table-wrap"><table>
+                  <thead><tr><th>订单号</th><th>请求号</th><th>处理结果</th><th>说明</th><th>操作</th></tr></thead>
+                  <tbody id="profitShareBatchResults"></tbody>
+                </table></div>
+                <p class="hint">接口受理不等于最终到账。失败或结果不明的订单请转单笔核对／重试原请求，切勿直接换号重提。未提交的订单仍保留勾选，可排除待核对订单后再次提交。刷新或关闭页面前，请保存请求号；本列表仅保留本次页面会话的结果。</p>
+              </section>
             </div>
           </section>
         </div>
@@ -3264,6 +3382,42 @@
   </section>
 </div>
 
+<dialog id="profitShareConfirmModal" class="profit-confirm" aria-labelledby="profitShareConfirmTitle" aria-describedby="profitShareConfirmSubtitle profitShareConfirmNotice">
+  <div class="profit-confirm-head">
+    <span class="profit-confirm-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8h15m-4-4 4 4-4 4M20 16H5m4-4-4 4 4 4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <div class="profit-confirm-heading">
+      <h3 id="profitShareConfirmTitle">确认新增分账</h3>
+      <p id="profitShareConfirmSubtitle">提交前，请核对本次分账信息</p>
+    </div>
+    <button class="profit-confirm-close" id="closeProfitShareConfirmBtn" type="button" aria-label="关闭分账确认"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" stroke-linecap="round"/></svg></button>
+  </div>
+  <div class="profit-confirm-body">
+    <div class="profit-confirm-total">
+      <div class="profit-confirm-total-head"><span id="profitShareConfirmValueLabel">本次分账比例</span><span id="profitShareConfirmBadge" class="profit-confirm-badge">新增分账</span></div>
+      <strong id="profitShareConfirmValue" class="profit-confirm-value"></strong>
+      <p id="profitShareConfirmValueNote" class="profit-confirm-value-note"></p>
+    </div>
+    <dl class="profit-confirm-details">
+      <div><dt>订单号</dt><dd id="profitShareConfirmOrder"></dd></div>
+      <div><dt>支付通道</dt><dd id="profitShareConfirmChannel"></dd></div>
+      <div id="profitShareConfirmReceiverRow"><dt>收入方</dt><dd><strong id="profitShareConfirmReceiver"></strong><span id="profitShareConfirmAccount" class="profit-confirm-account"></span></dd></div>
+      <div class="profit-confirm-request"><dt>请求号</dt><dd id="profitShareConfirmRequest"></dd></div>
+    </dl>
+    <div id="profitShareConfirmBatchList" class="profit-batch-confirm-list hidden">
+      <table><thead><tr><th>所选订单</th><th>本次分账</th></tr></thead><tbody id="profitShareConfirmBatchOrders"></tbody></table>
+    </div>
+    <div class="profit-confirm-notice">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v6m0 3v1" stroke-linecap="round"/></svg>
+      <div><strong id="profitShareConfirmNoticeTitle"></strong><p id="profitShareConfirmNotice"></p></div>
+    </div>
+    <label id="profitShareConfirmReviewRow" class="profit-confirm-review hidden"><input id="profitShareConfirmReviewed" type="checkbox">我已在支付平台核对原请求的最终结果及剩余额度</label>
+  </div>
+  <div class="profit-confirm-footer">
+    <button class="btn secondary" id="cancelProfitShareConfirmBtn" type="button" autofocus>取消</button>
+    <button class="btn" id="acceptProfitShareConfirmBtn" type="button">确认新增分账</button>
+  </div>
+</dialog>
+
 <div id="confirmModal" class="channel-modal hidden" aria-hidden="true">
   <section class="channel-dialog confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
     <div class="channel-modal-head">
@@ -3295,6 +3449,11 @@
     profitSharingRelations: [],
     singleProfitShareBusy: false,
     singleProfitShareBodies: new Map(),
+    profitShareConfirmResolve: null,
+    selectedProfitShareOrders: new Set(),
+    profitShareBatchBusy: false,
+    profitShareBatchStop: false,
+    profitShareBatchResults: [],
     payouts: [],
     paymentPasswordConfigured: false,
     superAdministrator: false,
@@ -4909,9 +5068,11 @@
   }
 
   function fillProfitShareOrder(outTradeNo) {
+    if (state.singleProfitShareBusy) return;
     const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
     $("profitShareOutTradeNo").value = outTradeNo || "";
     if (order) {
+      if ($("profitShareChannel").value !== order.channelId) state.selectedProfitShareOrders.clear();
       $("profitShareChannel").value = order.channelId || "";
       syncProfitShareModeFields();
       const douyin = channelById(order.channelId)?.provider === "DOUYIN";
@@ -4920,6 +5081,7 @@
       $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
       loadProfitSharingRelations(order.channelId, true).catch((error) => setProfitShareResult(error));
     }
+    renderProfitShareOrders();
     setProfitShareResult({ message: `已选择订单 ${outTradeNo}，请选择已绑定分账关系后提交单笔分账` });
     $("profitShareTransIn").focus();
   }
@@ -4927,16 +5089,59 @@
   function renderProfitShareOrders() {
     const tableBody = $("profitShareOrders");
     if (!tableBody) return;
-    const orders = state.orders.filter((order) => order.status === "COMPLETED" && order.tradeNo);
+    const orders = selectableProfitShareOrders();
+    const current = new Set(orders.map(order => order.outTradeNo));
+    for (const id of state.selectedProfitShareOrders) {
+      if (!current.has(id)) state.selectedProfitShareOrders.delete(id);
+    }
+    const busy = state.singleProfitShareBusy;
+    const channelId = $("profitShareChannel").value;
     tableBody.innerHTML = orders.map((order) => `
-      <tr>
+      <tr class="${state.selectedProfitShareOrders.has(order.outTradeNo) ? "profit-order-selected" : ""}">
+        <td><input class="profit-order-check" type="checkbox" data-profit-select="${html(order.outTradeNo)}" aria-label="勾选订单 ${html(order.outTradeNo)}" ${state.selectedProfitShareOrders.has(order.outTradeNo) ? "checked" : ""} ${busy || !channelId ? "disabled" : ""}></td>
         <td>${html(order.outTradeNo)}</td>
         <td>${html(order.channelId || "-")}</td>
         <td class="amount-green">${html(order.amountText)}</td>
         <td>${order.profitShared ? '<span class="status success">已分账</span>' : '<span class="status pending">未分账</span>'}</td>
-        <td><button class="btn secondary small" type="button" data-share-order="${html(order.outTradeNo)}">选择</button></td>
+        <td><button class="btn secondary small" type="button" data-share-order="${html(order.outTradeNo)}" ${busy ? "disabled" : ""}>单笔处理</button></td>
       </tr>
-    `).join("");
+    `).join("") || '<tr><td colspan="6" class="muted">当前列表暂无可分账订单，请刷新或调整订单管理中的筛选条件。</td></tr>';
+    const count = state.selectedProfitShareOrders.size;
+    $("profitShareSelectionSummary").textContent = `已选 ${count} 笔订单 / 本批上限 50 笔`;
+    $("shareChannelBtn").textContent = `分账所选订单（${count}）`;
+    $("shareChannelBtn").disabled = busy || !count;
+    $("clearProfitShareSelectionBtn").disabled = busy || !count;
+    $("refreshProfitShareOrdersBtn").disabled = busy;
+    const unshared = orders.filter(order => !order.profitShared);
+    const checked = unshared.filter(order => state.selectedProfitShareOrders.has(order.outTradeNo)).length;
+    $("selectAllProfitShareOrders").checked = unshared.length > 0 && checked === unshared.length;
+    $("selectAllProfitShareOrders").indeterminate = checked > 0 && checked < unshared.length;
+    $("selectAllProfitShareOrders").disabled = busy || !channelId || !unshared.length;
+  }
+
+  function selectableProfitShareOrders() {
+    const channelId = $("profitShareChannel").value;
+    return state.orders.filter(order => order.status === "COMPLETED" && order.tradeNo
+      && (!channelId || order.channelId === channelId));
+  }
+
+  function selectProfitShareOrder(outTradeNo, checked) {
+    if (state.singleProfitShareBusy) return;
+    if (!$("profitShareChannel").value) throw { message: "请先选择支付通道" };
+    if (!selectableProfitShareOrders().some(order => order.outTradeNo === outTradeNo)) throw { message: "订单已不在当前可分账列表，请刷新后重选" };
+    if (checked && !state.selectedProfitShareOrders.has(outTradeNo) && state.selectedProfitShareOrders.size >= 50) throw { message: "每批最多选择 50 笔订单，请分批处理" };
+    if (checked) state.selectedProfitShareOrders.add(outTradeNo);
+    else state.selectedProfitShareOrders.delete(outTradeNo);
+    renderProfitShareOrders();
+  }
+
+  function selectAllProfitShareOrders(checked) {
+    if (state.singleProfitShareBusy) return;
+    if (!$("profitShareChannel").value) throw { message: "请先选择支付通道" };
+    const ids = selectableProfitShareOrders().filter(order => !order.profitShared).map(order => order.outTradeNo);
+    if (checked && new Set([...state.selectedProfitShareOrders, ...ids]).size > 50) throw { message: "全选将超过 50 笔，请手动勾选并分批处理" };
+    ids.forEach(id => checked ? state.selectedProfitShareOrders.add(id) : state.selectedProfitShareOrders.delete(id));
+    renderProfitShareOrders();
   }
 
   function receiverTypeText(type) {
@@ -5091,8 +5296,8 @@
     });
   }
 
-  function profitShareSinglePayload() {
-    const channel = channelById($("profitShareChannel").value);
+  function profitShareSinglePayload(selectedOrder = null) {
+    const channel = channelById(selectedOrder?.channelId || $("profitShareChannel").value);
     const mode = channel?.provider === "DOUYIN" ? "AMOUNT" : $("profitShareMode").value;
     const value = amountField("profitShareAmount");
     if (!value) {
@@ -5101,11 +5306,11 @@
     if (mode === "PERCENTAGE" && (value <= 0 || value > 100)) {
       throw { message: "分账比例必须大于 0 且不能超过 100%" };
     }
-    const outTradeNo = $("profitShareOutTradeNo").value.trim();
+    const outTradeNo = selectedOrder?.outTradeNo || $("profitShareOutTradeNo").value.trim();
     if (!outTradeNo) {
       throw { message: "请填写或选择订单号" };
     }
-    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+    const order = selectedOrder || state.orders.find((item) => item.outTradeNo === outTradeNo);
     const extra = parseJson("profitShareExtra", {});
     if (channel?.provider === "DOUYIN") {
       extra.unfreeze_unsplit = $("profitShareUnfreezeUnsplit").value === "true";
@@ -5124,35 +5329,80 @@
     });
   }
 
-  function profitShareBatchPayload() {
+  function profitShareMinorUnits(value, label) {
+    const text = String(value ?? "").trim();
+    if (!/^\d{1,12}(?:\.\d{1,2})?$/.test(text)) throw { message: `${label}必须是最多两位小数的正数` };
+    const [whole, fraction = ""] = text.split(".");
+    const units = BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0"));
+    if (units <= 0n) throw { message: `${label}必须大于 0` };
+    return units;
+  }
+
+  function profitShareMoneyFromUnits(units) {
+    return `${units / 100n}.${String(units % 100n).padStart(2, "0")}`;
+  }
+
+  async function prepareSelectedProfitShares() {
+    const channelId = $("profitShareChannel").value;
+    if (!channelId) throw { message: "请先选择支付通道" };
+    const ids = [...state.selectedProfitShareOrders];
+    if (!ids.length || ids.length > 50) throw { message: "请勾选 1–50 笔订单" };
     const relation = selectedProfitShareRelation();
-    if (!relation.account) {
-      throw { message: "请选择已绑定分账关系中的收入方账号" };
+    if (!relation.account || !state.profitSharingRelations.some(item => item.channelId === channelId
+        && item.status === "BOUND" && item.receiverAccount === relation.account
+        && (item.receiverType || "loginName") === relation.type)) {
+      throw { message: "请刷新当前通道的已绑定关系，并选择收入方" };
     }
-    const channel = channelById($("profitShareChannel").value);
-    const mode = channel?.provider === "DOUYIN" ? "AMOUNT" : $("profitShareMode").value;
-    const value = amountField("profitShareAmount");
-    if (mode === "PERCENTAGE" && !value) {
-      throw { message: "批量按比例分账必须填写分账比例" };
+    const percentage = channelById(channelId)?.provider !== "DOUYIN" && $("profitShareMode").value === "PERCENTAGE";
+    const value = profitShareMinorUnits($("profitShareAmount").value, percentage ? "分账比例" : "每单分账金额");
+    if (percentage && value > 10000n) throw { message: "分账比例不能超过 100%" };
+    // Capture every payload synchronously; later form edits cannot change this batch.
+    const plans = ids.map(id => {
+      const order = state.orders.find(item => item.outTradeNo === id);
+      if (!order || order.channelId !== channelId || order.status !== "COMPLETED" || !order.tradeNo) {
+        throw { message: `订单 ${id} 不属于当前通道或已不可分账，请刷新后重新选择` };
+      }
+      const key = singleProfitShareKey(order);
+      const previous = readSingleProfitShare(key);
+      if (previous?.status === "UNCONFIRMED") throw { message: `订单 ${id} 的原请求 ${previous.outRequestNo} 结果未确认，请转单笔核对／重试，或先取消勾选该订单` };
+      const orderUnits = profitShareMinorUnits(order.amount, `订单 ${id} 的金额`);
+      // Same positive HALF_UP rounding as the server, without floating-point drift.
+      const units = percentage ? (orderUnits * value + 5000n) / 10000n : value;
+      if (units <= 0n || units > orderUnits) throw { message: `订单 ${id} 的本次分账必须至少 0.01 元且不超过订单总金额` };
+      const payload = profitShareSinglePayload(order);
+      payload.outRequestNo = newSingleProfitShareRequestNo();
+      return { key, previous, payload, body: JSON.stringify(payload), units, orderAmount: String(order.amount),
+        shared: !!order.profitShared || previous?.status === "ACCEPTED" };
+    });
+    for (const plan of plans) {
+      plan.attempt = { outRequestNo: plan.payload.outRequestNo,
+        fingerprint: await singleProfitShareFingerprint(plan.payload), status: "UNCONFIRMED" };
     }
-    if (mode === "PERCENTAGE" && (value <= 0 || value > 100)) {
-      throw { message: "分账比例必须大于 0 且不能超过 100%" };
-    }
-    const extra = parseJson("profitShareExtra", {});
-    if (channel?.provider === "DOUYIN") {
-      extra.unfreeze_unsplit = $("profitShareUnfreezeUnsplit").value === "true";
-    }
-    return compact({
-      channelId: $("profitShareChannel").value,
-      transIn: relation.account.trim(),
-      transInType: relation.type,
-      amount: mode === "AMOUNT" ? value : undefined,
-      percentage: mode === "PERCENTAGE" ? value : undefined,
-      desc: $("profitShareDesc").value.trim(),
-      outRequestNoPrefix: $("profitShareOutRequestPrefix").value,
-      operatorId: $("profitShareOperatorId").value,
-      appAuthToken: $("profitShareAppAuthToken").value,
-      extra
+    return plans;
+  }
+
+  function confirmSelectedProfitShares(plans) {
+    const payload = plans[0].payload;
+    const receiver = payload.royaltyParameters[0];
+    const channel = channelById(payload.channelIds[0]);
+    const shared = plans.filter(plan => plan.shared).length;
+    const rule = receiver.amount_percentage != null
+      ? `每单按订单总金额的 ${receiver.amount_percentage}% 分账`
+      : `每单分账 ¥ ${receiver.amount}（不是整批总金额）`;
+    return openProfitShareConfirm({
+      kind: "batch", title: "确认批量分账", subtitle: "仅处理下列已勾选订单，不处理整个通道",
+      badge: `${plans.length} 笔订单`, valueLabel: "本批预计分账合计",
+      value: `¥ ${profitShareMoneyFromUnits(plans.reduce((sum, plan) => sum + plan.units, 0n))}`,
+      valueNote: `${rule}；最终以支付平台校验结果为准`,
+      order: `已选择 ${plans.length} 笔${shared ? `，其中 ${shared} 笔曾分账` : ""}`,
+      channel: channel?.name || channel?.channelName || payload.channelIds[0],
+      receiver: receiver.receiver_name || receiver.trans_in,
+      account: receiver.receiver_name ? receiver.trans_in : "",
+      request: "每笔订单使用独立请求号，提交后可逐笔核对",
+      batchItems: plans.map(plan => ({ order: plan.payload.outTradeNo, amount: profitShareMoneyFromUnits(plan.units), shared: plan.shared })),
+      noticeTitle: shared ? `包含 ${shared} 笔曾分账订单，将再次划拨资金` : "本操作将为所选订单分别新增分账",
+      notice: "请核对收入方、历史分账及每单剩余额度。批次不具备整体回滚能力；逐笔提交，遇到失败或结果不明即暂停后续订单。请保持页面打开，停止操作不撤销已经发出的请求。",
+      confirmText: `确认分账 ${plans.length} 笔`
     });
   }
 
@@ -5160,9 +5410,9 @@
     return sendSingleProfitShare(false);
   }
 
-  function singleProfitShareKey() {
-    const outTradeNo = $("profitShareOutTradeNo").value.trim();
-    const order = state.orders.find((item) => item.outTradeNo === outTradeNo);
+  function singleProfitShareKey(selectedOrder = null) {
+    const outTradeNo = selectedOrder?.outTradeNo || $("profitShareOutTradeNo").value.trim();
+    const order = selectedOrder || state.orders.find((item) => item.outTradeNo === outTradeNo);
     const channelId = order?.channelId || $("profitShareChannel").value;
     if (!outTradeNo || !channelId) throw { message: "请先填写订单号并选择支付通道" };
     return `payment.single-profit-share.v1:${JSON.stringify([channelId, outTradeNo])}`;
@@ -5217,10 +5467,75 @@
     return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
   }
 
-  function singleProfitShareSummary(payload) {
-    const receiver = payload.royaltyParameters[0];
-    const allocation = receiver.amount_percentage != null ? `${receiver.amount_percentage}%（按订单总金额）` : `${receiver.amount} 元`;
-    return `订单：${payload.outTradeNo}\n收入方：${receiver.trans_in}\n本次分账：${allocation}`;
+  function confirmSingleProfitShare(kind, payload) {
+    const receiver = payload.royaltyParameters?.[0];
+    const percentage = receiver?.amount_percentage != null;
+    const channelId = payload.channelIds?.[0];
+    const channel = channelById(channelId);
+    const review = kind === "review";
+    const retry = kind === "retry";
+    return openProfitShareConfirm({
+      kind,
+      title: review ? "确认已完成人工核对" : retry ? "确认重试原分账" : "确认新增分账",
+      subtitle: review ? "请先在支付平台核对，再解除本页面的新增限制" : retry ? "本次沿用原请求号和原分账明细" : "提交前，请核对本次分账信息",
+      badge: review ? "人工核对" : retry ? "原请求重试" : "新增分账",
+      valueLabel: review ? "操作类型" : percentage ? "本次分账比例" : "本次分账金额",
+      value: review ? "解除新增限制" : percentage ? `${receiver.amount_percentage}%` : `¥ ${receiver.amount}`,
+      valueNote: review ? "此操作本身不会发起资金划拨" : percentage ? "按订单总金额计算，非剩余可分账金额" : "币种：人民币（元）",
+      order: payload.outTradeNo,
+      channel: channel?.name || channel?.channelName || channelId || "—",
+      receiver: receiver?.receiver_name || receiver?.trans_in || "",
+      account: receiver?.receiver_name ? receiver.trans_in : "",
+      request: payload.outRequestNo,
+      noticeTitle: review ? "请确认原请求已有明确结果" : retry ? "重试原请求，不新增一笔分账" : "本操作将额外划拨一笔资金",
+      notice: review ? "此操作不查询、不撤销原分账，只解除本页面的新增限制。结果仍不明确时，请取消并继续核对。" : retry ? "将使用原请求号和原参数提交，忽略当前表单中的修改。请勿把网络超时当作新增分账重新提交。" : "这是一笔新增分账，不是失败重试。请确认历史分账及剩余额度；若原请求结果不明，请取消并重试原请求。",
+      confirmText: review ? "确认已核对" : retry ? "确认重试原请求" : "确认新增分账"
+    });
+  }
+
+  function openProfitShareConfirm(options) {
+    const modal = $("profitShareConfirmModal");
+    if (state.profitShareConfirmResolve || modal.open) throw { message: "请先完成当前分账确认" };
+    if (typeof modal.showModal !== "function") throw { message: "浏览器不支持分账确认窗口，请使用新版浏览器" };
+    const fields = {
+      Title: "title", Subtitle: "subtitle", Badge: "badge", ValueLabel: "valueLabel",
+      Value: "value", ValueNote: "valueNote", Order: "order", Channel: "channel",
+      Receiver: "receiver", Account: "account", Request: "request",
+      NoticeTitle: "noticeTitle", Notice: "notice"
+    };
+    Object.entries(fields).forEach(([suffix, key]) => {
+      $("profitShareConfirm" + suffix).textContent = options[key] || "";
+    });
+    modal.dataset.kind = options.kind;
+    $("profitShareConfirmReceiverRow").classList.toggle("hidden", !options.receiver);
+    $("profitShareConfirmReviewRow").classList.toggle("hidden", options.kind !== "review");
+    $("profitShareConfirmReviewed").checked = false;
+    $("profitShareConfirmBatchList").classList.toggle("hidden", !options.batchItems?.length);
+    $("profitShareConfirmBatchOrders").innerHTML = (options.batchItems || []).map(item =>
+      `<tr><td>${html(item.order)}${item.shared ? '<br><span class="muted">曾分账，请核对剩余额度</span>' : ""}</td><td>¥ ${html(item.amount)}</td></tr>`
+    ).join("");
+    $("acceptProfitShareConfirmBtn").textContent = options.confirmText;
+    $("acceptProfitShareConfirmBtn").disabled = options.kind === "review";
+    return new Promise((resolve, reject) => {
+      state.profitShareConfirmResolve = resolve;
+      try {
+        // Native dialog keeps keyboard focus inside and makes the background inert.
+        modal.showModal();
+        $("cancelProfitShareConfirmBtn").focus();
+      } catch (error) {
+        state.profitShareConfirmResolve = null;
+        reject({ message: "无法打开分账确认窗口，未提交分账，请刷新页面后重试" });
+      }
+    });
+  }
+
+  function closeProfitShareConfirm(confirmed = false) {
+    const modal = $("profitShareConfirmModal");
+    if (confirmed && modal.dataset.kind === "review" && !$("profitShareConfirmReviewed").checked) return;
+    const resolve = state.profitShareConfirmResolve;
+    state.profitShareConfirmResolve = null;
+    if (modal.open) modal.close();
+    if (resolve) resolve(confirmed);
   }
 
   function setSingleProfitShareBusy(busy) {
@@ -5228,6 +5543,9 @@
     ["shareSingleBtn", "retrySingleProfitShareBtn", "reviewSingleProfitShareBtn", "shareChannelBtn"].forEach(id => {
       $(id).disabled = busy;
     });
+    $("profitShareFormFields").disabled = busy;
+    renderProfitShareOrders();
+    if (state.profitShareBatchResults?.length) renderProfitShareBatchResults();
   }
 
   async function sendSingleProfitShare(retry) {
@@ -5250,14 +5568,14 @@
           }
           body = JSON.stringify(restored);
         }
-        if (!window.confirm(`重试原分账（不是新增）\n请求号：${attempt.outRequestNo}\n${singleProfitShareSummary(JSON.parse(body))}\n将使用原参数，忽略当前表单中的修改。`)) return;
+        if (!await confirmSingleProfitShare("retry", JSON.parse(body))) return;
       } else {
         if (attempt?.status === "UNCONFIRMED") {
           throw { message: "该订单上一笔分账结果未确认，请先“重试原单笔分账”。如已在支付平台核对结果，再点击“已人工核对原请求”，不要直接换号重试。" };
         }
         const payload = profitShareSinglePayload();
         payload.outRequestNo = newSingleProfitShareRequestNo();
-        if (!window.confirm(`确认新增一笔分账？\n${singleProfitShareSummary(payload)}\n这会产生额外划拨，不是重试。请确认历史分账及剩余额度。`)) return;
+        if (!await confirmSingleProfitShare("new", payload)) return;
         body = JSON.stringify(payload);
         attempt = { outRequestNo: payload.outRequestNo, fingerprint: await singleProfitShareFingerprint(payload), status: "UNCONFIRMED" };
       }
@@ -5277,6 +5595,12 @@
       if (data.status === "SUCCESS") {
         attempt.status = "ACCEPTED";
         saveSingleProfitShare(key, attempt);
+        state.selectedProfitShareOrders?.delete(payload.outTradeNo);
+        const batchItem = state.profitShareBatchResults?.find(item => item.outRequestNo === attempt.outRequestNo);
+        if (batchItem) {
+          batchItem.status = "ACCEPTED";
+          batchItem.message = "原请求重试后接口已受理，请以支付平台最终结果为准";
+        }
       }
       if (gatewayFailed(data)) throw gatewayFailure("分账", data);
       setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n${data.status === "SUCCESS" ? "分账接口已受理；如需额外分账，请明确新增一笔。" : "分账结果尚未确认，请核对原请求，不要重新生成请求号。"}`, response: data });
@@ -5291,31 +5615,144 @@
     }
   }
 
-  function reviewSingleProfitShare() {
+  async function reviewSingleProfitShare() {
     if (state.singleProfitShareBusy) return;
-    const key = singleProfitShareKey();
-    const attempt = readSingleProfitShare(key);
-    if (!attempt) throw { message: "本标签页没有该订单的原单笔请求记录" };
-    $("profitShareLastRequestNo").value = attempt.outRequestNo;
-    if (!window.confirm(`请求号：${attempt.outRequestNo}\n只有已在支付宝/抖音核对该请求最终结果及剩余额度后，才能确认。\n此操作不查询、不撤销原分账，只解除本页面的新增限制。结果仍不明请取消。\n确认已经核对？`)) return;
-    attempt.status = "REVIEWED";
-    saveSingleProfitShare(key, attempt);
-    setProfitShareResult({ message: `已记录人工核对：${attempt.outRequestNo}。不会自动提交；新增单笔分账将使用新请求号。` });
+    setSingleProfitShareBusy(true);
+    try {
+      const key = singleProfitShareKey();
+      const attempt = readSingleProfitShare(key);
+      if (!attempt) throw { message: "本标签页没有该订单的原单笔请求记录" };
+      $("profitShareLastRequestNo").value = attempt.outRequestNo;
+      const [channelId, outTradeNo] = JSON.parse(key.slice("payment.single-profit-share.v1:".length));
+      const body = state.singleProfitShareBodies.get(attempt.outRequestNo);
+      const original = body ? JSON.parse(body) : { outTradeNo, channelIds: [channelId], outRequestNo: attempt.outRequestNo };
+      if (!await confirmSingleProfitShare("review", original)) return;
+      attempt.status = "REVIEWED";
+      saveSingleProfitShare(key, attempt);
+      setProfitShareResult({ message: `已记录人工核对：${attempt.outRequestNo}。不会自动提交；新增单笔分账将使用新请求号。` });
+    } finally {
+      setSingleProfitShareBusy(false);
+    }
   }
 
-  async function submitChannelProfitShare() {
-    if (!$("profitShareChannel").value) {
-      throw { message: "请选择要批量分账的支付通道" };
+  async function submitSelectedProfitShares() {
+    if (state.singleProfitShareBusy) return;
+    setSingleProfitShareBusy(true);
+    let started = false;
+    try {
+      const plans = await prepareSelectedProfitShares();
+      if (!await confirmSelectedProfitShares(plans)) return;
+      started = true;
+      state.profitShareBatchBusy = true;
+      state.profitShareBatchStop = false;
+      state.profitShareBatchResults = plans.map(plan => ({ outTradeNo: plan.payload.outTradeNo,
+        channelId: plan.payload.channelIds[0], outRequestNo: plan.payload.outRequestNo, status: "WAITING", message: "等待提交" }));
+      // Keep original form details in memory even for queued items; do not persist secrets.
+      plans.forEach(plan => state.singleProfitShareBodies.set(plan.payload.outRequestNo, plan.body));
+      renderProfitShareBatchResults();
+      for (let index = 0; index < plans.length; index++) {
+        const plan = plans[index];
+        const item = state.profitShareBatchResults[index];
+        if (state.profitShareBatchStop) {
+          item.status = "NOT_SENT";
+          item.message = "批次已暂停，此订单未发出请求";
+          continue;
+        }
+        let sent = false;
+        try {
+          const currentOrder = state.orders.find(order => order.outTradeNo === item.outTradeNo);
+          if (!currentOrder || currentOrder.status !== "COMPLETED" || currentOrder.channelId !== item.channelId
+              || currentOrder.tradeNo !== plan.payload.tradeNo || String(currentOrder.amount) !== plan.orderAmount) {
+            throw { message: "订单信息已变化，未提交，请刷新后核对" };
+          }
+          if (JSON.stringify(readSingleProfitShare(plan.key)) !== JSON.stringify(plan.previous)) {
+            throw { message: "原请求记录发生变化，已暂停，请重新核对" };
+          }
+          // Persist each identity before that request, not the whole queue up front.
+          saveSingleProfitShare(plan.key, plan.attempt);
+          state.singleProfitShareBodies.set(plan.attempt.outRequestNo, plan.body);
+          item.status = "SENDING";
+          item.message = "正在提交，请勿关闭页面";
+          renderProfitShareBatchResults();
+          sent = true;
+          const data = await request("/api/v1/payments/profit-sharing", { method: "POST", body: plan.body });
+          if (data?.status !== "SUCCESS") {
+            throw { message: gatewayFailed(data) ? gatewayFailure("分账", data).message : `结果待核对：${data?.message || data?.status || "响应格式异常"}` };
+          }
+          item.status = "ACCEPTED";
+          item.message = "接口已受理，请以支付平台最终结果为准";
+          state.selectedProfitShareOrders.delete(item.outTradeNo);
+          const order = state.orders.find(order => order.outTradeNo === item.outTradeNo);
+          if (order) order.profitShared = true;
+          plan.attempt.status = "ACCEPTED";
+          try { saveSingleProfitShare(plan.key, plan.attempt); } catch (error) {
+            item.message = `接口已受理，但本地记录保存失败：${error.message}。请勿重复分账`;
+            state.profitShareBatchStop = true;
+          }
+        } catch (error) {
+          item.status = sent ? "UNCONFIRMED" : "NOT_SENT";
+          item.message = error?.message || "处理异常，请核对原请求";
+          state.profitShareBatchStop = true;
+        }
+        renderProfitShareBatchResults();
+      }
+      setProfitShareResult({ message: "批量处理已结束，请查看下方逐笔结果。未确认的请求不能直接换号重提。" });
+      try { await loadOrders(); } catch (error) {
+        setProfitShareResult({ message: "批量处理已结束，但订单列表刷新失败。下方分账结果仍有效，请勿因此重复提交。" });
+      }
+    } finally {
+      state.profitShareBatchBusy = false;
+      setSingleProfitShareBusy(false);
+      if (started) renderProfitShareBatchResults();
     }
-    const data = await request("/api/v1/payments/profit-sharing/channel", {
-      method: "POST",
-      body: JSON.stringify(profitShareBatchPayload())
-    });
-    setProfitShareResult({
-      message: data.failed ? `批量分账完成，失败 ${data.failed} 笔` : "批量分账已提交",
-      response: data
-    });
-    await loadOrders();
+  }
+
+  function renderProfitShareBatchResults() {
+    const items = state.profitShareBatchResults;
+    $("profitShareBatchResultsPanel").classList.toggle("hidden", !items.length);
+    $("stopProfitShareBatchBtn").classList.toggle("hidden", !state.profitShareBatchBusy);
+    $("stopProfitShareBatchBtn").disabled = state.profitShareBatchStop;
+    const count = status => items.filter(item => item.status === status).length;
+    $("profitShareBatchProgress").textContent = `${state.profitShareBatchBusy ? "处理中" : "本批处理结束"}：共 ${items.length} 笔，接口受理 ${count("ACCEPTED")} 笔，待核对 ${count("UNCONFIRMED")} 笔，未提交 ${count("WAITING") + count("NOT_SENT")} 笔${state.profitShareBatchStop ? "；已停止后续提交" : ""}。`;
+    const labels = { WAITING: "等待提交", SENDING: "正在提交", ACCEPTED: "接口受理", UNCONFIRMED: "待核对", NOT_SENT: "未提交" };
+    $("profitShareBatchResults").innerHTML = items.map(item => `<tr>
+      <td>${html(item.outTradeNo)}</td><td class="profit-batch-request">${html(item.outRequestNo)}</td>
+      <td><span class="status ${item.status === "ACCEPTED" ? "success" : "pending"}">${labels[item.status]}</span></td>
+      <td>${html(item.message)}</td><td><button class="btn secondary small" type="button" data-batch-share-order="${html(item.outTradeNo)}" ${state.singleProfitShareBusy ? "disabled" : ""}>转单笔处理</button></td>
+    </tr>`).join("");
+  }
+
+  async function openBatchProfitShareOrder(outTradeNo) {
+    if (state.singleProfitShareBusy) return;
+    const item = state.profitShareBatchResults.find(item => item.outTradeNo === outTradeNo);
+    if (!item) return;
+    const body = state.singleProfitShareBodies.get(item.outRequestNo);
+    if (!body) throw { message: "原参数已不在当前页面，请先核对请求号，再恢复原参数处理" };
+    const payload = JSON.parse(body);
+    const receiver = payload.royaltyParameters[0];
+    setSingleProfitShareBusy(true);
+    try {
+      if ($("profitShareChannel").value !== item.channelId) state.selectedProfitShareOrders.clear();
+      $("profitShareOutTradeNo").value = payload.outTradeNo;
+      $("profitShareChannel").value = item.channelId;
+      $("profitShareTradeNo").value = payload.tradeNo || "";
+      $("profitShareMode").value = receiver.amount_percentage != null ? "PERCENTAGE" : "AMOUNT";
+      $("profitShareAmount").value = receiver.amount_percentage ?? receiver.amount;
+      $("profitShareDesc").value = receiver.desc || "";
+      $("profitShareOperatorId").value = payload.operatorId || "";
+      $("profitShareAppAuthToken").value = payload.appAuthToken || "";
+      $("profitShareExtra").value = JSON.stringify(payload.extra || {});
+      $("profitShareUnfreezeUnsplit").value = String(payload.extra?.unfreeze_unsplit === true);
+      $("profitShareLastRequestNo").value = item.outRequestNo;
+      $("profitShareQueryOutRequestNo").value = item.outRequestNo;
+      syncProfitShareModeFields();
+      await loadProfitSharingRelations(item.channelId, true);
+      $("profitShareTransIn").value = `${receiver.trans_in_type || "loginName"}|${receiver.trans_in}`;
+      syncProfitShareRelationType();
+      setProfitShareResult({ message: `已恢复订单 ${item.outTradeNo} 的原分账参数，请求号 ${item.outRequestNo}。${item.status === "NOT_SENT" ? "此请求未提交，可核对后新增分账。" : "结果不明请使用“重试原单笔分账”，不要新增。"}` });
+    } finally {
+      setSingleProfitShareBusy(false);
+    }
   }
 
   function douyinProfitQueryPayload() {
@@ -7093,6 +7530,20 @@
       });
   });
 
+  $("closeProfitShareConfirmBtn").addEventListener("click", () => closeProfitShareConfirm(false));
+  $("cancelProfitShareConfirmBtn").addEventListener("click", () => closeProfitShareConfirm(false));
+  $("acceptProfitShareConfirmBtn").addEventListener("click", () => closeProfitShareConfirm(true));
+  $("profitShareConfirmReviewed").addEventListener("change", () => {
+    $("acceptProfitShareConfirmBtn").disabled = !$("profitShareConfirmReviewed").checked;
+  });
+  $("profitShareConfirmModal").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeProfitShareConfirm(false);
+  });
+  $("profitShareConfirmModal").addEventListener("close", () => {
+    if (!$("profitShareConfirmModal").open) closeProfitShareConfirm(false);
+  });
+
   $("closeConfirmModalBtn").addEventListener("click", () => closeConfirmModal(false));
 
   $("cancelConfirmModalBtn").addEventListener("click", () => closeConfirmModal(false));
@@ -7220,6 +7671,8 @@
 
   $("profitShareChannel").addEventListener("change", async () => {
     try {
+      state.selectedProfitShareOrders.clear();
+      renderProfitShareOrders();
       syncProfitShareModeFields();
       await loadProfitSharingRelations($("profitShareChannel").value);
     } catch (error) {
@@ -7249,7 +7702,7 @@
 
   $("shareChannelBtn").addEventListener("click", async () => {
     try {
-      await submitChannelProfitShare();
+      await submitSelectedProfitShares();
     } catch (error) {
       setProfitShareResult(error);
     }
@@ -7259,8 +7712,8 @@
     try { await sendSingleProfitShare(true); } catch (error) { setProfitShareResult(error); }
   });
 
-  $("reviewSingleProfitShareBtn").addEventListener("click", () => {
-    try { reviewSingleProfitShare(); } catch (error) { setProfitShareResult(error); }
+  $("reviewSingleProfitShareBtn").addEventListener("click", async () => {
+    try { await reviewSingleProfitShare(); } catch (error) { setProfitShareResult(error); }
   });
 
   $("queryProfitShareBtn").addEventListener("click", async () => {
@@ -7333,6 +7786,47 @@
     if (button) {
       fillProfitShareOrder(button.dataset.shareOrder);
     }
+  });
+
+  $("profitShareOrders").addEventListener("change", (event) => {
+    const checkbox = event.target.closest("input[data-profit-select]");
+    if (!checkbox) return;
+    try { selectProfitShareOrder(checkbox.dataset.profitSelect, checkbox.checked); }
+    catch (error) { renderProfitShareOrders(); setProfitShareResult(error); }
+  });
+
+  $("selectAllProfitShareOrders").addEventListener("change", (event) => {
+    try { selectAllProfitShareOrders(event.target.checked); }
+    catch (error) { renderProfitShareOrders(); setProfitShareResult(error); }
+  });
+
+  $("clearProfitShareSelectionBtn").addEventListener("click", () => {
+    if (state.singleProfitShareBusy) return;
+    state.selectedProfitShareOrders.clear();
+    renderProfitShareOrders();
+  });
+
+  $("refreshProfitShareOrdersBtn").addEventListener("click", async () => {
+    if (state.singleProfitShareBusy) return;
+    try { await loadOrders(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("stopProfitShareBatchBtn").addEventListener("click", () => {
+    state.profitShareBatchStop = true;
+    renderProfitShareBatchResults();
+  });
+
+  $("profitShareBatchResults").addEventListener("click", async (event) => {
+    const button = event.target.closest("button[data-batch-share-order]");
+    if (!button || state.singleProfitShareBusy) return;
+    try { await openBatchProfitShareOrder(button.dataset.batchShareOrder); }
+    catch (error) { setProfitShareResult(error); }
+  });
+
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.profitShareBatchBusy) return;
+    event.preventDefault();
+    event.returnValue = "";
   });
 
   $("addMerchantBtn").addEventListener("click", openMerchantModal);

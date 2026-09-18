@@ -11,7 +11,7 @@ const functions = [
   'compact', 'profitShareRoyaltyParameter', 'profitShareSinglePayload',
   'submitSingleProfitShare', 'singleProfitShareKey', 'readSingleProfitShare',
   'saveSingleProfitShare', 'newSingleProfitShareRequestNo', 'canonicalProfitShare',
-  'singleProfitShareFingerprint', 'singleProfitShareSummary', 'setSingleProfitShareBusy',
+  'singleProfitShareFingerprint', 'confirmSingleProfitShare', 'setSingleProfitShareBusy',
   'sendSingleProfitShare', 'reviewSingleProfitShare', 'gatewayFailed',
   'gatewayFailure', 'gatewayAttemptsText'
 ];
@@ -46,13 +46,18 @@ function setup(options = {}) {
       getItem: key => { if (options.failRead) throw Error('storage unavailable'); return storage.get(key) ?? null; },
       setItem: (key, value) => { if (options.failWrite) throw Error('quota exceeded'); storage.set(key, value); }
     },
-    window: { crypto: options.crypto || webcrypto, confirm: text => { confirmations.push(text); return options.confirm !== false; } },
+    window: { crypto: options.crypto || webcrypto },
+    openProfitShareConfirm: async details => {
+      confirmations.push(JSON.stringify(details));
+      return options.confirmation ? options.confirmation(details) : options.confirm !== false;
+    },
     request: async (url, request) => {
       calls.push({ url, ...request });
       return options.request ? options.request(url, request) : { status: 'SUCCESS', code: '10000' };
     },
     loadOrders: async () => { if (options.failRefresh) throw Error('list failed'); },
-    setProfitShareResult: result => messages.push(result)
+    setProfitShareResult: result => messages.push(result),
+    renderProfitShareOrders: () => {}
   });
   vm.runInContext(functions.map(pageFunction).join('\n'), ctx);
   return { ctx, elements, storage, calls, confirmations, messages };
@@ -218,7 +223,7 @@ test('pending, failed, system-error and malformed responses never unlock automat
 test('manual reconciliation only unlocks explicit new allocation; it makes no API request', async () => {
   const { ctx, calls, confirmations } = setup({ request: timeout });
   await rejection(ctx.submitSingleProfitShare(), /请求超时/);
-  ctx.reviewSingleProfitShare();
+  await ctx.reviewSingleProfitShare();
   assert.equal(calls.length, 1);
   assert.match(confirmations.at(-1), /不查询、不撤销/);
   await rejection(ctx.submitSingleProfitShare(), /请求超时/);
@@ -229,7 +234,7 @@ test('cancelled manual reconciliation leaves unresolved request blocked', async 
   const original = setup({ request: timeout });
   await rejection(original.ctx.submitSingleProfitShare(), /请求超时/);
   const reload = setup({ storage: original.storage, confirm: false });
-  reload.ctx.reviewSingleProfitShare();
+  await reload.ctx.reviewSingleProfitShare();
   await rejection(reload.ctx.submitSingleProfitShare(), /结果未确认/);
 });
 
@@ -255,4 +260,114 @@ test('new and retry controls are separate and retry handler uses the retained at
   assert.match(page, /id="shareSingleBtn"[^>]*>新增单笔分账/);
   assert.match(page, /id="retrySingleProfitShareBtn"[^>]*>重试原单笔分账/);
   assert.match(script, /\$\("retrySingleProfitShareBtn"\)\.addEventListener\("click", async \(\) => \{\s*try \{ await sendSingleProfitShare\(true\)/);
+});
+
+test('custom confirmation waits for approval and freezes the displayed allocation', async () => {
+  let approve;
+  const { ctx, elements, calls, confirmations } = setup({ confirmation: () => new Promise(resolve => { approve = resolve; }) });
+  const pending = ctx.submitSingleProfitShare();
+  assert.equal(calls.length, 0);
+  assert.equal(elements.shareSingleBtn.disabled, true);
+  await ctx.submitSingleProfitShare();
+  assert.equal(confirmations.length, 1);
+  elements.profitShareAmount.value = '90';
+  elements.receiver.value = 'changed@example.com';
+  approve(true);
+  await pending;
+  assert.equal(payload(calls[0]).royaltyParameters[0].amount_percentage, 20);
+  assert.equal(payload(calls[0]).royaltyParameters[0].trans_in, 'receiver@example.com');
+  assert.equal(JSON.parse(confirmations[0]).request, payload(calls[0]).outRequestNo);
+});
+
+test('manual review remains locked while the custom confirmation is open', async () => {
+  const { ctx, calls } = setup({ request: timeout });
+  await rejection(ctx.submitSingleProfitShare(), /请求超时/);
+  let cancel, shown = 0;
+  ctx.openProfitShareConfirm = () => { shown++; return new Promise(resolve => { cancel = resolve; }); };
+  const pending = ctx.reviewSingleProfitShare();
+  await ctx.reviewSingleProfitShare();
+  await ctx.submitSingleProfitShare();
+  assert.equal(shown, 1);
+  assert.equal(calls.length, 1);
+  cancel(false);
+  await pending;
+  assert.equal(ctx.state.singleProfitShareBusy, false);
+  await rejection(ctx.submitSingleProfitShare(), /结果未确认/);
+});
+
+test('amount confirmation never rounds away part of the submitted value', async () => {
+  const { ctx, elements, confirmations } = setup({ confirm: false });
+  elements.profitShareMode.value = 'AMOUNT';
+  elements.profitShareAmount.value = '1.234';
+  await ctx.submitSingleProfitShare();
+  assert.equal(JSON.parse(confirmations[0]).value, '¥ 1.234');
+});
+
+function setupModal() {
+  const elements = new Proxy({}, {
+    get(target, id) {
+      return target[id] ||= {
+        textContent: '', dataset: {}, checked: false, disabled: false, open: false,
+        classList: { toggle() {} }, focus() { this.focused = true; },
+        showModal() { this.open = true; }, close() { this.open = false; }
+      };
+    }
+  });
+  const ctx = vm.createContext({ state: { profitShareConfirmResolve: null }, $: id => elements[id] });
+  vm.runInContext(['openProfitShareConfirm', 'closeProfitShareConfirm'].map(pageFunction).join('\n'), ctx);
+  return { ctx, elements };
+}
+
+test('custom modal displays values as text and puts initial focus on cancel', async () => {
+  const { ctx, elements } = setupModal();
+  const pending = ctx.openProfitShareConfirm({ kind: 'new', title: '确认新增分账', receiver: '<img src=x onerror=alert(1)>', value: '20%', request: 'PS_test' });
+  assert.equal(elements.profitShareConfirmModal.open, true);
+  assert.equal(elements.profitShareConfirmReceiver.textContent, '<img src=x onerror=alert(1)>');
+  assert.equal(elements.profitShareConfirmValue.textContent, '20%');
+  assert.equal(elements.profitShareConfirmRequest.textContent, 'PS_test');
+  assert.equal(elements.cancelProfitShareConfirmBtn.focused, true);
+  ctx.closeProfitShareConfirm(false);
+  assert.equal(await pending, false);
+  assert.equal(elements.profitShareConfirmModal.open, false);
+  assert.equal(ctx.state.profitShareConfirmResolve, null);
+  ctx.closeProfitShareConfirm(true); // Duplicate close events must be harmless.
+});
+
+test('manual review requires acknowledgement and resets it on each opening', async () => {
+  const { ctx, elements } = setupModal();
+  const pending = ctx.openProfitShareConfirm({ kind: 'review' });
+  assert.equal(elements.acceptProfitShareConfirmBtn.disabled, true);
+  ctx.closeProfitShareConfirm(true);
+  assert.equal(elements.profitShareConfirmModal.open, true);
+  elements.profitShareConfirmReviewed.checked = true;
+  ctx.closeProfitShareConfirm(true);
+  assert.equal(await pending, true);
+  const next = ctx.openProfitShareConfirm({ kind: 'review' });
+  assert.equal(elements.profitShareConfirmReviewed.checked, false);
+  ctx.closeProfitShareConfirm(false);
+  assert.equal(await next, false);
+});
+
+test('a second modal cannot replace the pending confirmation', async () => {
+  const { ctx } = setupModal();
+  const pending = ctx.openProfitShareConfirm({ kind: 'new' });
+  assert.throws(() => ctx.openProfitShareConfirm({ kind: 'retry' }), error => /当前分账确认/.test(error.message));
+  ctx.closeProfitShareConfirm(true);
+  assert.equal(await pending, true);
+});
+
+test('unsupported or failed modal opening fails closed and releases pending state', async () => {
+  const { ctx, elements } = setupModal();
+  elements.profitShareConfirmModal.showModal = () => { throw Error('not active'); };
+  await rejection(ctx.openProfitShareConfirm({ kind: 'new' }), /未提交分账/);
+  assert.equal(ctx.state.profitShareConfirmResolve, null);
+  elements.profitShareConfirmModal.showModal = undefined;
+  assert.throws(() => ctx.openProfitShareConfirm({ kind: 'new' }), error => /不支持/.test(error.message));
+});
+
+test('profit-sharing flows use custom dialogs with named actions and Escape cancellation', () => {
+  assert.doesNotMatch(pageFunction('sendSingleProfitShare') + pageFunction('reviewSingleProfitShare'), /window\.confirm/);
+  assert.match(page, /<dialog id="profitShareConfirmModal"[^>]*aria-labelledby="profitShareConfirmTitle"/);
+  assert.match(script, /\$\("profitShareConfirmModal"\)\.addEventListener\("cancel", \(event\) => \{\s*event.preventDefault\(\);\s*closeProfitShareConfirm\(false\)/);
+  assert.match(script, /\$\("cancelProfitShareConfirmBtn"\)\.addEventListener\("click", \(\) => closeProfitShareConfirm\(false\)\)/);
 });
