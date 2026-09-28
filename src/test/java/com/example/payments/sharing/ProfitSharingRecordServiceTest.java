@@ -72,7 +72,8 @@ class ProfitSharingRecordServiceTest {
         records.reserve(channel, request);
         ProfitSharingRecordService callback = new ProfitSharingRecordService(jdbc, orders, new ObjectMapper());
         callback.recordDouyinNotification(channel, Map.of("out_order_no", "SHARE-1", "transaction_id", "REMOTE-TRADE",
-                "state", "FINISHED", "receivers", List.of(Map.of("account", "receiver-account-01", "amount", 234, "result", "SUCCESS"))));
+                "state", "FINISHED", "finish_amount", 100, "finish_description", "自动解冻剩余款",
+                "receivers", List.of(Map.of("account", "receiver-account-01", "amount", 234, "result", "SUCCESS"))));
         records.recordResponse(channel, request, result(PaymentStatus.PENDING, Map.of("state", "PROCESSING")));
         records.recordResponse(channel, request, result(PaymentStatus.FAILED, Map.of("state", "FAILED")));
         assertThat(records.search(null, null, null, null, null).getFirst().status()).isEqualTo("SUCCESS");

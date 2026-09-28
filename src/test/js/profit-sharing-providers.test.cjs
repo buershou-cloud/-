@@ -8,6 +8,9 @@ const page = fs.readFileSync(path.join(__dirname, '../../main/resources/static/i
 const script = page.match(/<script>([\s\S]*?)<\/script>/)[1];
 const cashier = fs.readFileSync(path.join(__dirname, '../../main/resources/static/cashier.html'), 'utf8');
 const cashierScript = cashier.match(/<script>([\s\S]*?)<\/script>/)[1];
+const unfreezeSelect = page.match(/<select id="profitShareUnfreezeUnsplit">([\s\S]*?)<\/select>/)[1];
+const defaultUnfreeze = unfreezeSelect.match(/<option value="([^"]+)"[^>]*\bselected\b/)?.[1]
+  || unfreezeSelect.match(/<option value="([^"]+)"/)[1];
 function pageFunction(name, source = script) {
   const start = source.search(new RegExp(`^  (?:async )?function ${name}\\(`, 'm'));
   assert.notEqual(start, -1, `Missing ${name}`);
@@ -19,7 +22,7 @@ const relation = (channelId, account, type) => ({ channelId, receiverAccount: ac
 function setup(options = {}) {
   const defaults = { profitShareChannel: 'ali', profitRelationChannel: 'dy', profitShareMode: 'PERCENTAGE',
     profitShareOutTradeNo: 'ALI-ORDER', profitShareAmount: '20', profitShareExtra: '{}',
-    profitShareUnfreezeUnsplit: 'true', profitRelationExtra: '{}', profitRelationType: 'MERCHANT_ID',
+    profitShareUnfreezeUnsplit: defaultUnfreeze, profitRelationExtra: '{}', profitRelationType: 'MERCHANT_ID',
     profitShareQueryOutRequestNo: '', profitShareTradeNo: '', profitRelationRelationType: 'STORE' };
   const elements = new Proxy({}, { get(target, id) {
     if (!target[id]) {
@@ -47,7 +50,7 @@ function setup(options = {}) {
   vm.runInContext(['html', 'compact', 'channelById', 'receiverTypeText', 'relationOptionText',
     'renderProfitShareRelationOptions', 'renderProfitRelationTable', 'loadProfitSharingRelations',
     'profitShareRoyaltyParameter', 'profitShareSinglePayload', 'syncProfitShareModeFields',
-    'douyinProfitQueryPayload', 'queryProfitShare', 'queryProfitShareRemaining', 'finishProfitShare',
+    'douyinProfitQueryPayload', 'queryProfitShare', 'queryProfitShareRemaining',
     'returnProfitShare', 'queryProfitShareReturn', 'profitRelationPayload', 'matchingDouyinProfitShareResponse',
     'reconcileDouyinProfitShare'].map(name => pageFunction(name)).join('\n'), ctx);
   return { ctx, state, elements, calls };
@@ -120,6 +123,22 @@ test('cross-channel typed orders or receiver selections cannot produce a new tra
   assert.equal(payload.extra.unfreeze_unsplit, true);
 });
 
+test('the visible Douyin default releases remaining funds and an explicit keep-frozen choice is preserved', () => {
+  assert.equal(defaultUnfreeze, 'true');
+  const form = page.slice(page.indexOf('id="profitShareFormFields"'), page.indexOf('id="profitShareLastRequestNo"'));
+  assert.ok(form.indexOf('id="profitShareUnfreezeUnsplit"') < form.indexOf('<details'));
+  assert.match(form, /解冻后，该订单不能再次分账/);
+  const { ctx, elements } = setup();
+  elements.profitShareChannel.value = 'dy';
+  elements.profitShareOutTradeNo.value = 'DY-ORDER';
+  elements.receiver.value = 'DY-MERCHANT';
+  elements.receiverType.value = 'MERCHANT_ID';
+  assert.equal(ctx.profitShareSinglePayload().extra.unfreeze_unsplit, true);
+  elements.profitShareUnfreezeUnsplit.value = 'false';
+  elements.profitShareExtra.value = '{"unfreeze_unsplit":true}';
+  assert.equal(ctx.profitShareSinglePayload().extra.unfreeze_unsplit, false);
+});
+
 test('visiting Douyin preserves the selected Alipay percentage or fixed-amount mode', () => {
   for (const mode of ['PERCENTAGE', 'AMOUNT']) {
     const { ctx, elements } = setup();
@@ -138,15 +157,13 @@ test('visiting Douyin preserves the selected Alipay percentage or fixed-amount m
   }
 });
 
-test('Douyin remaining amount and finishing can run before any allocation request exists', async () => {
+test('Douyin remaining amount can be queried before any allocation request exists', async () => {
   const { ctx, elements, calls } = setup();
   elements.profitShareChannel.value = 'dy';
   elements.profitShareTradeNo.value = 'DY-TRADE';
   await ctx.queryProfitShareRemaining();
-  await ctx.finishProfitShare();
   assert.equal(calls[0].url, '/api/v1/payments/profit-sharing/remaining');
   assert.equal(JSON.parse(calls[0].body).tradeNo, 'DY-TRADE');
-  assert.match(JSON.parse(calls[1].body).outRequestNo, /^PSF_/);
   await assert.rejects(ctx.queryProfitShare(), error => /请填写分账请求号/.test(error.message));
 });
 

@@ -139,7 +139,7 @@ public class DouyinNotifyController {
             // A receiver-level success or an unfreeze result does not prove that a split succeeded.
             if ("ASYNC_SPLIT.FINISH".equals(upper(eventType))
                     && "PROFITSHARING".equals(upper(originalType))
-                    && !payload.containsKey("finish_amount") && !payload.containsKey("finish_description")) {
+                    && !DouyinProfitSharingState.hasFinishEvidence(payload)) {
                 String outOrderNo = required(payload, "out_order_no");
                 String transactionId = required(payload, "transaction_id");
                 if ("FINISHED".equals(upper(text(payload, "state")))

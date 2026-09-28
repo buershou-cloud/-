@@ -12,6 +12,8 @@ import com.example.payments.sharing.ProfitSharingRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.http.HttpHeaders;
 
 import javax.crypto.Cipher;
@@ -78,6 +80,51 @@ class DouyinProfitSharingNotifyControllerTest {
         assertThat(records.search(null, null, null, null, null)).hasSize(1)
                 .allMatch(record -> "SUCCESS".equals(record.status()) && "SPLIT-REQUEST".equals(record.orderNo()));
         verifyNoInteractions(merchantNotify);
+    }
+
+    @Test
+    void automaticUnfreezeAlongsideSuccessfulReceiversStillRecordsTheSplit() throws Exception {
+        Map<String, Object> payload = completed();
+        payload.put("finish_amount", 500);
+        payload.put("finish_description", "自动解冻");
+        payload.put("receivers", List.of(Map.of("account", "receiver-A", "result", "SUCCESS", "amount", 123)));
+
+        controller.notify("dy-main", new HttpHeaders(), encrypted("ASYNC_SPLIT.FINISH", "profitsharing", payload));
+
+        assertThat(order("ORDER").profitShared()).isTrue();
+        assertThat(records.search(null, null, null, null, null)).hasSize(1).allSatisfy(record -> {
+            assertThat(record.status()).isEqualTo("SUCCESS");
+            assertThat(record.amount()).isEqualByComparingTo("1.23");
+        });
+        assertThat(order("ALI-ORDER").profitShared()).isFalse();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"finish_amount,false", "finish_amount,true", "finish_description,false", "finish_description,true"})
+    void finishOnlyNotificationNeverCreatesOutgoingSplitOrMarksPayment(String marker, boolean emptyReceivers) throws Exception {
+        Map<String, Object> payload = completed();
+        payload.remove("receivers");
+        if (emptyReceivers) payload.put("receivers", List.of());
+        payload.put(marker, "finish_amount".equals(marker) ? 500 : "完结解冻");
+
+        assertThat(controller.notify("dy-main", new HttpHeaders(), encrypted("ASYNC_SPLIT.FINISH", "profitsharing", payload))
+                .getStatusCode().value()).isEqualTo(200);
+
+        assertThat(records.search(null, null, null, null, null)).isEmpty();
+        assertThat(order("ORDER").profitShared()).isFalse();
+    }
+
+    @Test
+    void malformedReceiversAndFinishFieldStayPendingWithoutMarkingPayment() throws Exception {
+        Map<String, Object> payload = completed();
+        payload.put("receivers", List.of("invalid"));
+        payload.put("finish_amount", 500);
+
+        controller.notify("dy-main", new HttpHeaders(), encrypted("ASYNC_SPLIT.FINISH", "profitsharing", payload));
+
+        assertThat(order("ORDER").profitShared()).isFalse();
+        assertThat(records.search(null, null, null, null, null)).hasSize(1)
+                .allMatch(record -> "PENDING".equals(record.status()) && record.amount() == null);
     }
 
     @Test
