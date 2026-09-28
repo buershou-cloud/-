@@ -430,10 +430,11 @@
   const channelId = params.get("channelId");
   const merchantId = params.get("merchantId");
   const preferredProduct = paramValue("product");
+  const douyinH5Handoff = params.get("handoff") === "douyin-h5" && params.get("product") === "DOUYIN_H5";
   const oauthAuthCode = params.get("auth_code") || params.get("authCode");
   const autoPayRequested = paramValue("autoPay") === "1";
-  const normalizedChannelId = safeDecode(paramValue("channelId"));
-  const normalizedMerchantId = safeDecode(paramValue("merchantId"));
+  const normalizedChannelId = douyinH5Handoff ? params.get("channelId") : safeDecode(paramValue("channelId"));
+  const normalizedMerchantId = douyinH5Handoff ? params.get("merchantId") : safeDecode(paramValue("merchantId"));
   const productLabels = {
     ALIPAY_ORDER_CODE: "订单码",
     ALIPAY_F2F: "当面付",
@@ -653,6 +654,7 @@
   function showPaymentQr(text, title, hint) {
     $("payPanelTitle").textContent = title;
     $("payPanelHint").textContent = hint;
+    $("payQrImage").alt = title;
     $("payQrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(text)}&t=${Date.now()}`;
     $("payPanel").classList.add("active");
   }
@@ -1010,6 +1012,12 @@
 
   function applyProductUi() {
     syncCashierProfitSharing();
+    if (isDouyinH5Product(currentProduct)) {
+      $("payButton").textContent = isMobilePayClient() ? "确认支付" : "生成手机付款入口";
+      $("cashierHint").textContent = isMobilePayClient()
+        ? "请核对金额和订单标题，点击确认支付后将在本手机发起抖音付款。"
+        : "电脑仅生成手机付款入口；请用手机扫码，核对金额后点击确认支付。";
+    }
     const paymentCodeMode = isPaymentCodeProduct(currentProduct);
     const paymentCodePanel = $("paymentCodePanel");
     const paymentCodeInput = $("paymentCode");
@@ -1039,6 +1047,61 @@
 
   function isDouyinNativeProduct(product) {
     return product === "DOUYIN_NATIVE";
+  }
+
+  function ensureDouyinH5Available() {
+    const channels = currentChannel ? [currentChannel] : currentAvailableChannels;
+    if (!channels.some(channel => channel.provider === "DOUYIN" && channel.enabled !== false
+        && channel.dailyEnabled !== false && productOptions(channel).includes("DOUYIN_H5"))) {
+      throw { code: "PRODUCT_NOT_ENABLED", message: "当前收银台没有可用的抖音 H5 支付通道，请联系商户核对配置。" };
+    }
+  }
+
+  function douyinH5Amount() {
+    const raw = $("amount").value.trim();
+    const amount = Number(raw);
+    if (!/^\d+(?:\.\d{1,2})?$/.test(raw) || !Number.isFinite(amount) || amount < 0.01
+        || !Number.isSafeInteger(Math.round(amount * 100))) {
+      throw { code: "BAD_AMOUNT", message: "请输入至少 0.01 元、最多两位小数的正确金额。" };
+    }
+    return amount.toFixed(2);
+  }
+
+  function douyinH5HandoffUrl() {
+    ensureDouyinH5Available();
+    const amount = douyinH5Amount();
+    const subject = $("subject").value;
+    if (!subject.trim()) throw { code: "BAD_SUBJECT", message: "请填写订单标题。" };
+    // Build a fresh same-origin URL. Never copy OAuth state, credentials or an upstream payment URL.
+    const url = new URL(location.origin);
+    url.pathname = location.pathname;
+    if (currentChannel) url.searchParams.set("channelId", currentChannel.id);
+    else if (currentMerchant?.merchantId) url.searchParams.set("merchantId", currentMerchant.merchantId);
+    else throw { code: "BAD_REQUEST", message: "请先加载有效的收银台。" };
+    url.searchParams.set("product", "DOUYIN_H5");
+    url.searchParams.set("amount", amount);
+    url.searchParams.set("subject", subject);
+    url.searchParams.set("profitSharing", String($("profitSharingEnabled").checked));
+    url.searchParams.set("handoff", "douyin-h5");
+    return url.href;
+  }
+
+  function applyDouyinH5HandoffDefaults() {
+    if (!douyinH5Handoff || !isDouyinH5Product(currentProduct)) return;
+    // These values are editable form defaults, not an existing or signed payment order.
+    if (params.has("amount")) $("amount").value = params.get("amount");
+    if (params.has("subject")) $("subject").value = params.get("subject");
+    if (["true", "false"].includes(params.get("profitSharing"))) {
+      cashierProfitSharingChoice = params.get("profitSharing") === "true";
+    }
+    writeResult("请核对金额和订单标题，再点击确认支付。当前尚未创建支付订单。");
+  }
+
+  function invalidateDouyinH5Handoff() {
+    if (isDouyinH5Product(currentProduct) && !isMobilePayClient() && $("payQrImage").src) {
+      hidePaymentQr();
+      writeResult("付款信息已修改，请重新生成手机付款入口。当前尚未创建支付订单。");
+    }
   }
 
   function channelsForCurrentProduct() {
@@ -1234,7 +1297,9 @@
       throw { code: "BAD_REQUEST", message: "缺少 channelId 或 merchantId" };
     }
 
+    if (isDouyinH5Product(currentProduct)) ensureDouyinH5Available();
     applyOauthStateDefaults();
+    applyDouyinH5HandoffDefaults();
     applyProductUi();
     if (!currentProduct) {
       $("payButton").disabled = true;
@@ -1256,7 +1321,7 @@
 
   function syncCashierProfitSharing() {
     const enabled = isDouyinH5Product(currentProduct) || isDouyinNativeProduct(currentProduct);
-    $("profitSharingPanel").hidden = !enabled;
+    $("profitSharingPanel").hidden = true;
     $("profitSharingEnabled").disabled = !enabled;
     $("profitSharingEnabled").checked = enabled && cashierProfitSharingChoice;
   }
@@ -1280,6 +1345,9 @@
   }
 
   $("profitSharingEnabled").addEventListener("change", rememberCashierProfitSharingChoice);
+  ["amount", "subject", "profitSharingEnabled"].forEach(id => {
+    $(id).addEventListener("input", invalidateDouyinH5Handoff);
+  });
 
   $("paymentCodeUploadButton").addEventListener("click", () => {
     if (!isPaymentCodeProduct(currentProduct)) {
@@ -1329,6 +1397,25 @@
     hideContinuePanel();
     clearPaymentPolling();
     const payButton = $("payButton");
+    if (!currentProduct || !currentProductOptions.includes(currentProduct)) {
+      writeResult({ code: "PRODUCT_NOT_ENABLED", message: "请先加载有效的支付通道和产品。" }, "bad");
+      return;
+    }
+    if (isDouyinH5Product(currentProduct)) {
+      try {
+        ensureDouyinH5Available();
+        douyinH5Amount();
+        if (!isMobilePayClient()) {
+          const entryUrl = douyinH5HandoffUrl();
+          showPaymentQr(entryUrl, "手机确认付款", "请用手机扫码打开收银台，核对金额后点击确认支付，再按页面提示完成抖音付款。");
+          writeResult("手机付款入口已生成，电脑尚未创建支付订单。请扫码后核对金额并点击确认；付款结果可在订单管理中查看。", "loading");
+          return;
+        }
+      } catch (error) {
+        writeResult(error, "bad");
+        return;
+      }
+    }
     const amount = Number($("amount").value);
     if (!amount || amount < 0.01) {
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" }, "bad");
@@ -1399,6 +1486,17 @@
       const failed = data.status === "FAILED";
       writeResult(data.message || "支付请求已创建", failed ? "bad" : "ok");
       if (failed && !data.qrCode && !data.redirectUrl && !data.redirectHtml) {
+        return;
+      }
+      if (isDouyinH5Product(currentProduct)) {
+        if (failed) return;
+        if (!isMobilePayClient() || !data.redirectUrl) {
+          writeResult({ code: "DOUYIN_H5_REDIRECT_MISSING", message: "请在手机收银台确认付款，并核对抖音 H5 返回的跳转地址。" }, "bad");
+          return;
+        }
+        startAppPaymentPolling(data, payload, "抖音H5支付");
+        writeResult("抖音H5支付订单已创建，正在打开官方收银台...", "loading");
+        window.location.href = data.redirectUrl;
         return;
       }
       if (isJsapiProduct(currentProduct)) {
@@ -1513,20 +1611,6 @@
           "请使用支付宝扫码付款，付款完成后订单会自动回调更新。"
         );
       } else if (data.redirectUrl) {
-        if (isDouyinH5Product(currentProduct)) {
-          startAppPaymentPolling(data, payload, "抖音H5支付");
-          writeResult("抖音H5支付订单已创建，正在打开官方收银台...", "loading");
-          if (isMobilePayClient()) {
-            window.location.href = data.redirectUrl;
-            return;
-          }
-          showPaymentQr(
-            data.redirectUrl,
-            "抖音H5支付二维码",
-            "请使用手机扫码进入抖音支付官方H5收银台完成付款。"
-          );
-          return;
-        }
         if (isMobilePayClient()) {
           openAlipayQr(data.redirectUrl);
           return;

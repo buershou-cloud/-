@@ -204,7 +204,7 @@ test('cashier defaults Douyin desktop Native and mobile H5 orders to profit shar
   for (const product of ['DOUYIN_NATIVE', 'DOUYIN_H5']) {
     const { ctx, elements } = setupCashier('DOUYIN', product);
     ctx.syncCashierProfitSharing();
-    assert.equal(elements.profitSharingPanel.hidden, false);
+    assert.equal(elements.profitSharingPanel.hidden, true);
     assert.equal(elements.profitSharingEnabled.checked, true);
     assert.equal(elements.profitSharingEnabled.disabled, false);
     assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, true);
@@ -222,7 +222,7 @@ test('merchant QR routing includes Douyin sharing without a preselected channel'
       { id: 'dy2', provider: 'DOUYIN', products: [product] }
     ];
     ctx.syncCashierProfitSharing();
-    assert.equal(elements.profitSharingPanel.hidden, false);
+    assert.equal(elements.profitSharingPanel.hidden, true);
     const extra = ctx.cashierPaymentExtra();
     assert.equal(extra.settle_info.profit_sharing, true);
     assert.equal(extra.merchantId, 'M1');
@@ -305,7 +305,7 @@ test('real cashier load and submit preserve default and opt-out for channel and 
   for (const [userAgent, expectedProduct] of [['Desktop', 'DOUYIN_NATIVE'], ['iPhone', 'DOUYIN_H5']]) {
     for (const search of ['?channelId=dy1', '?merchantId=M1']) {
       const { elements, submissions } = await openCashierPage({ userAgent, search, channels });
-      assert.equal(elements.profitSharingPanel.hidden, false);
+      assert.equal(elements.profitSharingPanel.hidden, true);
       assert.equal(elements.profitSharingEnabled.checked, true);
       elements.amount.value = '1.00';
       elements.subject.value = 'Test payment';
