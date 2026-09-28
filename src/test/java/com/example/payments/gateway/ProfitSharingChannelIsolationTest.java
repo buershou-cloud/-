@@ -291,7 +291,8 @@ class ProfitSharingChannelIsolationTest {
         when(relations.isBound(anyString(), anyString(), anyString())).thenReturn(true);
         PaymentGatewayService service = new PaymentGatewayService(properties, new ChannelSelector(registry),
                 List.of(alipay, douyin), orders, mock(DemoMerchantService.class),
-                mock(OnboardingRecordService.class), mock(ComplaintRecordService.class), relations);
+                mock(OnboardingRecordService.class), mock(ComplaintRecordService.class), relations,
+                mock(com.example.payments.sharing.ProfitSharingRecordService.class));
         return new Fixture(service, ali, dy, alipay, douyin, orders, relations);
     }
 

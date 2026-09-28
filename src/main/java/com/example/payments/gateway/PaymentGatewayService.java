@@ -34,6 +34,9 @@ import com.example.payments.merchant.MerchantRouting;
 import com.example.payments.merchant.api.MerchantApiException;
 import com.example.payments.onboarding.OnboardingRecordService;
 import com.example.payments.sharing.ProfitSharingRelationService;
+import com.example.payments.sharing.ProfitSharingRecordService;
+import com.example.payments.sharing.ProfitSharingRecordException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -63,6 +66,7 @@ public class PaymentGatewayService {
     private final OnboardingRecordService onboardingRecordService;
     private final ComplaintRecordService complaintRecordService;
     private final ProfitSharingRelationService profitSharingRelationService;
+    private final ProfitSharingRecordService profitSharingRecordService;
 
     public PaymentGatewayService(
             PaymentGatewayProperties properties,
@@ -74,6 +78,22 @@ public class PaymentGatewayService {
             ComplaintRecordService complaintRecordService,
             ProfitSharingRelationService profitSharingRelationService
     ) {
+        this(properties, channelSelector, providers, orderService, merchantService, onboardingRecordService,
+                complaintRecordService, profitSharingRelationService, new ProfitSharingRecordService(orderService));
+    }
+
+    @Autowired
+    public PaymentGatewayService(
+            PaymentGatewayProperties properties,
+            ChannelSelector channelSelector,
+            List<PaymentProvider> providers,
+            DemoOrderService orderService,
+            DemoMerchantService merchantService,
+            OnboardingRecordService onboardingRecordService,
+            ComplaintRecordService complaintRecordService,
+            ProfitSharingRelationService profitSharingRelationService,
+            ProfitSharingRecordService profitSharingRecordService
+    ) {
         this.properties = properties;
         this.channelSelector = channelSelector;
         this.providers = providers.stream().collect(Collectors.toMap(PaymentProvider::providerCode, Function.identity()));
@@ -82,6 +102,7 @@ public class PaymentGatewayService {
         this.onboardingRecordService = onboardingRecordService;
         this.complaintRecordService = complaintRecordService;
         this.profitSharingRelationService = profitSharingRelationService;
+        this.profitSharingRecordService = profitSharingRecordService;
     }
 
     public GatewayResponse pay(PayCreateRequest request) {
@@ -233,8 +254,12 @@ public class PaymentGatewayService {
                             request.appAuthToken(), request.channelIds(), request.extra())
                     : normalizeAlipayPercentageRequest(channel, request);
             validateProfitSharingRelations(channel, effectiveRequest.royaltyParameters());
-            return provider(channel).profitSharing(channel, effectiveRequest);
-        });
+            GatewayResponse saved = profitSharingRecordService.reserve(channel, effectiveRequest);
+            if (saved != null) return saved;
+            GatewayResponse result = provider(channel).profitSharing(channel, effectiveRequest);
+            profitSharingRecordService.recordResponse(channel, effectiveRequest, result);
+            return result;
+        }, false);
         syncLocalProfitSharingStatus(request.outTradeNo(), response);
         return response;
     }
@@ -270,7 +295,12 @@ public class PaymentGatewayService {
                 profitSharingChannelIds(request.channelIds(), request.outTradeNo()),
                 null,
                 null,
-                channel -> provider(channel).queryProfitSharing(channel, prepareProfitSharingQuery(channel, request))
+                channel -> {
+                    ProfitSharingQueryRequest effective = prepareProfitSharingQuery(channel, request);
+                    GatewayResponse result = provider(channel).queryProfitSharing(channel, effective);
+                    profitSharingRecordService.recordQuery(channel, effective, result);
+                    return result;
+                }
         );
         syncLocalProfitSharingStatus(request.outTradeNo(), response);
         return response;
@@ -699,7 +729,18 @@ public class PaymentGatewayService {
             RoutingMode routingMode,
             Function<PaymentGatewayProperties.Channel, GatewayResponse> operation
     ) {
-        int maxAttempts = Math.max(1, properties.getRouting().getMaxAttempts());
+        return execute(product, requestedChannelIds, amount, routingMode, operation, true);
+    }
+
+    private GatewayResponse execute(
+            PaymentProduct product,
+            Collection<String> requestedChannelIds,
+            BigDecimal amount,
+            RoutingMode routingMode,
+            Function<PaymentGatewayProperties.Channel, GatewayResponse> operation,
+            boolean allowFailover
+    ) {
+        int maxAttempts = allowFailover ? Math.max(1, properties.getRouting().getMaxAttempts()) : 1;
         RoutingMode mode = routingMode == null ? properties.getRouting().getMode() : routingMode;
         List<ChannelAttempt> attempts = new ArrayList<>();
         List<PaymentGatewayProperties.Channel> channels;
@@ -736,19 +777,21 @@ public class PaymentGatewayService {
                 // A failed split can still have successful recipients; retain their result details.
                 boolean douyinSharingResult = isDouyinChannel(channel) && response.raw() != null
                         && response.raw().containsKey("profit_sharing_out_order_no");
-                if (success || !properties.getRouting().isFailover() || douyinSharingResult) {
+                if (success || !allowFailover || !properties.getRouting().isFailover() || douyinSharingResult) {
                     return response.withAttempts(attempts);
                 }
+            } catch (ProfitSharingRecordException ex) {
+                throw ex;
             } catch (GatewayException ex) {
                 lastGatewayException = ex;
                 attempts.add(new ChannelAttempt(channel.getId(), false, ex.code(), ex.getMessage()));
-                if (!properties.getRouting().isFailover()) {
+                if (!allowFailover || !properties.getRouting().isFailover()) {
                     break;
                 }
             } catch (RuntimeException ex) {
                 lastRuntimeException = ex;
                 attempts.add(new ChannelAttempt(channel.getId(), false, "ROUTE_EXCEPTION", ex.getMessage()));
-                if (!properties.getRouting().isFailover()) {
+                if (!allowFailover || !properties.getRouting().isFailover()) {
                     break;
                 }
             }

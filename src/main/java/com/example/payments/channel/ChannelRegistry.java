@@ -381,6 +381,7 @@ public class ChannelRegistry {
         jdbcTemplate.update("UPDATE payment_attempt SET channel_id = ? WHERE channel_id = ?", newId, currentId);
         jdbcTemplate.update("UPDATE refund_order SET channel_id = ? WHERE channel_id = ?", newId, currentId);
         jdbcTemplate.update("UPDATE profit_sharing_order SET channel_id = ? WHERE channel_id = ?", newId, currentId);
+        jdbcTemplate.update("UPDATE profit_sharing_record SET channel_id = ? WHERE channel_id = ?", newId, currentId);
         jdbcTemplate.update("UPDATE onboarding_record SET channel_id = ? WHERE channel_id = ?", newId, currentId);
         jdbcTemplate.update("UPDATE complaint_record SET channel_id = ? WHERE channel_id = ?", newId, currentId);
     }

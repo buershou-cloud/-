@@ -2426,15 +2426,23 @@
 
         <section class="panel">
           <div class="panel-head">
-            <h2 class="panel-title">支付订单</h2>
+            <h2 class="panel-title">订单记录</h2>
           </div>
           <div class="panel-body">
             <form id="orderFilterForm">
               <div class="form-grid order-filter-grid">
+                <label>记录类型
+                  <select id="orderRecordType">
+                    <option value="ALL">全部</option>
+                    <option value="PAYMENT">收款</option>
+                    <option value="PROFIT_SHARING">分账</option>
+                    <option value="PAYOUT">代付</option>
+                  </select>
+                </label>
                 <label>开始时间<input id="orderBeginTime" type="datetime-local"></label>
                 <label>结束时间<input id="orderEndTime" type="datetime-local"></label>
-                <label>订单号<input id="orderOutTradeNo" placeholder="商户订单号"></label>
-                <label>支付宝交易号<input id="orderTradeNo" placeholder="支付宝交易号"></label>
+                <label>订单号<input id="orderOutTradeNo" placeholder="收款订单号 / 分账请求号 / 代付单号"></label>
+                <label>平台交易号<input id="orderTradeNo" placeholder="支付宝或抖音平台交易号"></label>
                 <label>支付通道
                   <select id="orderChannelFilter">
                     <option value="">全部通道</option>
@@ -2446,14 +2454,16 @@
                 <button class="btn secondary" id="resetOrderFilterBtn" type="button">重置</button>
               </div>
             </form>
+            <p class="muted" style="margin:12px 0">收款计入收入；分账、代付单独列为支出。历史收款单仅有“已分账”标记时，无法还原当时的分账请求号和金额。</p>
+            <p id="orderOperationsError" class="operation-result refund-error hidden" role="alert"></p>
             <div class="table-wrap">
               <table>
                 <thead>
                 <tr>
                   <th>订单号</th>
-                  <th>支付宝交易号</th>
+                  <th>平台交易号</th>
                   <th>支付通道</th>
-                  <th>商户</th>
+                  <th>商户 / 收款人</th>
                   <th>类型</th>
                   <th>金额</th>
                   <th>退款</th>
@@ -2689,10 +2699,10 @@
                 <div class="form-actions">
                   <button class="btn secondary" id="refreshProfitRelationsBtn" type="button">刷新已绑定关系</button>
                   <button class="btn" id="shareSingleBtn" type="button">新增单笔分账</button>
-                  <button class="btn secondary" id="retrySingleProfitShareBtn" type="button">重试原单笔分账</button>
+                  <button class="btn secondary" id="retrySingleProfitShareBtn" type="button">核对后重试原请求</button>
                   <button class="btn secondary" id="reviewSingleProfitShareBtn" type="button">已人工核对原请求</button>
                 </div>
-                <p class="hint">新增分账会生成新请求号并产生额外划拨；网络超时请重试原请求，不要更换请求号。重试不采用修改后的表单。刷新页面后需恢复原参数；关闭标签页或换浏览器前，请先保存请求号并核对结果。</p>
+                <p class="hint">新增分账会生成新请求号并产生额外划拨；网络超时或失败请先查询原请求或核对支付平台，不要更换请求号。重试沿用原参数；后台已有记录时不会再次划拨。刷新页面后需恢复原参数；关闭标签页或换浏览器前，请先保存请求号并核对结果。</p>
                 <label>本标签页最近单笔请求号<input id="profitShareLastRequestNo" readonly placeholder="提交前自动生成，可复制用于核对"></label>
                 </fieldset>
               </form>
@@ -2745,7 +2755,7 @@
                   <thead><tr><th>订单号</th><th>请求号</th><th>处理结果</th><th>说明</th><th>操作</th></tr></thead>
                   <tbody id="profitShareBatchResults"></tbody>
                 </table></div>
-                <p class="hint">接口受理不等于最终到账。失败或结果不明的订单请转单笔核对／重试原请求，切勿直接换号重提。未提交的订单仍保留勾选，可排除待核对订单后再次提交。刷新或关闭页面前，请保存请求号；本列表仅保留本次页面会话的结果。</p>
+                <p class="hint">接口受理不等于最终到账。失败或结果不明的订单请先查询原请求或核对支付平台，切勿直接换号重提。未提交的订单仍保留勾选，可排除待核对订单后再次提交。刷新或关闭页面前，请保存请求号；本列表仅保留本次页面会话的结果。</p>
               </section>
             </div>
           </section>
@@ -3439,6 +3449,8 @@
   const state = {
     channels: [],
     orders: [],
+    orderOperations: [],
+    orderOperationsError: "",
     orderLoadSequence: 0,
     orderPage: 1,
     orderPageSize: 10,
@@ -4263,16 +4275,29 @@
   async function loadOrders(resetPage = false, refreshStatuses = false) {
     const sequence = ++state.orderLoadSequence;
     const query = orderQueryString(refreshStatuses);
-    let orders;
-    try {
-      orders = await request(`/api/v1/orders/recent${query}`);
-    } catch (error) {
-      if (sequence !== state.orderLoadSequence) return false;
-      throw error;
-    }
+    const operationsQuery = orderQueryString(false);
+    const [paymentResult, operationResult] = await Promise.allSettled([
+      request(`/api/v1/orders/recent${query}`),
+      request(`/api/v1/orders/operations${operationsQuery}`)
+    ]);
     // A slower, older request must not overwrite a newer query's results.
     if (sequence !== state.orderLoadSequence) return false;
+    const operations = operationResult.status === "fulfilled" ? operationResult.value : null;
+    const validOperations = operations && Array.isArray(operations.records) && Array.isArray(operations.warnings)
+      && operations.warnings.every(warning => typeof warning === "string")
+      && operations.records.every(item => item && ["PROFIT_SHARING", "PAYOUT"].includes(item.recordType)
+        && typeof item.orderNo === "string" && item.orderNo);
+    state.orderOperations = validOperations ? operations.records : [];
+    state.orderOperationsError = validOperations
+      ? (operations.warnings.length ? `部分支出记录未能加载：${operations.warnings.join("；")}。请重新查询核对。` : "")
+      : "分账和代付记录加载失败，请重新查询；当前支出列表不完整，不能视为没有记录。";
+    if (paymentResult.status === "rejected") {
+      renderOrders();
+      throw paymentResult.reason;
+    }
+    const orders = paymentResult.value;
     if (!Array.isArray(orders)) {
+      renderOrders();
       throw { code: "INVALID_ORDER_RESPONSE", message: "订单列表返回格式异常，请重新查询" };
     }
     state.orders = orders.slice().sort((left, right) =>
@@ -4301,7 +4326,7 @@
       // Refresh the local list immediately, as on page load. Payment-provider
       // reconciliation is independent and must not block a list query.
       if (await loadOrders(true)) {
-        setDashboardResult({ message: `${resetFilters ? "筛选已重置，" : ""}已查询到 ${state.orders.length} 笔订单` });
+        setDashboardResult({ message: `${resetFilters ? "筛选已重置，" : ""}已查询到 ${displayOrderRecords().length} 笔订单记录${state.orderOperationsError ? "；支出记录不完整，请查看上方提示并重试" : ""}` });
       }
     } catch (error) {
       setDashboardResult({ message: `订单查询失败：${error?.message || (typeof error === "string" ? error : "网络异常，请重试")}` });
@@ -4988,27 +5013,102 @@
   }
 
   function renderOrders() {
-    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    const records = displayOrderRecords();
+    const totalPages = Math.max(1, Math.ceil(records.length / state.orderPageSize));
     if (state.orderPage > totalPages) {
       state.orderPage = totalPages;
     }
     const start = (state.orderPage - 1) * state.orderPageSize;
-    const pageOrders = state.orders.slice(start, start + state.orderPageSize);
-    $("recentOrders").innerHTML = pageOrders.map((order) => `
+    const pageOrders = records.slice(start, start + state.orderPageSize);
+    const error = $("orderOperationsError");
+    if (error) {
+      error.textContent = state.orderOperationsError || "";
+      error.classList.toggle("hidden", !state.orderOperationsError);
+    }
+    $("recentOrders").innerHTML = pageOrders.map((record) => {
+      if (record.recordType !== "PAYMENT") return operationOrderRow(record);
+      const order = record.payment;
+      return `
       <tr>
         <td>${html(order.outTradeNo)}</td>
         <td class="muted">${html(order.tradeNo || "-")}</td>
         <td>${html(order.channelId || "-")}</td>
         <td>${html(order.merchantName)}</td>
-        <td>${productCell(order)}</td>
+        <td><span class="tag">收款</span>${productCell(order)}</td>
         <td class="amount-green">${html(order.amountText)}</td>
         <td>${refundCell(order)}</td>
         <td>${statusCell(order.status)}</td>
         <td class="muted">${html(order.createdAt)}</td>
         <td>${orderActionCell(order)}</td>
       </tr>
-    `).join("");
+    `;
+    }).join("") || `<tr><td colspan="10" class="muted">${state.orderOperationsError ? "暂无可显示记录；支出记录尚未加载成功。" : "当前条件下暂无记录"}</td></tr>`;
     renderOrderPagination(totalPages, start, pageOrders.length);
+  }
+
+  function displayOrderRecords() {
+    const filter = $("orderRecordType")?.value || "ALL";
+    const records = [
+      ...state.orders.map(payment => ({ recordType: "PAYMENT", orderNo: payment.outTradeNo,
+        createdAt: payment.createdAt, payment })),
+      ...(state.orderOperations || [])
+    ];
+    return records.filter(record => filter === "ALL" || record.recordType === filter)
+      .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || ""))
+        || String(right.orderNo).localeCompare(String(left.orderNo))
+        || left.recordType.localeCompare(right.recordType));
+  }
+
+  function operationTypeText(record) {
+    return record.recordType === "PROFIT_SHARING" ? "分账" : "代付";
+  }
+
+  function operationStatusText(record) {
+    return ({ SUCCESS: "成功", PENDING: "处理中", PROCESSING: "处理中", UNKNOWN: "结果待核对", FAILED: "失败" })[record.status] || "结果待核对";
+  }
+
+  function operationOrderRow(record) {
+    const type = operationTypeText(record);
+    const attributes = `data-operation-type="${html(record.recordType)}" data-operation-no="${html(record.orderNo)}" data-operation-channel="${html(record.channelId || "")}"`;
+    const amount = record.amount == null ? "金额未记录" : `−${money(record.amount)}`;
+    return `<tr>
+      <td>${html(record.orderNo)}${record.relatedOutTradeNo ? `<div class="muted">原收款单 ${html(record.relatedOutTradeNo)}</div>` : ""}</td>
+      <td class="muted">${html(record.tradeNo || "-")}</td>
+      <td>${html(record.channelId || "-")}<div class="muted">${html(payoutProviderText(record.provider))}</div></td>
+      <td>${html(record.merchantName || "-")}${record.recipient ? `<div class="muted">收款人 ${html(record.recipient)}</div>` : ""}</td>
+      <td><span class="tag">${type}</span><span class="muted">支出</span></td>
+      <td style="color:var(--red)">${html(amount)}</td>
+      <td class="muted">不适用</td>
+      <td><span class="status ${record.status === "SUCCESS" ? "success" : record.status === "FAILED" ? "refunded" : "pending"}">${operationStatusText(record)}</span></td>
+      <td class="muted">${html(record.createdAt || "-")}</td>
+      <td><button class="btn secondary small" type="button" data-operation-action="detail" ${attributes}>查看结果</button>${record.recordType === "PAYOUT" ? `<button class="btn secondary small" type="button" data-operation-action="query" ${attributes}>查询原单</button>` : ""}</td>
+    </tr>`;
+  }
+
+  async function handleOperationAction(button) {
+    const record = (state.orderOperations || []).find(item => item.recordType === button.dataset.operationType
+      && item.orderNo === button.dataset.operationNo && (item.channelId || "") === button.dataset.operationChannel);
+    if (!record) return;
+    const lines = [`${operationTypeText(record)}记录：${record.orderNo}`, `状态：${operationStatusText(record)}`,
+      `金额：${record.amount == null ? "未记录" : money(record.amount)}（支出）`,
+      `支付通道：${record.channelId || "-"}`, `平台单号：${record.tradeNo || "-"}`];
+    if (record.relatedOutTradeNo) lines.push(`原收款单：${record.relatedOutTradeNo}`);
+    if (record.recipient) lines.push(`收款人：${record.recipient}`);
+    if (record.message) lines.push(`结果：${payoutBusinessText(record.message)}`);
+    setDashboardResult({ message: lines.join("\n") });
+    if (button.dataset.operationAction === "query" && record.recordType === "PAYOUT") {
+      button.disabled = true;
+      try {
+        const data = await queryPayout(record.orderNo);
+        setDashboardResult({ message: payoutOperationSummary(data, "代付原单查询完成")
+          + (state.orderOperationsError ? "\n记录刷新失败，请刷新列表，不要重复转账。" : "") });
+      } catch (error) {
+        setDashboardResult({ message: `原单查询失败：${error?.message || "请稍后重试"}。请勿重新转账。` });
+      } finally {
+        button.disabled = false;
+      }
+    }
+    $("dashboardResult")?.scrollIntoView?.({ block: "nearest" });
   }
 
   function compactPageItems(currentPage, totalPages) {
@@ -5033,15 +5133,16 @@
   function renderOrderPagination(totalPages, start, pageCount) {
     const container = $("orderPagination");
     if (!container) return;
-    if (!state.orders.length) {
-      container.innerHTML = '<span>暂无订单</span>';
+    const total = displayOrderRecords().length;
+    if (!total) {
+      container.innerHTML = '<span>暂无可显示记录</span>';
       return;
     }
     const pageItems = compactPageItems(state.orderPage, totalPages);
     const pageSizeOptions = [10, 20, 30, 50, 100];
     const end = start + pageCount;
     container.innerHTML = `
-      <span class="pagination-summary">共 ${state.orders.length} 笔订单，当前 ${start + 1}-${end} 笔，共 ${totalPages} 页</span>
+      <span class="pagination-summary">共 ${total} 笔订单记录，当前 ${start + 1}-${end} 笔，共 ${totalPages} 页</span>
       <div class="pagination-controls">
         <label class="pagination-size">每页
           <select data-order-page-size>
@@ -5380,7 +5481,7 @@
       }
       const key = singleProfitShareKey(order);
       const previous = readSingleProfitShare(key);
-      if (previous?.status === "UNCONFIRMED") throw { message: `订单 ${id} 的原请求 ${previous.outRequestNo} 结果未确认，请转单笔核对／重试，或先取消勾选该订单` };
+      if (previous?.status === "UNCONFIRMED") throw { message: `订单 ${id} 的原请求 ${previous.outRequestNo} 结果未确认，请先查询原请求或核对支付平台，或先取消勾选该订单` };
       const orderUnits = profitShareMinorUnits(order.amount, `订单 ${id} 的金额`);
       // Same positive HALF_UP rounding as the server, without floating-point drift.
       const units = percentage ? (orderUnits * value + 5000n) / 10000n : value;
@@ -5495,7 +5596,7 @@
     const retry = kind === "retry";
     return openProfitShareConfirm({
       kind,
-      title: review ? "确认已完成人工核对" : retry ? "确认重试原分账" : "确认新增分账",
+      title: review ? "确认已完成人工核对" : retry ? "核对后重试原请求" : "确认新增分账",
       subtitle: review ? "请先在支付平台核对，再解除本页面的新增限制" : retry ? "本次沿用原请求号和原分账明细" : "提交前，请核对本次分账信息",
       badge: review ? "人工核对" : retry ? "原请求重试" : "新增分账",
       valueLabel: review ? "操作类型" : percentage ? "本次分账比例" : "本次分账金额",
@@ -5506,8 +5607,8 @@
       receiver: receiver?.receiver_name || receiver?.trans_in || "",
       account: receiver?.receiver_name ? receiver.trans_in : "",
       request: payload.outRequestNo,
-      noticeTitle: review ? "请确认原请求已有明确结果" : retry ? "重试原请求，不新增一笔分账" : "本操作将额外划拨一笔资金",
-      notice: review ? "此操作不查询、不撤销原分账，只解除本页面的新增限制。结果仍不明确时，请取消并继续核对。" : retry ? "将使用原请求号和原参数提交，忽略当前表单中的修改。请勿把网络超时当作新增分账重新提交。" : "这是一笔新增分账，不是失败重试。请确认历史分账及剩余额度；若原请求结果不明，请取消并重试原请求。",
+      noticeTitle: review ? "请确认原请求已有明确结果" : retry ? "请先查询原请求或核对支付平台" : "本操作将额外划拨一笔资金",
+      notice: review ? "此操作不查询、不撤销原分账，只解除本页面的新增限制。结果仍不明确时，请取消并继续核对。" : retry ? "将使用原请求号和原参数提交，忽略当前表单中的修改。后台已有记录时只返回成功结果或拒绝重复划拨；如提示已记录，请继续查询或核对平台，不要换号重提。" : "这是一笔新增分账，不是失败重试。请确认历史分账及剩余额度；若原请求结果不明，请取消并查询原请求或核对支付平台。",
       confirmText: review ? "确认已核对" : retry ? "确认重试原请求" : "确认新增分账"
     });
   }
@@ -5593,7 +5694,7 @@
         if (attempt?.status === "UNCONFIRMED") {
           throw { message: attempt.acknowledged
             ? "抖音分账结果未确认，原请求已受理，请先查询分账结果；存在失败明细时请先人工核对，不要直接换号重试。"
-            : "该订单上一笔分账结果未确认，请先“重试原单笔分账”。如已在支付平台核对结果，再点击“已人工核对原请求”，不要直接换号重试。" };
+            : "该订单上一笔分账结果未确认，请先查询原请求或核对支付平台。如已核对明确结果，再点击“已人工核对原请求”，不要直接换号重试。" };
         }
         const payload = profitShareSinglePayload();
         payload.outRequestNo = newSingleProfitShareRequestNo();
@@ -5635,7 +5736,7 @@
         setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n分账返回状态：${data.status}；订单列表刷新失败，请单独刷新列表，不要因此重复分账。`, response: data });
       }
     } catch (error) {
-      throw { message: `${error?.message || "分账操作异常"}${attempt ? `\n原请求号：${attempt.outRequestNo}。结果不明时请核对或重试原请求。` : ""}`, response: error?.response };
+      throw { message: `${error?.message || "分账操作异常"}${attempt ? `\n原请求号：${attempt.outRequestNo}。请先查询原请求或核对支付平台；后台已记录的请求不会重复划拨，请勿换号重提。` : ""}`, response: error?.response };
     } finally {
       setSingleProfitShareBusy(false);
     }
@@ -5784,7 +5885,7 @@
       await loadProfitSharingRelations(item.channelId, true);
       $("profitShareTransIn").value = `${receiver.trans_in_type || "loginName"}|${receiver.trans_in}`;
       syncProfitShareRelationType();
-      setProfitShareResult({ message: `已恢复订单 ${item.outTradeNo} 的原分账参数，请求号 ${item.outRequestNo}。${item.status === "NOT_SENT" ? "此请求未提交，可核对后新增分账。" : "结果不明请使用“重试原单笔分账”，不要新增。"}` });
+      setProfitShareResult({ message: `已恢复订单 ${item.outTradeNo} 的原分账参数，请求号 ${item.outRequestNo}。${item.status === "NOT_SENT" ? "此请求未提交，可核对后新增分账。" : "结果不明请先查询原请求或核对支付平台，不要新增。"}` });
     } finally {
       setSingleProfitShareBusy(false);
     }
@@ -6325,6 +6426,15 @@
     renderPayouts();
   }
 
+  async function refreshAfterPayout() {
+    const results = await Promise.allSettled([loadPayouts(), loadOrders()]);
+    if (results.some(result => result.status === "rejected") || state.orderOperationsError) {
+      $("payoutResult").textContent += "\n\n记录刷新失败；以上操作结果仍有效，请刷新记录核对，不要重复转账。";
+      return false;
+    }
+    return true;
+  }
+
   function payoutPayload() {
     const channel = selectedPayoutChannel();
     const payload = {
@@ -6398,7 +6508,7 @@
       $("payoutPaymentPassword").value = "";
       $("payoutOutBizNo").value = "";
       $("payoutResult").textContent = payoutOperationSummary(data, "代付提交完成");
-      await loadPayouts();
+      await refreshAfterPayout();
       return data;
     } catch (error) {
       $("payoutPaymentPassword").value = "";
@@ -6440,7 +6550,7 @@
         "",
         ...details
       ].join("\n");
-      await loadPayouts();
+      await refreshAfterPayout();
       return data;
     } finally {
       $("payoutBatchPaymentPassword").value = "";
@@ -6453,8 +6563,9 @@
       timeoutMs: 30000,
       body: "{}"
     });
-      $("payoutResult").textContent = payoutOperationSummary(data, "代付原单查询完成");
-    await loadPayouts();
+    $("payoutResult").textContent = payoutOperationSummary(data, "代付原单查询完成");
+    await refreshAfterPayout();
+    return data;
   }
 
   function renderChannelChecks() {
@@ -7690,6 +7801,12 @@
   });
 
   $("recentOrders").addEventListener("click", async (event) => {
+    const operationButton = event.target.closest("button[data-operation-action]");
+    if (operationButton) {
+      event.preventDefault();
+      await handleOperationAction(operationButton);
+      return;
+    }
     const menuButton = event.target.closest("button[data-order-menu]");
     if (menuButton) {
       const panel = document.querySelector(`[data-order-menu-panel="${CSS.escape(menuButton.dataset.orderMenu)}"]`);
@@ -7709,7 +7826,7 @@
     const button = event.target.closest("button[data-order-page]");
     if (!button || button.disabled) return;
     const page = Number(button.dataset.orderPage);
-    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    const totalPages = Math.max(1, Math.ceil(displayOrderRecords().length / state.orderPageSize));
     state.orderPage = Math.min(Math.max(page, 1), totalPages);
     closeOrderMenus("");
     renderOrders();
@@ -7730,7 +7847,7 @@
     if (!form) return;
     event.preventDefault();
     const input = form.querySelector("[data-order-page-jump]");
-    const totalPages = Math.max(1, Math.ceil(state.orders.length / state.orderPageSize));
+    const totalPages = Math.max(1, Math.ceil(displayOrderRecords().length / state.orderPageSize));
     const page = Number(input?.value);
     state.orderPage = Math.min(Math.max(Number.isFinite(page) ? page : state.orderPage, 1), totalPages);
     closeOrderMenus("");
@@ -7740,6 +7857,12 @@
   $("orderFilterForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     await queryOrders();
+  });
+
+  $("orderRecordType").addEventListener("change", () => {
+    state.orderPage = 1;
+    closeOrderMenus("");
+    renderOrders();
   });
 
   $("resetOrderFilterBtn").addEventListener("click", async () => {

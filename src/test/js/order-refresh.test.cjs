@@ -22,7 +22,7 @@ function setup(request) {
   elements.resetOrderFilterBtn = { disabled: false };
   elements.orderFilterForm = { reset: () => fields.forEach(id => { elements[id].value = ''; }) };
   const context = vm.createContext({
-    URLSearchParams, request,
+    URLSearchParams, request: url => url.includes('/operations') ? Promise.resolve({ records: [], warnings: [] }) : request(url),
     state: { orders: [], orderPage: 3, orderLoadSequence: 0 },
     $: id => elements[id], elements, messages: [], renders: 0
   });
@@ -34,6 +34,7 @@ function setup(request) {
     ${pageFunction('loadOrders')}
     ${pageFunction('queryOrders')}
     ${pageFunction('orderQueryString')}
+    ${pageFunction('displayOrderRecords')}
   `, context);
   return context;
 }
