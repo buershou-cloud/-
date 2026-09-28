@@ -385,8 +385,8 @@ class DouyinPaymentProviderTest {
                 "DY1001",
                 "PS_ORDER-1001",
                 List.of(Map.of(
-                        "trans_in_type", "MERCHANT_ID",
-                        "trans_in", "dy-receiver-mch",
+                        "trans_in_type", "PERSONAL_OPENID",
+                        "trans_in", "dy-receiver-openid",
                         "amount", new BigDecimal("0.50"),
                         "desc", "合作方分账"
                 )),
@@ -411,8 +411,8 @@ class DouyinPaymentProviderTest {
                 .containsEntry("unfreeze_unsplit", false);
         List<Map<String, Object>> receivers = (List<Map<String, Object>>) body.get("receivers");
         assertThat(receivers).singleElement().satisfies(receiver -> assertThat(receiver)
-                .containsEntry("type", "MERCHANT_ID")
-                .containsEntry("account", "dy-receiver-mch")
+                .containsEntry("type", "PERSONAL_OPENID")
+                .containsEntry("account", "dy-receiver-openid")
                 .containsEntry("amount", 50L)
                 .containsEntry("description", "合作方分账"));
     }
@@ -469,7 +469,8 @@ class DouyinPaymentProviderTest {
         String queryPath = "/v1/trade/profitsharing/orders/PS_ORDER-1001?mchid=dy-mch-1&transaction_id=DY1001";
         when(client.get(any(), eq(queryPath))).thenReturn(new DouyinGatewayResponse(
                 200,
-                Map.of("state", "SUCCESS", "out_order_no", "PS_ORDER-1001", "transaction_id", "DY1001"),
+                Map.of("state", "FINISHED", "receivers", List.of(Map.of("result", "SUCCESS")),
+                        "out_order_no", "PS_ORDER-1001", "transaction_id", "DY1001"),
                 "{}",
                 Map.of()
         ));

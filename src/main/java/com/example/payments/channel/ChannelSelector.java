@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
@@ -25,6 +26,10 @@ public class ChannelSelector {
 
     public ChannelSelector(ChannelRegistry registry) {
         this.registry = registry;
+    }
+
+    public Optional<PaymentGatewayProperties.Channel> findChannel(String channelId) {
+        return registry.find(channelId);
     }
 
     public List<PaymentGatewayProperties.Channel> select(

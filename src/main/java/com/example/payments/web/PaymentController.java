@@ -17,6 +17,7 @@ import com.example.payments.domain.ProfitSharingBatchRequest;
 import com.example.payments.domain.ProfitSharingBatchResult;
 import com.example.payments.domain.ProfitSharingFinishRequest;
 import com.example.payments.domain.ProfitSharingQueryRequest;
+import com.example.payments.domain.ProfitSharingRemainingRequest;
 import com.example.payments.domain.ProfitSharingRelationBindRequest;
 import com.example.payments.domain.ProfitSharingRelationQueryRequest;
 import com.example.payments.domain.ProfitSharingRequest;
@@ -156,8 +157,8 @@ public class PaymentController {
     }
 
     @PostMapping("/profit-sharing/remaining")
-    public GatewayResponse profitSharingRemainingAmount(@Valid @RequestBody ProfitSharingQueryRequest request) {
-        return paymentGatewayService.profitSharingRemainingAmount(request);
+    public GatewayResponse profitSharingRemainingAmount(@Valid @RequestBody ProfitSharingRemainingRequest request) {
+        return paymentGatewayService.profitSharingRemainingAmount(request.toQueryRequest());
     }
 
     @PostMapping("/profit-sharing/return")

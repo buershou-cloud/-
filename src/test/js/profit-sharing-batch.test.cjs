@@ -20,7 +20,8 @@ const names = [
   'selectAllProfitShareOrders', 'renderProfitShareOrders', 'profitShareMinorUnits',
   'profitShareMoneyFromUnits', 'prepareSelectedProfitShares', 'confirmSelectedProfitShares',
   'submitSelectedProfitShares', 'renderProfitShareBatchResults', 'gatewayFailed',
-  'gatewayFailure', 'gatewayAttemptsText', 'confirmSingleProfitShare', 'sendSingleProfitShare', 'openBatchProfitShareOrder'
+  'gatewayFailure', 'gatewayAttemptsText', 'confirmSingleProfitShare', 'sendSingleProfitShare', 'openBatchProfitShareOrder',
+  'matchingDouyinProfitShareResponse', 'reconcileDouyinProfitShare', 'douyinProfitQueryPayload', 'queryProfitShare'
 ];
 const order = (number, extra = {}) => ({ outTradeNo: `ORDER-${number}`, tradeNo: `TRADE-${number}`,
   channelId: 'ali-main', amount: 10, amountText: '10.00', status: 'COMPLETED', profitShared: false, ...extra });
@@ -297,6 +298,81 @@ test('Douyin batch retains amount and unfreeze options', async () => {
   t.elements.profitShareUnfreezeUnsplit.value = 'true';
   await t.ctx.submitSelectedProfitShares();
   assert.ok(t.calls.every(call => payload(call).royaltyParameters[0].amount === 2 && payload(call).extra.unfreeze_unsplit === true));
+});
+
+const douyinResponse = (body, status = 'PENDING') => ({ status, channelId: body.channelIds[0],
+  outTradeNo: body.outTradeNo, tradeNo: body.tradeNo,
+  raw: { profit_sharing_out_order_no: body.outRequestNo, data: { state: status === 'PENDING' ? 'PROCESSING' : 'FINISHED' } } });
+
+test('acknowledged asynchronous Douyin batch queues independent orders without marking completion or allowing replay', async () => {
+  const t = setup({ provider: 'DOUYIN', request: async (count, body) => douyinResponse(body) });
+  t.elements.profitShareAmount.value = '2';
+  await t.ctx.submitSelectedProfitShares();
+  assert.equal(t.calls.length, 2);
+  assert.equal(new Set(t.calls.map(call => payload(call).outRequestNo)).size, 2);
+  assert.ok(t.calls.every(call => /^[A-Za-z0-9_]{6,32}$/.test(payload(call).outRequestNo)));
+  assert.deepEqual(Array.from(t.state.profitShareBatchResults, item => item.status), ['UNCONFIRMED', 'UNCONFIRMED']);
+  assert.ok(t.state.orders.every(order => !order.profitShared));
+  assert.equal(t.state.selectedProfitShareOrders.size, 0);
+  const saved = t.ctx.readSingleProfitShare(t.ctx.singleProfitShareKey(t.state.orders[0]));
+  assert.equal(saved.status, 'UNCONFIRMED');
+  assert.equal(saved.acknowledged, true);
+  await t.ctx.openBatchProfitShareOrder('ORDER-1');
+  await reject(t.ctx.sendSingleProfitShare(true), /已受理.*查询/);
+  await reject(t.ctx.sendSingleProfitShare(false), /结果未确认/);
+  assert.equal(t.calls.length, 2);
+});
+
+test('pending responses without matching Douyin request identity still stop later orders', async () => {
+  for (const corrupt of [data => { delete data.raw; }, data => { data.channelId = 'other'; },
+    data => { data.tradeNo = 'OTHER'; }, data => { data.outTradeNo = 'OTHER'; },
+    data => { data.raw.profit_sharing_out_order_no = 'OTHER'; }, data => { data.raw.data = {}; }]) {
+    const t = setup({ provider: 'DOUYIN', request: async (count, body) => { const data = douyinResponse(body); corrupt(data); return data; } });
+    t.elements.profitShareAmount.value = '2';
+    await t.ctx.submitSelectedProfitShares();
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.state.profitShareBatchResults[1].status, 'NOT_SENT');
+  }
+});
+
+test('matching query success resolves the original pending batch request and unlocks an explicit new allocation', async () => {
+  let queryStatus = 'PENDING';
+  const t = setup({ provider: 'DOUYIN', request: async (count, body) => douyinResponse(body, queryStatus) });
+  t.elements.profitShareAmount.value = '2';
+  await t.ctx.submitSelectedProfitShares();
+  const originalRequest = t.state.profitShareBatchResults[0].outRequestNo;
+  await t.ctx.openBatchProfitShareOrder('ORDER-1');
+  queryStatus = 'SUCCESS';
+  await t.ctx.queryProfitShare();
+  assert.equal(t.ctx.readSingleProfitShare(t.ctx.singleProfitShareKey()).status, 'ACCEPTED');
+  assert.equal(t.state.profitShareBatchResults[0].status, 'ACCEPTED');
+  assert.equal(t.state.profitShareBatchResults[1].status, 'UNCONFIRMED');
+  assert.equal(t.state.orders[0].profitShared, true);
+  await t.ctx.sendSingleProfitShare(false);
+  assert.notEqual(payload(t.calls.at(-1)).outRequestNo, originalRequest);
+});
+
+test('failed partial, mismatched and finish-only query results never unlock pending splits', async () => {
+  for (const corrupt of [data => { data.status = 'FAILED'; }, data => { data.tradeNo = 'OTHER'; },
+    data => { data.channelId = 'OTHER'; }, data => { data.raw.profit_sharing_out_order_no = 'OTHER'; },
+    data => { data.raw.profit_sharing_operation = 'FINISH'; }]) {
+    let query = false;
+    const t = setup({ provider: 'DOUYIN', request: async (count, body) => {
+      const data = douyinResponse(body, query ? 'SUCCESS' : 'PENDING');
+      if (query) corrupt(data);
+      return data;
+    } });
+    t.elements.profitShareAmount.value = '2';
+    await t.ctx.submitSelectedProfitShares();
+    await t.ctx.openBatchProfitShareOrder('ORDER-1');
+    query = true;
+    await t.ctx.queryProfitShare().catch(() => {});
+    assert.equal(t.ctx.readSingleProfitShare(t.ctx.singleProfitShareKey()).status, 'UNCONFIRMED');
+    assert.equal(t.state.orders[0].profitShared, false);
+    await reject(t.ctx.sendSingleProfitShare(true), /已受理.*查询/);
+    await reject(t.ctx.sendSingleProfitShare(false), /结果未确认/);
+    assert.equal(t.calls.length, 3);
+  }
 });
 
 test('UI no longer submits the entire channel and exposes selection, stop and row results', () => {

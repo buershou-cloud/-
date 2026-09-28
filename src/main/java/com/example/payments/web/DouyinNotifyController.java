@@ -2,8 +2,10 @@ package com.example.payments.web;
 
 import com.example.payments.channel.ChannelRegistry;
 import com.example.payments.config.PaymentGatewayProperties;
+import com.example.payments.domain.PaymentStatus;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.douyin.DouyinPayClient;
+import com.example.payments.gateway.douyin.DouyinProfitSharingState;
 import com.example.payments.gateway.douyin.DouyinSignatureSupport;
 import com.example.payments.gateway.douyin.DouyinTradeState;
 import com.example.payments.merchant.api.MerchantNotifyService;
@@ -62,6 +64,9 @@ public class DouyinNotifyController {
     ) {
         PaymentGatewayProperties.Channel channel = channelRegistry.find(channelId)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown channel: " + channelId));
+        if (!"DOUYIN".equalsIgnoreCase(channel.getProvider())) {
+            return ResponseEntity.badRequest().build();
+        }
         if (!douyinPayClient.verifyNotification(
                 channel,
                 headers.getFirst("Douyinpay-Timestamp"),
@@ -114,8 +119,16 @@ public class DouyinNotifyController {
         }
 
         if (isProfitSharingNotification(eventType, originalType, payload)) {
-            // Profit-sharing is asynchronous. Its final state remains queryable with out_order_no,
-            // and acknowledging the verified notification prevents unnecessary platform retries.
+            // A receiver-level success or an unfreeze result does not prove that a split succeeded.
+            if ("ASYNC_SPLIT.FINISH".equals(upper(eventType))
+                    && "PROFITSHARING".equals(upper(originalType))
+                    && "FINISHED".equals(upper(text(payload, "state")))
+                    && DouyinProfitSharingState.toPaymentStatus(payload, false) == PaymentStatus.SUCCESS) {
+                String outOrderNo = required(payload, "out_order_no");
+                orderService.recordDouyinProfitSharingNotify(channelId, required(payload, "transaction_id"));
+                log.info("Processed Douyin profit-sharing notification channel={} outOrderNo={}",
+                        channelId, outOrderNo);
+            }
             return ResponseEntity.ok().build();
         }
 
@@ -174,9 +187,11 @@ public class DouyinNotifyController {
             String originalType,
             Map<String, Object> payload
     ) {
-        String event = eventType == null ? "" : eventType.toUpperCase();
-        String original = originalType == null ? "" : originalType.toUpperCase();
+        String event = upper(eventType);
+        String original = upper(originalType);
         return event.contains("PROFITSHARING")
+                || event.startsWith("SPLIT.")
+                || event.startsWith("ASYNC_SPLIT.")
                 || original.contains("PROFITSHARING")
                 || (payload.containsKey("out_order_no")
                     && payload.containsKey("state")

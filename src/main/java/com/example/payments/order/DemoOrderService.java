@@ -396,6 +396,26 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized DemoOrderView recordDouyinProfitSharingNotify(String channelId, String transactionId) {
+        if (!hasText(channelId) || !hasText(transactionId)) {
+            throw new IllegalArgumentException("Douyin profit-sharing notification requires channelId and transactionId");
+        }
+        DemoOrder order = orderByIdentifierOrThrow(null, transactionId);
+        if (!channelId.trim().equals(order.getChannelId())) {
+            throw new IllegalArgumentException("Douyin profit-sharing notification channel does not match the payment order");
+        }
+        if (!order.isProfitShared()) {
+            if (databaseBacked()) {
+                jdbcTemplate.update("""
+                        UPDATE pay_order SET profit_shared = 1
+                        WHERE out_trade_no = ? AND channel_id = ? AND trade_no = ?
+                        """, order.getOutTradeNo(), channelId.trim(), transactionId.trim());
+            }
+            order.setProfitShared(true);
+        }
+        return DemoOrderView.from(order);
+    }
+
     public synchronized DemoOrderView recordDouyinRefundNotify(
             String outRefundNo,
             String refundStatus,
