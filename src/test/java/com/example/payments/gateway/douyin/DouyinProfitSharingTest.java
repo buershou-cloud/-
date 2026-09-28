@@ -322,7 +322,7 @@ class DouyinProfitSharingTest {
 
     @ParameterizedTest
     @EnumSource(value = PaymentProduct.class, names = {"DOUYIN_H5", "DOUYIN_NATIVE"})
-    void paymentFreezesFundsOnlyWhenSharingWasExplicitlyRequested(PaymentProduct product) {
+    void paymentDefaultsToProfitSharingAndPreservesExplicitChoice(PaymentProduct product) {
         String path = product == PaymentProduct.DOUYIN_H5 ? "/v1/trade/transactions/h5" : "/v1/trade/transactions/native";
         String urlKey = product == PaymentProduct.DOUYIN_H5 ? "h5_url" : "code_url";
         when(client.post(any(), eq(path), anyMap())).thenReturn(response(Map.of(urlKey, "https://pay.example.com/order")));
@@ -333,9 +333,70 @@ class DouyinProfitSharingTest {
 
         ArgumentCaptor<Map<String, Object>> body = bodyCaptor();
         verify(client, org.mockito.Mockito.times(3)).post(eq(channel), eq(path), body.capture());
-        assertThat(body.getAllValues().get(0)).doesNotContainKey("settle_info");
+        assertThat(body.getAllValues().get(0)).containsEntry("settle_info", Map.of("profit_sharing", true));
         assertThat(body.getAllValues().get(1)).containsEntry("settle_info", Map.of("profit_sharing", false));
         assertThat(body.getAllValues().get(2)).containsEntry("settle_info", Map.of("profit_sharing", true));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PaymentProduct.class, names = {"DOUYIN_H5", "DOUYIN_NATIVE"})
+    void defaultSharingPreservesSettlementFieldsWithoutMutatingRequest(PaymentProduct product) {
+        String path = product == PaymentProduct.DOUYIN_H5 ? "/v1/trade/transactions/h5" : "/v1/trade/transactions/native";
+        String urlKey = product == PaymentProduct.DOUYIN_H5 ? "h5_url" : "code_url";
+        when(client.post(any(), eq(path), anyMap())).thenReturn(response(Map.of(urlKey, "https://pay.example.com/order")));
+        Map<String, Object> settlement = Map.of("other_option", "original");
+        PayCreateRequest request = pay(product, settlement);
+
+        provider.pay(channel, request);
+
+        ArgumentCaptor<Map<String, Object>> body = bodyCaptor();
+        verify(client).post(eq(channel), eq(path), body.capture());
+        assertThat(body.getValue()).containsEntry("settle_info", Map.of("other_option", "original", "profit_sharing", true));
+        assertThat(body.getValue().get("settle_info")).isNotSameAs(settlement);
+        assertThat(request.settleInfo()).containsExactlyEntriesOf(Map.of("other_option", "original"));
+        assertThat(request.extra()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PaymentProduct.class, names = {"DOUYIN_H5", "DOUYIN_NATIVE"})
+    void extraSettlementStillOverridesTypedSettlementIncludingExplicitFalse(PaymentProduct product) {
+        String path = product == PaymentProduct.DOUYIN_H5 ? "/v1/trade/transactions/h5" : "/v1/trade/transactions/native";
+        String urlKey = product == PaymentProduct.DOUYIN_H5 ? "h5_url" : "code_url";
+        when(client.post(any(), eq(path), anyMap())).thenReturn(response(Map.of(urlKey, "https://pay.example.com/order")));
+        Map<String, Object> typedSettlement = Map.of("profit_sharing", true, "typed_only", "typed");
+        Map<String, Object> extraSettlement = Map.of("profit_sharing", false, "other_option", "extra");
+        Map<String, Object> extra = Map.of("settle_info", extraSettlement, "attach", "cashier-order");
+        PayCreateRequest request = pay(product, typedSettlement, extra);
+
+        provider.pay(channel, request);
+
+        ArgumentCaptor<Map<String, Object>> body = bodyCaptor();
+        verify(client).post(eq(channel), eq(path), body.capture());
+        assertThat(body.getValue()).containsEntry("settle_info", extraSettlement).containsEntry("attach", "cashier-order");
+        assertThat(body.getValue().get("settle_info")).isNotSameAs(extraSettlement);
+        assertThat(request.settleInfo()).containsExactlyEntriesOf(typedSettlement);
+        assertThat(request.extra()).containsExactlyEntriesOf(extra);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = PaymentProduct.class, names = {"DOUYIN_H5", "DOUYIN_NATIVE"})
+    void defaultSharingUsesFinalExtraSettlementWithoutMergingTypedFields(PaymentProduct product) {
+        String path = product == PaymentProduct.DOUYIN_H5 ? "/v1/trade/transactions/h5" : "/v1/trade/transactions/native";
+        String urlKey = product == PaymentProduct.DOUYIN_H5 ? "h5_url" : "code_url";
+        when(client.post(any(), eq(path), anyMap())).thenReturn(response(Map.of(urlKey, "https://pay.example.com/order")));
+        Map<String, Object> typedSettlement = Map.of("profit_sharing", false, "typed_only", "typed");
+        Map<String, Object> extraSettlement = Map.of("other_option", "extra");
+        Map<String, Object> extra = Map.of("settle_info", extraSettlement);
+        PayCreateRequest request = pay(product, typedSettlement, extra);
+
+        provider.pay(channel, request);
+
+        ArgumentCaptor<Map<String, Object>> body = bodyCaptor();
+        verify(client).post(eq(channel), eq(path), body.capture());
+        assertThat(body.getValue()).containsEntry("settle_info", Map.of("other_option", "extra", "profit_sharing", true));
+        assertThat(request.settleInfo()).containsExactlyEntriesOf(typedSettlement);
+        assertThat(extraSettlement).containsExactlyEntriesOf(Map.of("other_option", "extra"));
+        assertThat(request.extra()).containsExactlyEntriesOf(extra);
     }
 
     private static ProfitSharingRequest split(String id, List<Map<String, Object>> receivers) {
@@ -365,9 +426,13 @@ class DouyinProfitSharingTest {
     }
 
     private static PayCreateRequest pay(PaymentProduct product, Map<String, Object> settleInfo) {
+        return pay(product, settleInfo, Map.of());
+    }
+
+    private static PayCreateRequest pay(PaymentProduct product, Map<String, Object> settleInfo, Map<String, Object> extra) {
         return new PayCreateRequest(product, "ORDER-1001", "测试商品", new BigDecimal("2.00"),
                 null, null, null, null, "10m", null, "https://merchant.example.com/return", null,
-                null, List.of("douyin-test"), Map.of(), settleInfo, null);
+                null, List.of("douyin-test"), extra, settleInfo, null);
     }
 
     private static PaymentGatewayProperties.Channel channel() {
