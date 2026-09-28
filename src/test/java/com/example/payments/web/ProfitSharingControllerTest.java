@@ -5,6 +5,7 @@ import com.example.payments.complaint.ComplaintRecordService;
 import com.example.payments.domain.ProfitSharingQueryRequest;
 import com.example.payments.gateway.PaymentGatewayService;
 import com.example.payments.onboarding.OnboardingRecordService;
+import com.example.payments.order.DemoOrderService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.http.MediaType;
@@ -22,7 +23,7 @@ class ProfitSharingControllerTest {
     private final PaymentGatewayService gateway = mock(PaymentGatewayService.class);
     private final MockMvc mvc = MockMvcBuilders.standaloneSetup(new PaymentController(
             gateway, mock(ComplaintAutoQueryService.class), mock(OnboardingRecordService.class),
-            mock(ComplaintRecordService.class))).build();
+            mock(ComplaintRecordService.class), mock(DemoOrderService.class))).build();
 
     @Test
     void remainingAmountCanBeQueriedBeforeFirstSplit() throws Exception {

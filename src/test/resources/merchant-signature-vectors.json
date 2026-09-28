@@ -1,0 +1,20 @@
+[
+  {
+    "name": "pay-unicode-and-decimal",
+    "key": "integration-test-key-not-a-secret",
+    "payload": {"merchantId":"M1001","product":"ALIPAY_ORDER_CODE","outTradeNo":"M1001_001","subject":"测试 商品 & A=B","totalAmount":"1.00","signType":"MD5","timestamp":"2026-09-28T00:00:00Z","nonce":"vector-001","notifyUrl":"https://shop.example/notify"},
+    "canonical": "merchantId=M1001&nonce=vector-001&notifyUrl=https://shop.example/notify&outTradeNo=M1001_001&product=ALIPAY_ORDER_CODE&signType=MD5&subject=测试 商品 & A=B&timestamp=2026-09-28T00:00:00Z&totalAmount=1.00"
+  },
+  {
+    "name": "recursive-json-and-blank-rules",
+    "key": "integration-test-key-not-a-secret",
+    "payload": {"sign":"ignored","signType":"MD5","extra":{"z":null,"empty":" \t","sign":"ignored","b":[null,"",{"z":"尾","a":"1.00","sign":"omit"}],"a":true,"numbers":{"2":"two","10":"ten"}},"subject":"line\n\u000b literal\\u000b","zero":0},
+    "canonical": "extra={\"a\":true,\"b\":[\"\",{\"a\":\"1.00\",\"z\":\"尾\"}],\"numbers\":{\"10\":\"ten\",\"2\":\"two\"}}&signType=MD5&subject=line\n\u000b literal\\u000b&zero=0"
+  },
+  {
+    "name": "platform-callback",
+    "key": "integration-test-key-not-a-secret",
+    "payload": {"merchantId":"M1001","outTradeNo":"M1001_001","tradeNo":"TRADE_001","channelId":"ali-main","productName":"支付宝扫码","totalAmount":"1.00","tradeStatus":"TRADE_SUCCESS","status":"COMPLETED","notifyTime":"2026-09-28T00:00:00Z","signType":"MD5"},
+    "canonical": "channelId=ali-main&merchantId=M1001&notifyTime=2026-09-28T00:00:00Z&outTradeNo=M1001_001&productName=支付宝扫码&signType=MD5&status=COMPLETED&totalAmount=1.00&tradeNo=TRADE_001&tradeStatus=TRADE_SUCCESS"
+  }
+]

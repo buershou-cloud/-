@@ -11,7 +11,7 @@ import java.util.Map;
 
 public record MerchantApiRefundRequest(
         @NotBlank String merchantId,
-        @NotBlank String outTradeNo,
+        String outTradeNo,
         String tradeNo,
         @NotNull @DecimalMin("0.01") BigDecimal refundAmount,
         @NotBlank String outRequestNo,

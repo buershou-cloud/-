@@ -8,7 +8,7 @@ import java.util.Map;
 
 public record MerchantApiCancelRequest(
         @NotBlank String merchantId,
-        @NotBlank String outTradeNo,
+        String outTradeNo,
         String tradeNo,
         List<String> channelIds,
         @NotBlank String signType,

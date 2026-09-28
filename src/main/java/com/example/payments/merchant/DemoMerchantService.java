@@ -3,11 +3,13 @@ package com.example.payments.merchant;
 import com.example.payments.domain.RoutingMode;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
@@ -27,24 +29,30 @@ public class DemoMerchantService {
 
     private static final DateTimeFormatter ID_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final SecureRandom RANDOM = new SecureRandom();
-    private static final RsaKeyPair PLATFORM_RSA = rsaKeyPair();
     private static final String DEFAULT_STATUS = "正常";
     private static final String DEFAULT_SETTLEMENT_STATUS = "待结算";
 
     private final Map<String, DemoMerchant> merchants = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
+    private final PlatformRsaKeys.Material platformRsa;
 
     public DemoMerchantService() {
-        this((JdbcTemplate) null);
+        this(null, ephemeralPlatformKeys());
     }
 
     @Autowired
-    public DemoMerchantService(ObjectProvider<JdbcTemplate> jdbcTemplateProvider) {
-        this(jdbcTemplateProvider.getIfAvailable());
+    public DemoMerchantService(ObjectProvider<JdbcTemplate> jdbcTemplateProvider,
+            @Value("${payment.merchant.platform-key-file:data/platform-rsa.properties}") String platformKeyFile) {
+        this(jdbcTemplateProvider.getIfAvailable(), Path.of(platformKeyFile));
     }
 
-    private DemoMerchantService(JdbcTemplate jdbcTemplate) {
+    DemoMerchantService(JdbcTemplate jdbcTemplate, Path platformKeyFile) {
+        this(jdbcTemplate, PlatformRsaKeys.load(platformKeyFile));
+    }
+
+    private DemoMerchantService(JdbcTemplate jdbcTemplate, PlatformRsaKeys.Material platformRsa) {
         this.jdbcTemplate = jdbcTemplate;
+        this.platformRsa = platformRsa;
         if (!databaseBacked()) {
             seedMemory();
         }
@@ -86,7 +94,7 @@ public class DemoMerchantService {
                 merchantId,
                 required(request.name(), "鍟嗘埛鍚嶇О涓嶈兘涓虹┖"),
                 request.feeRate() == null ? new BigDecimal("0.60") : request.feeRate(),
-                hasText(request.status()) ? request.status().trim() : "姝ｅ父",
+                hasText(request.status()) ? request.status().trim() : DEFAULT_STATUS,
                 request.todayAmount() == null ? BigDecimal.ZERO : request.todayAmount(),
                 request.channelIds(),
                 request.routingMode()
@@ -195,7 +203,12 @@ public class DemoMerchantService {
     }
 
     public String platformPrivateKey() {
-        return PLATFORM_RSA.privateKey();
+        return platformRsa.privateKey();
+    }
+
+    private static PlatformRsaKeys.Material ephemeralPlatformKeys() {
+        RsaKeyPair keys = rsaKeyPair();
+        return new PlatformRsaKeys.Material(keys.publicKey(), keys.privateKey());
     }
 
     private boolean databaseBacked() {
@@ -218,7 +231,7 @@ public class DemoMerchantService {
                 rs.getString("status"),
                 merchantAmount(rs.getString("merchant_id")),
                 rs.getString("md5_key"),
-                PLATFORM_RSA.publicKey(),
+                platformRsa.publicKey(),
                 rs.getString("rsa2_public_key"),
                 rs.getString("rsa2_private_key"),
                 firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
@@ -242,7 +255,7 @@ public class DemoMerchantService {
                     rs.getString("status"),
                     merchantAmount(rs.getString("merchant_id")),
                     rs.getString("md5_key"),
-                    PLATFORM_RSA.publicKey(),
+                    platformRsa.publicKey(),
                     rs.getString("rsa2_public_key"),
                     rs.getString("rsa2_private_key"),
                     firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
@@ -294,7 +307,7 @@ public class DemoMerchantService {
                 firstText(merchant.getStatus(), DEFAULT_STATUS),
                 firstText(merchant.getSettlementStatus(), DEFAULT_SETTLEMENT_STATUS),
                 merchant.getMd5Key(),
-                firstText(merchant.getPlatformPublicKey(), PLATFORM_RSA.publicKey()),
+                firstText(merchant.getPlatformPublicKey(), platformRsa.publicKey()),
                 merchant.getRsa2PublicKey(),
                 merchant.getRsa2PrivateKey(),
                 firstText(merchant.getSignMode(), "MD5_RSA2"),
@@ -316,7 +329,7 @@ public class DemoMerchantService {
                 firstText(merchant.getStatus(), DEFAULT_STATUS),
                 firstText(merchant.getSettlementStatus(), DEFAULT_SETTLEMENT_STATUS),
                 merchant.getMd5Key(),
-                firstText(merchant.getPlatformPublicKey(), PLATFORM_RSA.publicKey()),
+                firstText(merchant.getPlatformPublicKey(), platformRsa.publicKey()),
                 merchant.getRsa2PublicKey(),
                 merchant.getRsa2PrivateKey(),
                 firstText(merchant.getSignMode(), "MD5_RSA2"),
@@ -352,7 +365,7 @@ public class DemoMerchantService {
         return merchant;
     }
 
-    private static DemoMerchant merchant(
+    private DemoMerchant merchant(
             String merchantId,
             String name,
             BigDecimal feeRate,
@@ -362,7 +375,7 @@ public class DemoMerchantService {
         return merchant(merchantId, name, feeRate, status, todayAmount, Set.of(), RoutingMode.ROUND_ROBIN);
     }
 
-    private static DemoMerchant merchant(
+    private DemoMerchant merchant(
             String merchantId,
             String name,
             BigDecimal feeRate,
@@ -379,7 +392,7 @@ public class DemoMerchantService {
                 status,
                 todayAmount,
                 md5Key(),
-                PLATFORM_RSA.publicKey(),
+                platformRsa.publicKey(),
                 rsa.publicKey(),
                 rsa.privateKey(),
                 DEFAULT_SETTLEMENT_STATUS,

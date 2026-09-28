@@ -65,6 +65,10 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     }
 
     private static boolean isPublic(String path, String method, HttpServletRequest request) {
+        if ("GET".equalsIgnoreCase(method) && Set.of("/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs",
+                "/docs/merchant-api.md").contains(path)) {
+            return true;
+        }
         if (PUBLIC_PAGES.contains(path)) {
             return true;
         }
@@ -83,6 +87,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
             return true;
         }
         if (path.startsWith("/api/v1/alipay/")
+                || ("POST".equalsIgnoreCase(method) && path.matches("/api/v1/douyin/notify/[^/]+"))
                 || path.startsWith("/api/v1/payouts/notify/")
                 || path.equals("/api/v1/qrcode")
                 || ("POST".equalsIgnoreCase(method) && path.equals("/api/v1/payment-code/decode"))) {
