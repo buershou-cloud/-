@@ -390,8 +390,8 @@
         <input id="subject" value="扫码收银台支付" required>
       </label>
       <div id="profitSharingPanel" hidden>
-        <label class="profit-sharing-option"><input id="profitSharingEnabled" type="checkbox">本订单需要分账</label>
-        <p class="profit-sharing-hint">勾选后，支付款项将保留待分账；分账完成后可解冻剩余资金。</p>
+        <label class="profit-sharing-option"><input id="profitSharingEnabled" type="checkbox" checked>本订单需要分账</label>
+        <p class="profit-sharing-hint">抖音订单默认开启，支付款项将保留待分账；不需要分账时可取消勾选。</p>
       </div>
       <div id="paymentCodePanel" class="payment-code-panel" hidden>
         <label>付款码数字
@@ -483,6 +483,7 @@
   let currentAvailableChannels = [];
   let currentProduct;
   let currentProductOptions = [];
+  let cashierProfitSharingChoice = true;
   let alipaySubmitForm;
   let paymentPollTimer;
   let paymentPollAttempts = 0;
@@ -1254,10 +1255,16 @@
   }
 
   function syncCashierProfitSharing() {
-    const enabled = currentChannel?.provider === "DOUYIN";
+    const enabled = isDouyinH5Product(currentProduct) || isDouyinNativeProduct(currentProduct);
     $("profitSharingPanel").hidden = !enabled;
     $("profitSharingEnabled").disabled = !enabled;
-    if (!enabled) $("profitSharingEnabled").checked = false;
+    $("profitSharingEnabled").checked = enabled && cashierProfitSharingChoice;
+  }
+
+  function rememberCashierProfitSharingChoice() {
+    if (!$("profitSharingEnabled").disabled) {
+      cashierProfitSharingChoice = $("profitSharingEnabled").checked;
+    }
   }
 
   function cashierPaymentExtra() {
@@ -1266,11 +1273,13 @@
       extra.merchantId = currentMerchant.merchantId;
       extra.merchantName = currentMerchant.name;
     }
-    if (currentChannel?.provider === "DOUYIN" && $("profitSharingEnabled").checked) {
-      extra.settle_info = { profit_sharing: true };
+    if (isDouyinH5Product(currentProduct) || isDouyinNativeProduct(currentProduct)) {
+      extra.settle_info = { profit_sharing: $("profitSharingEnabled").checked };
     }
     return extra;
   }
+
+  $("profitSharingEnabled").addEventListener("change", rememberCashierProfitSharingChoice);
 
   $("paymentCodeUploadButton").addEventListener("click", () => {
     if (!isPaymentCodeProduct(currentProduct)) {

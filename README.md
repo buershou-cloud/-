@@ -5,7 +5,7 @@ Spring Boot payment gateway for Alipay and Douyin Pay flows.
 Douyin Pay:
 
 - 抖音 H5 支付: `POST /v1/trade/transactions/h5`, with official RSA request signing, order query/close, refund, signed encrypted notifications, and H5 cashier redirection.
-- 抖音分账: H5 / Native 下单可选开启分账，支持接收方管理、单笔及所选订单批量分账、结果查询、通知更新、剩余金额、完结解冻与商户回退。见 [抖音分账接入说明](docs/douyin-profit-sharing.md)。支付宝沿用原通道与分账接口。
+- 抖音分账: H5 / Native 新订单默认开启分账，可显式关闭；支持接收方管理、单笔及所选订单批量分账、结果查询、通知更新、剩余金额、完结解冻与商户回退。见 [抖音分账接入说明](docs/douyin-profit-sharing.md)。支付宝沿用原通道与分账接口。
 - 商家代付到抖音零钱: official merchant-transfer create/query APIs, RSA-encrypted sensitive fields, signed encrypted result notifications, and original-order reconciliation.
 - 商户网站 API: signed JSON check/pay/query/cancel/refund, runnable Node.js SDK, original-channel order protection and persistent merchant notifications. See [商户接入说明](docs/merchant-api.md) and [宝塔升级说明](docs/merchant-api-deployment.md).
 

@@ -170,30 +170,78 @@ test('querying Douyin merchant receivers does not require the fields used to add
   assert.equal(payload.extra?.relation_type, undefined);
 });
 
-function setupCashier(provider) {
-  const elements = { profitSharingPanel: { hidden: true }, profitSharingEnabled: { checked: false, disabled: false } };
+function setupCashier(provider, product) {
+  const elements = { profitSharingPanel: { hidden: true }, profitSharingEnabled: { checked: true, disabled: false } };
   const ctx = vm.createContext({ currentChannel: provider ? { id: provider, provider } : null, currentMerchant: null,
+    currentProduct: product, cashierProfitSharingChoice: true,
     $: id => elements[id] });
-  vm.runInContext(['syncCashierProfitSharing', 'cashierPaymentExtra'].map(name => pageFunction(name, cashierScript)).join('\n'), ctx);
+  vm.runInContext(['isDouyinH5Product', 'isDouyinNativeProduct', 'syncCashierProfitSharing',
+    'rememberCashierProfitSharingChoice', 'cashierPaymentExtra'].map(name => pageFunction(name, cashierScript)).join('\n'), ctx);
   return { ctx, elements };
 }
 
-test('cashier script parses and only an explicitly checked Douyin order requests frozen settlement', () => {
+test('cashier defaults Douyin desktop Native and mobile H5 orders to profit sharing', () => {
   new vm.Script(cashierScript);
-  assert.match(cashier, /id="profitSharingEnabled" type="checkbox"/);
-  assert.doesNotMatch(cashier, /id="profitSharingEnabled"[^>]*checked/);
-  const { ctx, elements } = setupCashier('DOUYIN');
-  ctx.syncCashierProfitSharing();
-  assert.equal(elements.profitSharingPanel.hidden, false);
-  assert.equal(ctx.cashierPaymentExtra().settle_info, undefined);
-  elements.profitSharingEnabled.checked = true;
-  assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, true);
+  assert.match(cashier, /id="profitSharingEnabled"[^>]*checked/);
+  assert.match(cashierScript, /let cashierProfitSharingChoice = true;/);
+  for (const product of ['DOUYIN_NATIVE', 'DOUYIN_H5']) {
+    const { ctx, elements } = setupCashier('DOUYIN', product);
+    ctx.syncCashierProfitSharing();
+    assert.equal(elements.profitSharingPanel.hidden, false);
+    assert.equal(elements.profitSharingEnabled.checked, true);
+    assert.equal(elements.profitSharingEnabled.disabled, false);
+    assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, true);
+  }
   assert.match(cashierScript, /const extra = cashierPaymentExtra\(\);/);
 });
 
-test('Alipay and automatic merchant routing keep original settlement even with a stale checkbox', () => {
-  for (const provider of ['ALIPAY', 'ALIPAY_DIRECT', null]) {
-    const { ctx, elements } = setupCashier(provider);
+test('merchant QR routing includes Douyin sharing without a preselected channel', () => {
+  for (const product of ['DOUYIN_NATIVE', 'DOUYIN_H5']) {
+    const { ctx, elements } = setupCashier(null, product);
+    ctx.currentMerchant = { merchantId: 'M1', name: 'Merchant' };
+    ctx.currentAvailableChannels = [
+      { id: 'ali', provider: 'ALIPAY', products: ['ALIPAY_F2F'] },
+      { id: 'dy1', provider: 'DOUYIN', products: [product] },
+      { id: 'dy2', provider: 'DOUYIN', products: [product] }
+    ];
+    ctx.syncCashierProfitSharing();
+    assert.equal(elements.profitSharingPanel.hidden, false);
+    const extra = ctx.cashierPaymentExtra();
+    assert.equal(extra.settle_info.profit_sharing, true);
+    assert.equal(extra.merchantId, 'M1');
+    assert.equal(extra.merchantName, 'Merchant');
+  }
+});
+
+test('Douyin opt-out sends explicit false and survives repeated UI updates', () => {
+  assert.match(cashierScript, /\$\("profitSharingEnabled"\)\.addEventListener\("change", rememberCashierProfitSharingChoice\)/);
+  for (const provider of ['DOUYIN', null]) {
+    for (const product of ['DOUYIN_NATIVE', 'DOUYIN_H5']) {
+      const { ctx, elements } = setupCashier(provider, product);
+      ctx.syncCashierProfitSharing();
+      elements.profitSharingEnabled.checked = false;
+      ctx.rememberCashierProfitSharingChoice();
+      ctx.syncCashierProfitSharing();
+      assert.equal(elements.profitSharingEnabled.checked, false);
+      assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, false);
+      ctx.currentProduct = 'ALIPAY_F2F';
+      ctx.syncCashierProfitSharing();
+      assert.equal(ctx.cashierPaymentExtra().settle_info, undefined);
+      ctx.currentProduct = product;
+      ctx.syncCashierProfitSharing();
+      assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, false);
+      elements.profitSharingEnabled.checked = true;
+      ctx.rememberCashierProfitSharingChoice();
+      ctx.syncCashierProfitSharing();
+      assert.equal(ctx.cashierPaymentExtra().settle_info.profit_sharing, true);
+    }
+  }
+});
+
+test('Alipay and mixed merchant routing keep original settlement even with a stale checkbox', () => {
+  for (const [provider, product] of [['ALIPAY', 'ALIPAY_F2F'], ['ALIPAY_DIRECT', 'ALIPAY_DIRECT_ORDER_CODE'],
+    [null, 'ALIPAY_ORDER_CODE'], [null, 'ALIPAY_WAP'], [null, undefined]]) {
+    const { ctx, elements } = setupCashier(provider, product);
     ctx.currentMerchant = { merchantId: 'M1', name: 'Merchant' };
     elements.profitSharingEnabled.checked = true;
     assert.equal(ctx.cashierPaymentExtra().settle_info, undefined);
@@ -202,5 +250,73 @@ test('Alipay and automatic merchant routing keep original settlement even with a
     assert.equal(elements.profitSharingPanel.hidden, true);
     assert.equal(elements.profitSharingEnabled.checked, false);
     assert.equal(elements.profitSharingEnabled.disabled, true);
+  }
+});
+
+async function openCashierPage({ userAgent, search, channels }) {
+  const elements = Object.fromEntries([...cashier.matchAll(/\bid="([^"]+)"/g)].map(match => [match[1], {
+    value: '', checked: match[1] === 'profitSharingEnabled', hidden: false, disabled: false, style: {}, listeners: {},
+    classList: { add() {}, remove() {} }, removeAttribute() {},
+    addEventListener(event, callback) { this.listeners[event] = callback; }
+  }]));
+  const submissions = [];
+  const ctx = vm.createContext({ URLSearchParams, URL, navigator: { userAgent },
+    location: { search, origin: 'https://pay.example', pathname: '/cashier.html' },
+    document: { getElementById: id => elements[id] },
+    fetch: async (url, options = {}) => {
+      let result;
+      if (url === '/api/v1/channels') result = channels;
+      else if (url === '/api/v1/merchants/M1/cashier-info') {
+        result = { merchantId: 'M1', name: 'Merchant', channelIds: channels.map(channel => channel.id) };
+      } else if (url === '/api/v1/payments/pay') {
+        submissions.push(JSON.parse(options.body));
+        result = { status: 'FAILED', message: 'Test ends after capturing request' };
+      } else throw Error(`Unexpected request: ${url}`);
+      return { ok: true, text: async () => JSON.stringify(result) };
+    }
+  });
+  vm.runInContext(cashierScript, ctx);
+  await new Promise(resolve => setImmediate(resolve));
+  return { elements, submissions };
+}
+
+test('real cashier load and submit preserve default and opt-out for channel and merchant QR routes', async () => {
+  const channels = [
+    { id: 'dy1', provider: 'DOUYIN', enabled: true, products: ['DOUYIN_H5', 'DOUYIN_NATIVE'] },
+    { id: 'dy2', provider: 'DOUYIN', enabled: true, products: ['DOUYIN_H5', 'DOUYIN_NATIVE'] }
+  ];
+  for (const [userAgent, expectedProduct] of [['Desktop', 'DOUYIN_NATIVE'], ['iPhone', 'DOUYIN_H5']]) {
+    for (const search of ['?channelId=dy1', '?merchantId=M1']) {
+      const { elements, submissions } = await openCashierPage({ userAgent, search, channels });
+      assert.equal(elements.profitSharingPanel.hidden, false);
+      assert.equal(elements.profitSharingEnabled.checked, true);
+      elements.amount.value = '1.00';
+      elements.subject.value = 'Test payment';
+      await elements.cashierForm.listeners.submit({ preventDefault() {} });
+      assert.equal(submissions.length, 1);
+      assert.equal(submissions[0].product, expectedProduct);
+      assert.equal(submissions[0].extra.settle_info.profit_sharing, true);
+      elements.profitSharingEnabled.checked = false;
+      elements.profitSharingEnabled.listeners.change();
+      await elements.cashierForm.listeners.submit({ preventDefault() {} });
+      assert.equal(submissions[1].extra.settle_info.profit_sharing, false);
+      assert.equal(submissions[1].extra.merchantId, search.includes('merchantId') ? 'M1' : undefined);
+    }
+  }
+});
+
+test('real mixed-channel merchant QR keeps Alipay payment payload unchanged', async () => {
+  const channels = [
+    { id: 'ali', provider: 'ALIPAY', enabled: true, products: ['ALIPAY_F2F'] },
+    { id: 'dy', provider: 'DOUYIN', enabled: true, products: ['DOUYIN_H5', 'DOUYIN_NATIVE'] }
+  ];
+  for (const userAgent of ['Desktop', 'iPhone']) {
+    const { elements, submissions } = await openCashierPage({ userAgent, search: '?merchantId=M1', channels });
+    assert.equal(elements.profitSharingPanel.hidden, true);
+    assert.equal(elements.profitSharingEnabled.disabled, true);
+    elements.amount.value = '1.00';
+    await elements.cashierForm.listeners.submit({ preventDefault() {} });
+    assert.equal(submissions[0].product, 'ALIPAY_F2F');
+    assert.deepEqual(submissions[0].extra, { cashier: true, merchantId: 'M1', merchantName: 'Merchant' });
   }
 });

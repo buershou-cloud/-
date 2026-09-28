@@ -113,6 +113,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("scene_info", sceneInfo);
         putIfNotEmpty(body, "settle_info", request.settleInfo());
         mergeAllowedPayExtras(body, request.extra());
+        applyDefaultProfitSharing(body);
 
         DouyinGatewayResponse response = client.post(channel, H5_ORDER_PATH, body);
         String h5Url = firstText(text(response.body(), "h5_url"), nestedText(response.body(), "data", "h5_url"));
@@ -153,6 +154,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("amount", amount(request.totalAmount()));
         putIfNotEmpty(body, "settle_info", request.settleInfo());
         mergeAllowedNativePayExtras(body, request.extra());
+        applyDefaultProfitSharing(body);
 
         DouyinGatewayResponse response = client.post(channel, NATIVE_ORDER_PATH, body);
         String codeUrl = firstText(
@@ -769,6 +771,17 @@ public class DouyinPaymentProvider implements PaymentProvider {
                     "Douyin H5 website URL must be a complete HTTP or HTTPS URL",
                     ex
             );
+        }
+    }
+
+    private static void applyDefaultProfitSharing(Map<String, Object> body) {
+        // Apply the default after extra overrides, without changing the caller's settlement map.
+        if (body.get("settle_info") instanceof Map<?, ?> existing) {
+            Map<Object, Object> settlement = new LinkedHashMap<>(existing);
+            settlement.putIfAbsent("profit_sharing", true);
+            body.put("settle_info", settlement);
+        } else if (!body.containsKey("settle_info")) {
+            body.put("settle_info", Map.of("profit_sharing", true));
         }
     }
 

@@ -72,6 +72,8 @@ node merchant-example.mjs check
 
 ### 下单
 
+抖音 `DOUYIN_NATIVE`（扫码）和 `DOUYIN_H5` 新订单默认开启分账，无需额外传参；通道须已开通分账权限，支付款项会保留待分账，完成后可解冻剩余资金。需要普通结算时，在下单业务字段中加入 `"settleInfo": { "profit_sharing": false }`，再由 SDK 生成签名。若使用 `extra.settle_info`，其内容优先于顶层 `settleInfo`，不要同时传冲突值。此默认值不影响支付宝，也不能补开历史订单的分账。
+
 新建 `pay.json`：
 
 ```json
