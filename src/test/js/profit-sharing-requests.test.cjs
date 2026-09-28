@@ -119,6 +119,8 @@ test('timeout retry sends byte-identical body despite edited form and credential
   assert.equal(calls[1].body, calls[0].body);
   assert.match(confirmations[1], /20%/);
   assert.match(confirmations[1], /receiver@example.com/);
+  assert.match(confirmations[1], /先查询原请求或核对支付平台/);
+  assert.match(confirmations[1], /后台已有记录时只返回成功结果或拒绝重复划拨/);
 });
 
 test('an unresolved request blocks a new allocation and preserves the original ID', async () => {
@@ -283,7 +285,7 @@ test('Douyin request identifiers respect its shorter limit without changing Alip
 
 test('new and retry controls are separate and retry handler uses the retained attempt', () => {
   assert.match(page, /id="shareSingleBtn"[^>]*>新增单笔分账/);
-  assert.match(page, /id="retrySingleProfitShareBtn"[^>]*>重试原单笔分账/);
+  assert.match(page, /id="retrySingleProfitShareBtn"[^>]*>核对后重试原请求/);
   assert.match(script, /\$\("retrySingleProfitShareBtn"\)\.addEventListener\("click", async \(\) => \{\s*try \{ await sendSingleProfitShare\(true\)/);
 });
 

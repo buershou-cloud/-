@@ -11,10 +11,12 @@ import com.example.payments.gateway.douyin.DouyinTradeState;
 import com.example.payments.merchant.api.MerchantNotifyService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
+import com.example.payments.sharing.ProfitSharingRecordService;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,6 +43,7 @@ public class DouyinNotifyController {
     private final DemoOrderService orderService;
     private final MerchantNotifyService merchantNotifyService;
     private final ObjectMapper objectMapper;
+    private final ProfitSharingRecordService profitSharingRecords;
 
     public DouyinNotifyController(
             ChannelRegistry channelRegistry,
@@ -49,11 +52,25 @@ public class DouyinNotifyController {
             MerchantNotifyService merchantNotifyService,
             ObjectMapper objectMapper
     ) {
+        this(channelRegistry, douyinPayClient, orderService, merchantNotifyService, objectMapper,
+                new ProfitSharingRecordService(orderService));
+    }
+
+    @Autowired
+    public DouyinNotifyController(
+            ChannelRegistry channelRegistry,
+            DouyinPayClient douyinPayClient,
+            DemoOrderService orderService,
+            MerchantNotifyService merchantNotifyService,
+            ObjectMapper objectMapper,
+            ProfitSharingRecordService profitSharingRecords
+    ) {
         this.channelRegistry = channelRegistry;
         this.douyinPayClient = douyinPayClient;
         this.orderService = orderService;
         this.merchantNotifyService = merchantNotifyService;
         this.objectMapper = objectMapper;
+        this.profitSharingRecords = profitSharingRecords;
     }
 
     @PostMapping("/notify/{channelId}")
@@ -122,10 +139,20 @@ public class DouyinNotifyController {
             // A receiver-level success or an unfreeze result does not prove that a split succeeded.
             if ("ASYNC_SPLIT.FINISH".equals(upper(eventType))
                     && "PROFITSHARING".equals(upper(originalType))
-                    && "FINISHED".equals(upper(text(payload, "state")))
-                    && DouyinProfitSharingState.toPaymentStatus(payload, false) == PaymentStatus.SUCCESS) {
+                    && !payload.containsKey("finish_amount") && !payload.containsKey("finish_description")) {
                 String outOrderNo = required(payload, "out_order_no");
-                orderService.recordDouyinProfitSharingNotify(channelId, required(payload, "transaction_id"));
+                String transactionId = required(payload, "transaction_id");
+                if ("FINISHED".equals(upper(text(payload, "state")))
+                        && DouyinProfitSharingState.toPaymentStatus(payload, false) == PaymentStatus.SUCCESS) {
+                    try {
+                        orderService.recordDouyinProfitSharingNotify(channelId, transactionId);
+                    } catch (IllegalArgumentException ex) {
+                        if (ex.getMessage() == null || !ex.getMessage().startsWith("Order does not exist:")) throw ex;
+                        // External platform transactions have an outgoing record but no local payment order.
+                        log.info("Recording split notification for external transaction channel={} transaction={}", channelId, transactionId);
+                    }
+                }
+                profitSharingRecords.recordDouyinNotification(channel, payload);
                 log.info("Processed Douyin profit-sharing notification channel={} outOrderNo={}",
                         channelId, outOrderNo);
             }

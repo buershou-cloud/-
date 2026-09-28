@@ -21,6 +21,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -88,6 +89,54 @@ public class MerchantPayoutService {
                 ORDER BY id DESC
                 LIMIT ?
                 """, this::mapView, safeLimit);
+    }
+
+    /** Search persisted payout history without limiting it to the latest payout-page records. */
+    public List<MerchantPayoutView> search(String beginTime, String endTime, String orderNo, String tradeNo, String channelId) {
+        requireDatabase();
+        StringBuilder sql = new StringBuilder("""
+                SELECT id, out_biz_no, provider, channel_id, recipient_type, recipient_masked,
+                       recipient_name_masked, amount, order_title, remark, transfer_scene_id,
+                       platform_order_no, platform_fund_order_no, status, code, message, fail_reason,
+                       DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                       DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
+                       DATE_FORMAT(completed_at, '%Y-%m-%d %H:%i:%s') AS completed_at
+                FROM merchant_payout
+                WHERE 1 = 1
+                """);
+        List<Object> arguments = new ArrayList<>();
+        if (hasText(beginTime)) {
+            sql.append(" AND created_at >= ?");
+            arguments.add(searchTime(beginTime));
+        }
+        if (hasText(endTime)) {
+            sql.append(" AND created_at <= ?");
+            arguments.add(searchTime(endTime));
+        }
+        if (hasText(orderNo)) {
+            sql.append(" AND out_biz_no LIKE ?");
+            arguments.add("%" + orderNo.trim() + "%");
+        }
+        if (hasText(tradeNo)) {
+            sql.append(" AND (platform_order_no LIKE ? OR platform_fund_order_no LIKE ?)");
+            arguments.add("%" + tradeNo.trim() + "%");
+            arguments.add("%" + tradeNo.trim() + "%");
+        }
+        if (hasText(channelId)) {
+            sql.append(" AND channel_id = ?");
+            arguments.add(channelId.trim());
+        }
+        sql.append(" ORDER BY created_at DESC, id DESC");
+        return jdbcTemplate.query(sql.toString(), this::mapView, arguments.toArray());
+    }
+
+    private static Timestamp searchTime(String value) {
+        String normalized = value.trim().replace('T', ' ');
+        try {
+            return Timestamp.valueOf(normalized.length() == 16 ? normalized + ":00" : normalized);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("代付查询时间格式应为 yyyy-MM-dd HH:mm[:ss]", ex);
+        }
     }
 
     public MerchantPayoutView create(MerchantPayoutCreateRequest request, String douyinNotifyUrl) {
@@ -335,9 +384,10 @@ public class MerchantPayoutService {
             String failReason,
             Object rawResponse
     ) {
-        MerchantPayoutView current = findRequired(outBizNo);
-        String mergedStatus = mergeStatus(current.status(), status);
-        jdbcTemplate.update("""
+        String incomingStatus = firstText(status, STATUS_UNKNOWN);
+        // The terminal-state guard is evaluated by the database while the row is locked.
+        // A response read before a successful callback must not overwrite that callback later.
+        int updated = jdbcTemplate.update("""
                 UPDATE merchant_payout
                 SET platform_order_no = COALESCE(?, platform_order_no),
                     platform_fund_order_no = COALESCE(?, platform_fund_order_no),
@@ -345,17 +395,26 @@ public class MerchantPayoutService {
                     completed_at = CASE WHEN ? IN ('SUCCESS', 'FAILED') THEN COALESCE(completed_at, NOW()) ELSE completed_at END,
                     updated_at = NOW()
                 WHERE out_biz_no = ?
+                  AND (status NOT IN ('SUCCESS', 'FAILED')
+                       OR ? = 'SUCCESS'
+                       OR (status = 'FAILED' AND ? = 'FAILED'))
                 """,
                 trimToNull(platformOrderNo),
                 trimToNull(platformFundOrderNo),
-                mergedStatus,
+                incomingStatus,
                 trimToNull(code),
                 trimToNull(message),
                 trimToNull(failReason),
                 json(rawResponse),
-                mergedStatus,
-                outBizNo
+                incomingStatus,
+                outBizNo,
+                incomingStatus,
+                incomingStatus
         );
+        if (updated == 0) {
+            // A rejected stale update is expected; a missing local order is still an error.
+            findRequired(outBizNo);
+        }
     }
 
     private void markUnknown(String outBizNo, String code, String message) {
@@ -553,16 +612,6 @@ public class MerchantPayoutService {
             case "ACCEPTED", "TRANSFERING", "PROCESSING", "PENDING" -> STATUS_PROCESSING;
             default -> STATUS_UNKNOWN;
         };
-    }
-
-    private static String mergeStatus(String current, String incoming) {
-        if (STATUS_SUCCESS.equals(current)) {
-            return STATUS_SUCCESS;
-        }
-        if (STATUS_FAILED.equals(current) && !STATUS_SUCCESS.equals(incoming)) {
-            return STATUS_FAILED;
-        }
-        return firstText(incoming, current, STATUS_UNKNOWN);
     }
 
     private static String normalizedOutBizNo(String value) {

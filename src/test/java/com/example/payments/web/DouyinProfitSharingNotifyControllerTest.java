@@ -8,6 +8,7 @@ import com.example.payments.gateway.douyin.DouyinPayClient;
 import com.example.payments.merchant.api.MerchantNotifyService;
 import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
+import com.example.payments.sharing.ProfitSharingRecordService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +42,7 @@ class DouyinProfitSharingNotifyControllerTest {
     private final DouyinPayClient client = mock(DouyinPayClient.class);
     private final MerchantNotifyService merchantNotify = mock(MerchantNotifyService.class);
     private final DemoOrderService orders = new DemoOrderService();
+    private final ProfitSharingRecordService records = new ProfitSharingRecordService(orders);
     private final PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
     private DouyinNotifyController controller;
 
@@ -57,7 +59,7 @@ class DouyinProfitSharingNotifyControllerTest {
                 "DOUYIN_H5", new BigDecimal("12.34"), false, PaymentStatus.SUCCESS);
         orders.recordPaymentCreated("ALI-ORDER", "ALI-TRANSACTION", "ali-main", "M1", "merchant",
                 "ALIPAY_PAGE", new BigDecimal("20.00"), false, PaymentStatus.SUCCESS);
-        controller = new DouyinNotifyController(registry, client, orders, merchantNotify, mapper);
+        controller = new DouyinNotifyController(registry, client, orders, merchantNotify, mapper, records);
     }
 
     @Test
@@ -73,6 +75,8 @@ class DouyinProfitSharingNotifyControllerTest {
         controller.notify("dy-main", new HttpHeaders(), body);
         assertThat(order("ORDER")).isEqualTo(first);
         assertThat(orders.recent()).hasSize(2);
+        assertThat(records.search(null, null, null, null, null)).hasSize(1)
+                .allMatch(record -> "SUCCESS".equals(record.status()) && "SPLIT-REQUEST".equals(record.orderNo()));
         verifyNoInteractions(merchantNotify);
     }
 
@@ -111,13 +115,14 @@ class DouyinProfitSharingNotifyControllerTest {
     }
 
     @Test
-    void unknownTransactionNeverCreatesAnOrder() throws Exception {
+    void unknownTransactionCreatesOnlyAnOutgoingRecord() throws Exception {
         Map<String, Object> payload = completed();
         payload.put("transaction_id", "UNKNOWN");
         String body = encrypted("ASYNC_SPLIT.FINISH", "profitsharing", payload);
-        assertThatThrownBy(() -> controller.notify("dy-main", new HttpHeaders(), body))
-                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Order does not exist");
+        assertThat(controller.notify("dy-main", new HttpHeaders(), body).getStatusCode().value()).isEqualTo(200);
         assertThat(orders.recent()).hasSize(2).allMatch(order -> !order.profitShared());
+        assertThat(records.search(null, null, "SPLIT-REQUEST", "UNKNOWN", "dy-main")).hasSize(1)
+                .allMatch(record -> "SUCCESS".equals(record.status()) && record.amount() == null);
     }
 
     @Test
@@ -137,6 +142,7 @@ class DouyinProfitSharingNotifyControllerTest {
         when(client.verifyNotification(eq(channel), any(), any(), any(), any(), anyString())).thenReturn(false);
         assertThat(controller.notify("dy-main", new HttpHeaders(), "not even JSON").getStatusCode().value()).isEqualTo(401);
         assertThat(orders.recent()).allMatch(order -> !order.profitShared());
+        assertThat(records.search(null, null, null, null, null)).isEmpty();
     }
 
     @Test
