@@ -5163,7 +5163,6 @@
     const channel = channelById($("profitShareChannel")?.value);
     const douyin = channel?.provider === "DOUYIN";
     const mode = douyin ? "AMOUNT" : $("profitShareMode").value;
-    if (douyin) $("profitShareMode").value = "AMOUNT";
     $("profitShareModeField").classList.toggle("hidden", douyin);
     $("profitShareUnfreezeField").classList.toggle("hidden", !douyin);
     $("douyinProfitAdvanced").classList.toggle("hidden", !douyin);
@@ -5216,13 +5215,14 @@
     $("profitShareTransInTypeLabel").value = relation.account ? receiverTypeText(relation.type) : "-";
   }
 
-  function renderProfitShareRelationOptions() {
+  function renderProfitShareRelationOptions(selectedValue) {
     const select = $("profitShareTransIn");
     if (!select) return;
-    const selected = select.value;
-    const placeholder = $("profitShareChannel").value ? "请选择已绑定分账关系" : "请先选择支付通道";
+    const selected = selectedValue ?? select.value;
+    const channelId = $("profitShareChannel").value;
+    const placeholder = channelId ? "请选择已绑定分账关系" : "请先选择支付通道";
     select.innerHTML = `<option value="">${placeholder}</option>` + state.profitSharingRelations
-      .filter((relation) => relation.status === "BOUND")
+      .filter((relation) => relation.channelId === channelId && relation.status === "BOUND")
       .map((relation) => {
       const key = `${relation.receiverType || "loginName"}|${relation.receiverAccount}`;
       return `
@@ -5241,11 +5241,12 @@
   function renderProfitRelationTable() {
     const body = $("profitRelationTableBody");
     if (!body) return;
-    if (!state.profitSharingRelations.length) {
+    const relations = state.profitSharingRelations.filter(relation => relation.channelId === $("profitRelationChannel").value);
+    if (!relations.length) {
       body.innerHTML = '<tr><td colspan="6" class="muted">暂无分账关系</td></tr>';
       return;
     }
-    body.innerHTML = state.profitSharingRelations.map((relation) => `
+    body.innerHTML = relations.map((relation) => `
       <tr>
         <td>${html(relation.channelId)}</td>
         <td>${html(relation.receiverAccount)}</td>
@@ -5263,20 +5264,24 @@
   async function loadProfitSharingRelations(channelId = $("profitShareChannel").value, silent = false) {
     const safeChannelId = (channelId || "").trim();
     if (!safeChannelId) {
-      state.profitSharingRelations = [];
       renderProfitShareRelationOptions();
       renderProfitRelationTable();
       if (!silent) setProfitShareResult({ message: "请先选择支付通道，再刷新已绑定分账关系" });
       return [];
     }
-    const data = await request(`/api/v1/payments/profit-sharing/relations?channelId=${encodeURIComponent(safeChannelId)}`);
-    state.profitSharingRelations = Array.isArray(data) ? data : [];
+    const selectedReceiver = safeChannelId === $("profitShareChannel").value ? $("profitShareTransIn").value : undefined;
+    state.profitSharingRelations = state.profitSharingRelations.filter(relation => relation.channelId !== safeChannelId);
     renderProfitShareRelationOptions();
     renderProfitRelationTable();
+    const data = await request(`/api/v1/payments/profit-sharing/relations?channelId=${encodeURIComponent(safeChannelId)}`);
+    const relations = Array.isArray(data) ? data.filter(relation => relation.channelId === safeChannelId) : [];
+    state.profitSharingRelations = state.profitSharingRelations.filter(relation => relation.channelId !== safeChannelId).concat(relations);
+    renderProfitShareRelationOptions(safeChannelId === $("profitShareChannel").value ? selectedReceiver : undefined);
+    renderProfitRelationTable();
     if (!silent) {
-      setProfitShareResult({ message: `已加载 ${state.profitSharingRelations.length} 个已绑定分账关系` });
+      setProfitShareResult({ message: `已加载 ${relations.length} 个已绑定分账关系` });
     }
-    return state.profitSharingRelations;
+    return relations;
   }
 
   function profitShareRoyaltyParameter(amount, percentage) {
@@ -5297,7 +5302,23 @@
   }
 
   function profitShareSinglePayload(selectedOrder = null) {
-    const channel = channelById(selectedOrder?.channelId || $("profitShareChannel").value);
+    const outTradeNo = selectedOrder?.outTradeNo || $("profitShareOutTradeNo").value.trim();
+    if (!outTradeNo) {
+      throw { message: "请填写或选择订单号" };
+    }
+    const order = selectedOrder || state.orders.find((item) => item.outTradeNo === outTradeNo);
+    const selectedChannelId = $("profitShareChannel").value;
+    if (order?.channelId && selectedChannelId && order.channelId !== selectedChannelId) {
+      throw { message: "订单不属于当前支付通道，请选择订单对应的通道和已绑定收入方" };
+    }
+    const channelId = order?.channelId || selectedChannelId;
+    const channel = channelById(channelId);
+    const relation = selectedProfitShareRelation();
+    if (!state.profitSharingRelations.some(item => item.channelId === channelId
+        && item.status === "BOUND" && item.receiverAccount === relation.account
+        && (item.receiverType || "loginName") === relation.type)) {
+      throw { message: "请刷新当前通道的已绑定关系，并选择收入方" };
+    }
     const mode = channel?.provider === "DOUYIN" ? "AMOUNT" : $("profitShareMode").value;
     const value = amountField("profitShareAmount");
     if (!value) {
@@ -5306,11 +5327,6 @@
     if (mode === "PERCENTAGE" && (value <= 0 || value > 100)) {
       throw { message: "分账比例必须大于 0 且不能超过 100%" };
     }
-    const outTradeNo = selectedOrder?.outTradeNo || $("profitShareOutTradeNo").value.trim();
-    if (!outTradeNo) {
-      throw { message: "请填写或选择订单号" };
-    }
-    const order = selectedOrder || state.orders.find((item) => item.outTradeNo === outTradeNo);
     const extra = parseJson("profitShareExtra", {});
     if (channel?.provider === "DOUYIN") {
       extra.unfreeze_unsplit = $("profitShareUnfreezeUnsplit").value === "true";
@@ -5324,7 +5340,7 @@
       )],
       operatorId: $("profitShareOperatorId").value,
       appAuthToken: $("profitShareAppAuthToken").value,
-      channelIds: order?.channelId ? [order.channelId] : ($("profitShareChannel").value ? [$("profitShareChannel").value] : []),
+      channelIds: channelId ? [channelId] : [],
       extra
     });
   }
@@ -5425,7 +5441,8 @@
       const attempt = JSON.parse(raw);
       if (!/^[A-Za-z0-9_]{1,64}$/.test(attempt.outRequestNo || "")
           || !/^[a-f0-9]{64}$/.test(attempt.fingerprint || "")
-          || !["UNCONFIRMED", "ACCEPTED", "REVIEWED"].includes(attempt.status)) throw new Error();
+          || !["UNCONFIRMED", "ACCEPTED", "REVIEWED"].includes(attempt.status)
+          || (attempt.acknowledged !== undefined && typeof attempt.acknowledged !== "boolean")) throw new Error();
       return attempt;
     } catch (error) {
       throw { message: "无法读取原分账请求记录，已停止提交。请先核对支付宝/抖音分账结果，不要清除记录后直接重试。" };
@@ -5449,7 +5466,9 @@
     }
     if (!window.crypto?.getRandomValues) throw { message: "浏览器不支持安全请求号生成，请使用新版浏览器" };
     const bytes = window.crypto.getRandomValues(new Uint8Array(16));
-    return `${prefix}_${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+    const suffix = Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+    const douyin = channelById($("profitShareChannel").value)?.provider === "DOUYIN";
+    return `${prefix}_${douyin ? suffix.slice(0, 31 - prefix.length) : suffix}`;
   }
 
   function canonicalProfitShare(value) {
@@ -5560,6 +5579,7 @@
       if (retry) {
         if (!attempt) throw { message: "本标签页没有该订单的原单笔请求记录。旧版本请求请先人工核对，不要当作新增分账重试。" };
         if (attempt.status === "ACCEPTED") throw { message: "原请求已被接口受理，无需再次提交。若确需额外分账，请点击“新增单笔分账”。" };
+        if (attempt.status === "UNCONFIRMED" && attempt.acknowledged) throw { message: "抖音原请求已受理，请查询分账结果；存在失败明细时请先人工核对，不要重复提交。" };
         body = state.singleProfitShareBodies.get(attempt.outRequestNo);
         if (!body) {
           const restored = { ...profitShareSinglePayload(), outRequestNo: attempt.outRequestNo };
@@ -5571,7 +5591,9 @@
         if (!await confirmSingleProfitShare("retry", JSON.parse(body))) return;
       } else {
         if (attempt?.status === "UNCONFIRMED") {
-          throw { message: "该订单上一笔分账结果未确认，请先“重试原单笔分账”。如已在支付平台核对结果，再点击“已人工核对原请求”，不要直接换号重试。" };
+          throw { message: attempt.acknowledged
+            ? "抖音分账结果未确认，原请求已受理，请先查询分账结果；存在失败明细时请先人工核对，不要直接换号重试。"
+            : "该订单上一笔分账结果未确认，请先“重试原单笔分账”。如已在支付平台核对结果，再点击“已人工核对原请求”，不要直接换号重试。" };
         }
         const payload = profitShareSinglePayload();
         payload.outRequestNo = newSingleProfitShareRequestNo();
@@ -5601,6 +5623,10 @@
           batchItem.status = "ACCEPTED";
           batchItem.message = "原请求重试后接口已受理，请以支付平台最终结果为准";
         }
+      }
+      if (data.status === "PENDING" && matchingDouyinProfitShareResponse(data, payload)) {
+        attempt.acknowledged = true;
+        saveSingleProfitShare(key, attempt);
       }
       if (gatewayFailed(data)) throw gatewayFailure("分账", data);
       setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n${data.status === "SUCCESS" ? "分账接口已受理；如需额外分账，请明确新增一笔。" : "分账结果尚未确认，请核对原请求，不要重新生成请求号。"}`, response: data });
@@ -5676,6 +5702,15 @@
           renderProfitShareBatchResults();
           sent = true;
           const data = await request("/api/v1/payments/profit-sharing", { method: "POST", body: plan.body });
+          if (data?.status === "PENDING" && matchingDouyinProfitShareResponse(data, plan.payload)) {
+            plan.attempt.acknowledged = true;
+            saveSingleProfitShare(plan.key, plan.attempt);
+            item.status = "UNCONFIRMED";
+            item.message = "抖音已受理，正在异步分账；请查询原请求，勿重复提交";
+            state.selectedProfitShareOrders.delete(item.outTradeNo);
+            renderProfitShareBatchResults();
+            continue;
+          }
           if (data?.status !== "SUCCESS") {
             throw { message: gatewayFailed(data) ? gatewayFailure("分账", data).message : `结果待核对：${data?.message || data?.status || "响应格式异常"}` };
           }
@@ -5755,16 +5790,15 @@
     }
   }
 
-  function douyinProfitQueryPayload() {
+  function douyinProfitQueryPayload(requireRequestNo = true, requireTradeNo = true) {
     const channelId = $("profitShareChannel").value;
     if (channelById(channelId)?.provider !== "DOUYIN") {
       throw { message: "该高级操作仅适用于抖音支付通道" };
     }
     const outRequestNo = $("profitShareQueryOutRequestNo").value.trim();
     const tradeNo = $("profitShareTradeNo").value.trim();
-    if (!outRequestNo || !tradeNo) {
-      throw { message: "请填写抖音交易单号和分账请求号" };
-    }
+    if (requireRequestNo && !outRequestNo) throw { message: "请填写分账请求号" };
+    if (requireTradeNo && !tradeNo) throw { message: "请填写抖音交易单号" };
     return {
       outTradeNo: $("profitShareOutTradeNo").value.trim(),
       tradeNo,
@@ -5774,11 +5808,58 @@
     };
   }
 
+  function matchingDouyinProfitShareResponse(data, payload) {
+    const channelId = payload.channelIds?.[0];
+    const raw = data?.raw;
+    const providerState = raw?.data?.state ?? raw?.state;
+    return channelById(channelId)?.provider === "DOUYIN"
+      && !!payload.outTradeNo && !!payload.tradeNo && !!payload.outRequestNo
+      && data?.channelId === channelId && data.outTradeNo === payload.outTradeNo
+      && data.tradeNo === payload.tradeNo
+      && (data.status !== "PENDING" || ["PROCESSING", "ACCEPTED"].includes(providerState))
+      && raw?.profit_sharing_operation !== "FINISH"
+      && raw?.profit_sharing_out_order_no === payload.outRequestNo;
+  }
+
+  function reconcileDouyinProfitShare(payload, data) {
+    if (!["SUCCESS", "FAILED", "PENDING"].includes(data?.status)
+        || !matchingDouyinProfitShareResponse(data, payload)) return;
+    const order = state.orders.find(item => item.outTradeNo === payload.outTradeNo
+      && item.channelId === payload.channelIds[0] && item.tradeNo === payload.tradeNo);
+    if (!order) return;
+    const key = singleProfitShareKey(order);
+    const attempt = readSingleProfitShare(key);
+    if (!attempt || attempt.outRequestNo !== payload.outRequestNo || attempt.status !== "UNCONFIRMED") return;
+    const success = data.status === "SUCCESS";
+    if (success) {
+      attempt.status = "ACCEPTED";
+      delete attempt.acknowledged;
+    } else {
+      attempt.acknowledged = true;
+    }
+    saveSingleProfitShare(key, attempt);
+    const item = state.profitShareBatchResults?.find(result => result.outTradeNo === order.outTradeNo
+      && result.channelId === order.channelId && result.outRequestNo === attempt.outRequestNo);
+    if (item) {
+      item.status = success ? "ACCEPTED" : "UNCONFIRMED";
+      item.message = success ? "查询确认分账成功" : data.status === "FAILED"
+        ? "分账存在失败明细，部分收入方可能已到账；请人工核对后处理" : "抖音分账处理中，请继续查询原请求";
+      renderProfitShareBatchResults();
+    }
+    if (success) {
+      order.profitShared = true;
+      state.selectedProfitShareOrders?.delete(order.outTradeNo);
+      renderProfitShareOrders();
+    }
+  }
+
   async function queryProfitShare() {
+    const payload = douyinProfitQueryPayload();
     const data = await request("/api/v1/payments/profit-sharing/query", {
       method: "POST",
-      body: JSON.stringify(douyinProfitQueryPayload())
+      body: JSON.stringify(payload)
     });
+    reconcileDouyinProfitShare(payload, data);
     if (gatewayFailed(data)) throw gatewayFailure("查询抖音分账结果", data);
     setProfitShareResult({ message: "抖音分账结果已更新", response: data });
     await loadOrders();
@@ -5787,14 +5868,14 @@
   async function queryProfitShareRemaining() {
     const data = await request("/api/v1/payments/profit-sharing/remaining", {
       method: "POST",
-      body: JSON.stringify(douyinProfitQueryPayload())
+      body: JSON.stringify(douyinProfitQueryPayload(false))
     });
     if (gatewayFailed(data)) throw gatewayFailure("查询抖音剩余待分金额", data);
     setProfitShareResult({ message: "抖音剩余待分金额查询完成", response: data });
   }
 
   async function finishProfitShare() {
-    const payload = douyinProfitQueryPayload();
+    const payload = douyinProfitQueryPayload(false);
     const data = await request("/api/v1/payments/profit-sharing/finish", {
       method: "POST",
       body: JSON.stringify({
@@ -5811,7 +5892,7 @@
   }
 
   async function returnProfitShare() {
-    const base = douyinProfitQueryPayload();
+    const base = douyinProfitQueryPayload(true, false);
     const receiverAccount = $("profitShareReturnAccount").value.trim();
     const amount = amountField("profitShareReturnAmount");
     if (!receiverAccount || !amount) {
@@ -5836,7 +5917,7 @@
   }
 
   async function queryProfitShareReturn() {
-    const base = douyinProfitQueryPayload();
+    const base = douyinProfitQueryPayload(true, false);
     const outReturnNo = $("profitShareReturnNo").value.trim();
     if (!outReturnNo) throw { message: "请填写回退请求号" };
     const data = await request("/api/v1/payments/profit-sharing/return/query", {
@@ -5863,7 +5944,7 @@
     }
     const channel = channelById(channelId);
     const extra = parseJson("profitRelationExtra", {});
-    if (channel?.provider === "DOUYIN") {
+    if (channel?.provider === "DOUYIN" && requireAccount) {
       extra.relation_type = $("profitRelationRelationType").value;
       if (extra.relation_type === "CUSTOM") {
         extra.custom_relation = $("profitRelationCustom").value.trim();

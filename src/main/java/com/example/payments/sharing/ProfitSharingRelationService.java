@@ -16,6 +16,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -39,7 +40,7 @@ public class ProfitSharingRelationService {
         }
         save(new ProfitSharingRelationView(
                 channelId,
-                firstText(request.receiverType(), "loginName"),
+                receiverType(request.receiverType()),
                 request.receiverAccount().trim(),
                 trimToNull(request.receiverName()),
                 trimToNull(request.memo()),
@@ -70,14 +71,14 @@ public class ProfitSharingRelationService {
             }
             save(new ProfitSharingRelationView(
                     channelId,
-                    firstText(
+                    receiverType(firstText(
                             stringValue(candidate, "type"),
                             stringValue(candidate, "receiver_type"),
                             stringValue(candidate, "receiverType"),
                             stringValue(candidate, "trans_in_type"),
                             stringValue(candidate, "transInType"),
                             "loginName"
-                    ),
+                    )),
                     account.trim(),
                     firstText(
                             stringValue(candidate, "name"),
@@ -110,7 +111,7 @@ public class ProfitSharingRelationService {
         }
         save(new ProfitSharingRelationView(
                 channelId,
-                firstText(request.receiverType(), "loginName"),
+                receiverType(request.receiverType()),
                 request.receiverAccount().trim(),
                 trimToNull(request.receiverName()),
                 trimToNull(request.memo()),
@@ -153,7 +154,7 @@ public class ProfitSharingRelationService {
         if (!hasText(channelId) || !hasText(receiverAccount)) {
             return false;
         }
-        String safeType = firstText(receiverType, "loginName");
+        String safeType = receiverType(receiverType);
         String safeAccount = receiverAccount.trim();
         if (jdbcTemplate != null) {
             try {
@@ -214,7 +215,7 @@ public class ProfitSharingRelationService {
     private ProfitSharingRelationView mapRow(ResultSet rs, int rowNum) throws SQLException {
         return new ProfitSharingRelationView(
                 rs.getString("channel_id"),
-                rs.getString("receiver_type"),
+                receiverType(rs.getString("receiver_type")),
                 rs.getString("receiver_account"),
                 rs.getString("receiver_name"),
                 rs.getString("memo"),
@@ -268,7 +269,15 @@ public class ProfitSharingRelationService {
     }
 
     private static String key(String channelId, String receiverType, String receiverAccount) {
-        return channelId.trim() + "|" + firstText(receiverType, "loginName") + "|" + receiverAccount.trim();
+        return channelId.trim() + "|" + receiverType(receiverType) + "|" + receiverAccount.trim();
+    }
+
+    private static String receiverType(String value) {
+        String type = firstText(value, "loginName");
+        if ("MERCHANT_ID".equalsIgnoreCase(type) || "PERSONAL_OPENID".equalsIgnoreCase(type)) {
+            return type.toUpperCase(Locale.ROOT);
+        }
+        return type;
     }
 
     private static String trimToNull(String value) {

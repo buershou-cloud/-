@@ -113,6 +113,25 @@
       box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.12);
     }
 
+    .profit-sharing-option {
+      display: flex;
+      align-items: center;
+      line-height: 1.6;
+    }
+
+    .profit-sharing-option input {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .profit-sharing-hint {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
     .amount {
       height: 58px;
       font-size: 26px;
@@ -370,6 +389,10 @@
       <label>订单标题
         <input id="subject" value="扫码收银台支付" required>
       </label>
+      <div id="profitSharingPanel" hidden>
+        <label class="profit-sharing-option"><input id="profitSharingEnabled" type="checkbox">本订单需要分账</label>
+        <p class="profit-sharing-hint">勾选后，支付款项将保留待分账；分账完成后可解冻剩余资金。</p>
+      </div>
       <div id="paymentCodePanel" class="payment-code-panel" hidden>
         <label>付款码数字
           <input id="paymentCode" inputmode="numeric" pattern="[0-9]*" placeholder="可手动输入，也可上传照片自动识别">
@@ -985,6 +1008,7 @@
   }
 
   function applyProductUi() {
+    syncCashierProfitSharing();
     const paymentCodeMode = isPaymentCodeProduct(currentProduct);
     const paymentCodePanel = $("paymentCodePanel");
     const paymentCodeInput = $("paymentCode");
@@ -1229,6 +1253,25 @@
     return `CASHIER${Date.now()}${Math.floor(Math.random() * 1000).toString().padStart(3, "0")}`;
   }
 
+  function syncCashierProfitSharing() {
+    const enabled = currentChannel?.provider === "DOUYIN";
+    $("profitSharingPanel").hidden = !enabled;
+    $("profitSharingEnabled").disabled = !enabled;
+    if (!enabled) $("profitSharingEnabled").checked = false;
+  }
+
+  function cashierPaymentExtra() {
+    const extra = { cashier: true };
+    if (currentMerchant) {
+      extra.merchantId = currentMerchant.merchantId;
+      extra.merchantName = currentMerchant.name;
+    }
+    if (currentChannel?.provider === "DOUYIN" && $("profitSharingEnabled").checked) {
+      extra.settle_info = { profit_sharing: true };
+    }
+    return extra;
+  }
+
   $("paymentCodeUploadButton").addEventListener("click", () => {
     if (!isPaymentCodeProduct(currentProduct)) {
       clearPaymentCodeUi();
@@ -1282,11 +1325,7 @@
       writeResult({ code: "BAD_AMOUNT", message: "请输入正确金额" }, "bad");
       return;
     }
-    const extra = { cashier: true };
-    if (currentMerchant) {
-      extra.merchantId = currentMerchant.merchantId;
-      extra.merchantName = currentMerchant.name;
-    }
+    const extra = cashierPaymentExtra();
     const payload = {
       product: currentProduct,
       outTradeNo: orderNo(),

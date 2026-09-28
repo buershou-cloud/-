@@ -13,7 +13,7 @@ const functions = [
   'saveSingleProfitShare', 'newSingleProfitShareRequestNo', 'canonicalProfitShare',
   'singleProfitShareFingerprint', 'confirmSingleProfitShare', 'setSingleProfitShareBusy',
   'sendSingleProfitShare', 'reviewSingleProfitShare', 'gatewayFailed',
-  'gatewayFailure', 'gatewayAttemptsText'
+  'gatewayFailure', 'gatewayAttemptsText', 'matchingDouyinProfitShareResponse'
 ];
 
 function pageFunction(name) {
@@ -36,7 +36,9 @@ function setup(options = {}) {
   const calls = [], confirmations = [], messages = [];
   const ctx = vm.createContext({
     TextEncoder, Uint8Array, Map,
-    state: { orders: [{ outTradeNo: 'ORDER-1', tradeNo: 'TRADE-1', channelId: 'ali-main' }], singleProfitShareBusy: false, singleProfitShareBodies: new Map() },
+    state: { orders: [{ outTradeNo: 'ORDER-1', tradeNo: 'TRADE-1', channelId: 'ali-main' }],
+      profitSharingRelations: [{ channelId: 'ali-main', status: 'BOUND', receiverAccount: 'receiver@example.com', receiverType: 'loginName' }],
+      singleProfitShareBusy: false, singleProfitShareBodies: new Map() },
     $: id => elements[id],
     channelById: id => ({ id, provider: options.provider || 'ALIPAY' }),
     amountField: id => Number(elements[id].value) || undefined,
@@ -254,6 +256,29 @@ test('Douyin keeps amount and unfreeze options while gaining stable retry identi
   assert.equal(payload(calls[0]).royaltyParameters[0].amount, 20);
   assert.equal(payload(calls[0]).extra.unfreeze_unsplit, true);
   assert.equal(calls[0].body, calls[1].body);
+});
+
+test('acknowledged Douyin pending requests stay blocked against replay after page reload', async () => {
+  const original = setup({ provider: 'DOUYIN', request: async (url, config) => {
+    const body = JSON.parse(config.body);
+    return { status: 'PENDING', channelId: body.channelIds[0], outTradeNo: body.outTradeNo, tradeNo: body.tradeNo,
+      raw: { profit_sharing_out_order_no: body.outRequestNo, data: { state: 'PROCESSING' } } };
+  } });
+  await original.ctx.submitSingleProfitShare();
+  const reloaded = setup({ provider: 'DOUYIN', storage: original.storage });
+  await rejection(reloaded.ctx.sendSingleProfitShare(true), /已受理.*查询/);
+  await rejection(reloaded.ctx.submitSingleProfitShare(), /结果未确认/);
+  assert.equal(reloaded.calls.length, 0);
+});
+
+test('Douyin request identifiers respect its shorter limit without changing Alipay identifiers', () => {
+  for (const provider of ['DOUYIN', 'ALIPAY']) {
+    const { ctx, elements } = setup({ provider });
+    elements.profitShareOutRequestPrefix.value = 'A'.repeat(16);
+    const requestNo = ctx.newSingleProfitShareRequestNo();
+    assert.equal(requestNo.length, provider === 'DOUYIN' ? 32 : 49);
+    assert.match(requestNo, /^[A-Za-z0-9_]+$/);
+  }
 });
 
 test('new and retry controls are separate and retry handler uses the retained attempt', () => {

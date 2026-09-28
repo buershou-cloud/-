@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -179,25 +180,30 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse profitSharing(ProfitSharingRequest request) {
-        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> {
-            ProfitSharingRequest effectiveRequest = normalizeAlipayPercentageRequest(channel, request);
-            validateProfitSharingRelations(channel.getId(), effectiveRequest.royaltyParameters());
+        GatewayResponse response = execute(null, profitSharingChannelIds(request.channelIds(), request.outTradeNo(),
+                containsDouyinReceiver(request.royaltyParameters())), null, null, channel -> {
+            ProfitSharingRequest effectiveRequest = isDouyinChannel(channel)
+                    ? new ProfitSharingRequest(request.outTradeNo(),
+                            profitSharingTradeNo(channel, request.outTradeNo(), request.tradeNo()),
+                            request.outRequestNo(), douyinProfitSharingReceivers(channel, request.royaltyParameters()), request.operatorId(),
+                            request.appAuthToken(), request.channelIds(), request.extra())
+                    : normalizeAlipayPercentageRequest(channel, request);
+            validateProfitSharingRelations(channel, effectiveRequest.royaltyParameters());
             return provider(channel).profitSharing(channel, effectiveRequest);
         });
-        if (response.status() == PaymentStatus.SUCCESS && hasText(request.outTradeNo())) {
-            orderService.markProfitShared(request.outTradeNo());
-        }
+        syncLocalProfitSharingStatus(request.outTradeNo(), response);
         return response;
     }
 
     public GatewayResponse bindProfitSharingRelation(ProfitSharingRelationBindRequest request) {
-        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).bindProfitSharingRelation(channel, request));
+        GatewayResponse response = execute(null, profitSharingChannelIds(request.channelIds(), null,
+                isDouyinReceiverType(request.receiverType())), null, null, channel -> provider(channel).bindProfitSharingRelation(channel, request));
         profitSharingRelationService.recordBind(request, response);
         return response;
     }
 
     public GatewayResponse queryProfitSharingRelations(ProfitSharingRelationQueryRequest request) {
-        GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
+        GatewayResponse response = execute(null, profitSharingChannelIds(request.channelIds(), null), null, null, channel -> provider(channel).queryProfitSharingRelations(channel, request));
         profitSharingRelationService.recordQuery(request, response);
         return response;
     }
@@ -205,7 +211,7 @@ public class PaymentGatewayService {
     public GatewayResponse unbindProfitSharingRelation(ProfitSharingRelationBindRequest request) {
         GatewayResponse response = execute(
                 null,
-                request.channelIds(),
+                profitSharingChannelIds(request.channelIds(), null, isDouyinReceiverType(request.receiverType())),
                 null,
                 null,
                 channel -> provider(channel).unbindProfitSharingRelation(channel, request)
@@ -217,42 +223,48 @@ public class PaymentGatewayService {
     public GatewayResponse queryProfitSharing(ProfitSharingQueryRequest request) {
         GatewayResponse response = execute(
                 null,
-                request.channelIds(),
+                profitSharingChannelIds(request.channelIds(), request.outTradeNo()),
                 null,
                 null,
-                channel -> provider(channel).queryProfitSharing(channel, request)
+                channel -> provider(channel).queryProfitSharing(channel, prepareProfitSharingQuery(channel, request))
         );
-        if (response.status() == PaymentStatus.SUCCESS && hasText(request.outTradeNo())) {
-            orderService.markProfitShared(request.outTradeNo());
-        }
+        syncLocalProfitSharingStatus(request.outTradeNo(), response);
         return response;
     }
 
     public GatewayResponse finishProfitSharing(ProfitSharingFinishRequest request) {
         return execute(
                 null,
-                request.channelIds(),
+                profitSharingChannelIds(request.channelIds(), request.outTradeNo()),
                 null,
                 null,
-                channel -> provider(channel).finishProfitSharing(channel, request)
+                channel -> provider(channel).finishProfitSharing(channel, isDouyinChannel(channel)
+                        ? new ProfitSharingFinishRequest(request.outTradeNo(),
+                                profitSharingTradeNo(channel, request.outTradeNo(), request.tradeNo()),
+                                request.outRequestNo(), request.description(), request.channelIds(), request.extra())
+                        : request)
         );
     }
 
     public GatewayResponse profitSharingRemainingAmount(ProfitSharingQueryRequest request) {
         return execute(
                 null,
-                request.channelIds(),
+                profitSharingChannelIds(request.channelIds(), request.outTradeNo()),
                 null,
                 null,
-                channel -> provider(channel).profitSharingRemainingAmount(channel, request)
+                channel -> provider(channel).profitSharingRemainingAmount(channel, prepareProfitSharingQuery(channel, request))
         );
     }
 
     public GatewayResponse returnProfitSharing(ProfitSharingReturnRequest request) {
+        Collection<String> channelIds = profitSharingChannelIds(request.channelIds(), null);
+        boolean douyin = channelIds != null && channelIds.stream()
+                .map(channelSelector::findChannel).flatMap(java.util.Optional::stream)
+                .anyMatch(PaymentGatewayService::isDouyinChannel);
         return execute(
                 null,
-                request.channelIds(),
-                request.amount(),
+                channelIds,
+                douyin ? null : request.amount(),
                 null,
                 channel -> provider(channel).returnProfitSharing(channel, request)
         );
@@ -261,7 +273,7 @@ public class PaymentGatewayService {
     public GatewayResponse queryProfitSharingReturn(ProfitSharingReturnQueryRequest request) {
         return execute(
                 null,
-                request.channelIds(),
+                profitSharingChannelIds(request.channelIds(), null),
                 null,
                 null,
                 channel -> provider(channel).queryProfitSharingReturn(channel, request)
@@ -270,6 +282,154 @@ public class PaymentGatewayService {
 
     public List<ProfitSharingRelationService.ProfitSharingRelationView> profitSharingRelations(String channelId) {
         return profitSharingRelationService.list(channelId);
+    }
+
+    /** A Douyin split belongs to a single merchant and must never fail over to another channel. */
+    private Collection<String> profitSharingChannelIds(Collection<String> requestedChannelIds, String outTradeNo) {
+        return profitSharingChannelIds(requestedChannelIds, outTradeNo, false);
+    }
+
+    private Collection<String> profitSharingChannelIds(
+            Collection<String> requestedChannelIds,
+            String outTradeNo,
+            boolean douyinReceiver
+    ) {
+        List<String> requested = requestedChannelIds == null ? List.of() : requestedChannelIds.stream()
+                .filter(PaymentGatewayService::hasText).map(String::trim).distinct().toList();
+        DemoOrderView order = localProfitSharingOrder(outTradeNo);
+        PaymentGatewayProperties.Channel orderChannel = order == null || !hasText(order.channelId())
+                ? null : channelSelector.findChannel(order.channelId()).orElse(null);
+        if (isDouyinChannel(orderChannel)) {
+            if (!requested.isEmpty() && !requested.equals(List.of(order.channelId()))) {
+                throw new GatewayException("DOUYIN_PROFIT_SHARING_CHANNEL_MISMATCH", "抖音分账必须使用订单原支付通道");
+            }
+            return List.of(order.channelId());
+        }
+        boolean selectsDouyin = requested.stream()
+                .map(channelSelector::findChannel)
+                .flatMap(java.util.Optional::stream)
+                .anyMatch(PaymentGatewayService::isDouyinChannel);
+        if (selectsDouyin || douyinReceiver) {
+            if (requested.size() != 1 || !selectsDouyin) {
+                throw new GatewayException("DOUYIN_PROFIT_SHARING_CHANNEL_REQUIRED", "抖音分账必须明确选择一个抖音支付通道");
+            }
+            return requested;
+        }
+        if (!requested.isEmpty()) {
+            return requestedChannelIds;
+        }
+        // Preserve implicit Alipay routing when Douyin channels are added to the gateway.
+        List<PaymentGatewayProperties.Channel> candidates;
+        try {
+            candidates = channelSelector.select(null, null, Integer.MAX_VALUE, null, RoutingMode.PRIORITY);
+        } catch (IllegalStateException ex) {
+            return requestedChannelIds;
+        }
+        if (candidates.stream().noneMatch(PaymentGatewayService::isDouyinChannel)) {
+            return requestedChannelIds;
+        }
+        List<String> alipayChannels = candidates.stream().filter(PaymentGatewayService::isAlipayChannel)
+                .map(PaymentGatewayProperties.Channel::getId).toList();
+        if (alipayChannels.isEmpty()) {
+            throw new GatewayException("DOUYIN_PROFIT_SHARING_CHANNEL_REQUIRED", "抖音分账必须明确选择一个抖音支付通道");
+        }
+        return alipayChannels;
+    }
+
+    private ProfitSharingQueryRequest prepareProfitSharingQuery(
+            PaymentGatewayProperties.Channel channel,
+            ProfitSharingQueryRequest request
+    ) {
+        if (!isDouyinChannel(channel)) {
+            return request;
+        }
+        return new ProfitSharingQueryRequest(request.outTradeNo(),
+                profitSharingTradeNo(channel, request.outTradeNo(), request.tradeNo()),
+                request.outRequestNo(), request.appAuthToken(), request.channelIds(), request.extra());
+    }
+
+    private List<Map<String, Object>> douyinProfitSharingReceivers(
+            PaymentGatewayProperties.Channel channel,
+            List<Map<String, Object>> parameters
+    ) {
+        if (parameters == null) {
+            return null;
+        }
+        return parameters.stream().map(parameter -> {
+            if (parameter == null || !"MERCHANT_ID".equalsIgnoreCase(firstText(mapText(parameter, "trans_in_type"), ""))
+                    || hasText(mapText(parameter, "receiver_name"))
+                    || hasText(mapText(parameter, "receiverName"))
+                    || hasText(mapText(parameter, "name"))) {
+                return parameter;
+            }
+            String account = firstText(mapText(parameter, "trans_in"), "");
+            String name = profitSharingRelationService.list(channel.getId()).stream()
+                    .filter(relation -> channel.getId().equals(relation.channelId()))
+                    .filter(relation -> "BOUND".equals(relation.status()))
+                    .filter(relation -> "MERCHANT_ID".equalsIgnoreCase(relation.receiverType()))
+                    .filter(relation -> account.equals(relation.receiverAccount()))
+                    .map(ProfitSharingRelationService.ProfitSharingRelationView::receiverName)
+                    .filter(PaymentGatewayService::hasText)
+                    .findFirst().orElse(null);
+            if (!hasText(name)) {
+                return parameter;
+            }
+            Map<String, Object> prepared = new LinkedHashMap<>(parameter);
+            prepared.put("receiver_name", name);
+            return prepared;
+        }).toList();
+    }
+
+    private String profitSharingTradeNo(PaymentGatewayProperties.Channel channel, String outTradeNo, String tradeNo) {
+        DemoOrderView order = localProfitSharingOrder(outTradeNo);
+        if (order == null) {
+            return tradeNo;
+        }
+        if (!channel.getId().equals(order.channelId())) {
+            throw new GatewayException("DOUYIN_PROFIT_SHARING_CHANNEL_MISMATCH", "抖音分账通道与本地订单支付通道不一致");
+        }
+        if (hasUsableText(tradeNo) && hasUsableText(order.tradeNo()) && !tradeNo.trim().equals(order.tradeNo().trim())) {
+            throw new GatewayException("DOUYIN_PROFIT_SHARING_TRADE_MISMATCH", "抖音分账交易号与本地订单支付交易号不一致");
+        }
+        return hasUsableText(tradeNo) ? tradeNo.trim() : order.tradeNo();
+    }
+
+    private DemoOrderView localProfitSharingOrder(String outTradeNo) {
+        if (!hasText(outTradeNo)) {
+            return null;
+        }
+        try {
+            return orderService.view(outTradeNo.trim());
+        } catch (IllegalArgumentException ex) {
+            // Gateway callers may reference valid platform orders not created in this application.
+            return null;
+        }
+    }
+
+    private void syncLocalProfitSharingStatus(String outTradeNo, GatewayResponse response) {
+        if (response.status() != PaymentStatus.SUCCESS || !hasText(outTradeNo)
+                || (response.raw() != null && "FINISH".equals(response.raw().get("profit_sharing_operation")))) {
+            return;
+        }
+        try {
+            orderService.markProfitShared(outTradeNo.trim());
+        } catch (RuntimeException ex) {
+            log.warn("Failed to sync successful profit sharing locally: outTradeNo={}, channel={}, tradeNo={}",
+                    outTradeNo, response.channelId(), response.tradeNo(), ex);
+        }
+    }
+
+    private static boolean isDouyinChannel(PaymentGatewayProperties.Channel channel) {
+        return channel != null && "DOUYIN".equals(channel.getProvider());
+    }
+
+    private static boolean containsDouyinReceiver(List<Map<String, Object>> receivers) {
+        return receivers != null && receivers.stream()
+                .anyMatch(receiver -> isDouyinReceiverType(mapText(receiver, "trans_in_type")));
+    }
+
+    private static boolean isDouyinReceiverType(String type) {
+        return hasText(type) && ("MERCHANT_ID".equalsIgnoreCase(type.trim()) || "PERSONAL_OPENID".equalsIgnoreCase(type.trim()));
     }
 
     public ProfitSharingBatchResult profitSharingByChannel(ProfitSharingBatchRequest request) {
@@ -529,7 +689,10 @@ public class PaymentGatewayService {
                 GatewayResponse response = operation.apply(channel);
                 boolean success = response.status() != PaymentStatus.FAILED;
                 attempts.add(new ChannelAttempt(channel.getId(), success, response.code(), response.message()));
-                if (success || !properties.getRouting().isFailover()) {
+                // A failed split can still have successful recipients; retain their result details.
+                boolean douyinSharingResult = isDouyinChannel(channel) && response.raw() != null
+                        && response.raw().containsKey("profit_sharing_out_order_no");
+                if (success || !properties.getRouting().isFailover() || douyinSharingResult) {
                     return response.withAttempts(attempts);
                 }
             } catch (GatewayException ex) {
@@ -857,7 +1020,7 @@ public class PaymentGatewayService {
         }
     }
 
-    private void validateProfitSharingRelations(String channelId, List<Map<String, Object>> royaltyParameters) {
+    private void validateProfitSharingRelations(PaymentGatewayProperties.Channel channel, List<Map<String, Object>> royaltyParameters) {
         if (royaltyParameters == null || royaltyParameters.isEmpty()) {
             return;
         }
@@ -867,7 +1030,10 @@ public class PaymentGatewayService {
                 continue;
             }
             String transInType = firstText(mapText(parameter, "trans_in_type"), "loginName");
-            if (!profitSharingRelationService.isBound(channelId, transInType, transIn)) {
+            if (isDouyinChannel(channel)) {
+                transInType = transInType.toUpperCase(Locale.ROOT);
+            }
+            if (!profitSharingRelationService.isBound(channel.getId(), transInType, transIn)) {
                 throw new IllegalArgumentException("收入方账号未绑定分账关系，请先在“分账关系”中添加：" + transIn);
             }
         }
