@@ -31,6 +31,7 @@ import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderView;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.MerchantRouting;
+import com.example.payments.merchant.api.MerchantApiException;
 import com.example.payments.onboarding.OnboardingRecordService;
 import com.example.payments.sharing.ProfitSharingRelationService;
 import org.slf4j.Logger;
@@ -90,10 +91,53 @@ public class PaymentGatewayService {
                 channelIds(request.channelIds(), merchantRouting),
                 request.totalAmount(),
                 routingMode(request.routingMode(), merchantRouting),
-                channel -> provider(channel).pay(channel, request)
+                channel -> provider(channel).pay(channel, upstreamPaymentRequest(channel, request))
         );
         recordOrder(request, response);
         return response;
+    }
+
+    /** Public cashier payments must reserve the same global order namespace as signed merchant requests. */
+    public GatewayResponse payPublic(PayCreateRequest request) {
+        MerchantRouting merchantRouting = merchantRouting(request);
+        Collection<String> requestedChannels = channelIds(request.channelIds(), merchantRouting);
+        if (merchantRouting != null && (merchantRouting.channelIds() == null || merchantRouting.channelIds().isEmpty()
+                || requestedChannels == null || requestedChannels.isEmpty())) {
+            throw new MerchantApiException("CHANNEL_FORBIDDEN", "No requested channel is bound to this merchant");
+        }
+        RoutingMode mode = routingMode(request.routingMode(), merchantRouting);
+        if (mode == null) {
+            mode = properties.getRouting().getMode();
+        }
+        PaymentGatewayProperties.Channel selected;
+        try {
+            selected = channelSelector.select(request.product(), requestedChannels, 1, request.totalAmount(), mode).getFirst();
+        } catch (IllegalStateException ex) {
+            return new GatewayResponse(null, PaymentStatus.FAILED, "NO_MATCHING_CHANNEL", ex.getMessage(),
+                    null, null, null, null, routeFailureRaw(request.product(), requestedChannels, request.totalAmount(), mode), List.of());
+        }
+        orderService.reserveMerchantPayment(extraText(request.extra(), "merchantId", "M10001"),
+                extraText(request.extra(), "merchantName", "默认商户"), selected.getId(), request);
+        GatewayResponse response = execute(request.product(), List.of(selected.getId()), request.totalAmount(), RoutingMode.PRIORITY,
+                channel -> provider(channel).pay(channel, request));
+        recordOrder(request, response);
+        return response;
+    }
+
+    private static PayCreateRequest upstreamPaymentRequest(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        if (request.extra() == null || !Boolean.TRUE.equals(request.extra().get("merchantApiRequest"))) {
+            return request;
+        }
+        String callback = isDouyinChannel(channel) ? channel.getDouyin().getNotifyUrl() : channel.getAlipay().getNotifyUrl();
+        if (!hasText(callback)) {
+            throw new GatewayException("MERCHANT_GATEWAY_NOTIFY_URL_MISSING", "商户 API 支付通道必须配置网关支付回调地址");
+        }
+        Map<String, Object> upstreamExtra = new LinkedHashMap<>(request.extra());
+        upstreamExtra.remove("merchantApiRequest");
+        return new PayCreateRequest(request.product(), request.outTradeNo(), request.subject(), request.totalAmount(),
+                request.authCode(), request.buyerId(), request.buyerOpenId(), request.quitUrl(), request.timeoutExpress(),
+                callback, request.returnUrl(), request.appAuthToken(), request.routingMode(), request.channelIds(),
+                upstreamExtra, request.settleInfo(), request.royaltyInfo());
     }
 
     public GatewayResponse query(PaymentQueryRequest request) {

@@ -1,5 +1,7 @@
 package com.example.payments.web;
 
+import com.example.payments.auth.AdminAuthService;
+import com.example.payments.auth.AdminSession;
 import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.merchant.DemoMerchantView;
 import com.example.payments.merchant.MerchantLoginRequest;
@@ -22,10 +24,13 @@ public class MerchantPortalController {
 
     private final DemoMerchantService merchantService;
     private final DemoOrderService orderService;
+    private final AdminAuthService adminAuthService;
 
-    public MerchantPortalController(DemoMerchantService merchantService, DemoOrderService orderService) {
+    public MerchantPortalController(DemoMerchantService merchantService, DemoOrderService orderService,
+            AdminAuthService adminAuthService) {
         this.merchantService = merchantService;
         this.orderService = orderService;
+        this.adminAuthService = adminAuthService;
     }
 
     @PostMapping("/login")
@@ -33,7 +38,9 @@ public class MerchantPortalController {
             @RequestBody MerchantLoginRequest request,
             HttpServletRequest servletRequest
     ) {
-        boolean demoLogin = request.demoLogin() != null && request.demoLogin();
+        boolean demoLogin = Boolean.TRUE.equals(request.demoLogin())
+                && AdminSession.isAuthenticated(servletRequest)
+                && adminAuthService.hasUsername(AdminSession.username(servletRequest));
         DemoMerchantView merchant = merchantService.login(request.merchantId(), request.md5Key(), demoLogin);
         MerchantSession.login(servletRequest, merchant.merchantId());
         List<DemoOrderView> orders = orderService.byMerchant(merchant.merchantId());

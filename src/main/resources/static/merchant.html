@@ -30,6 +30,8 @@
     .shell {
       min-height: 100vh;
       padding: 24px;
+      max-width: 1600px;
+      margin: 0 auto;
     }
 
     .topbar {
@@ -524,6 +526,39 @@
       display: none !important;
     }
 
+    .integration-head { padding: 28px; background: #f8fbff; border-bottom: 1px solid var(--line); }
+    .integration-head h2 { margin: 8px 0 10px; font-size: 24px; }
+    .integration-head p { max-width: 780px; color: #526176; line-height: 1.75; font-size: 14px; }
+    .integration-badge { color: #1764ca; font-size: 12px; font-weight: 850; letter-spacing: .06em; }
+    .integration-section { padding: 26px 28px; border-bottom: 1px solid var(--line); }
+    .integration-section h3 { margin-bottom: 14px; font-size: 16px; }
+    .integration-section p { margin: 10px 0; color: #526176; font-size: 13px; line-height: 1.8; }
+    .integration-meta { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+    .integration-meta .wide { grid-column: 1 / -1; }
+    .integration-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .integration-step { padding: 18px; border: 1px solid var(--line); border-radius: 10px; }
+    .integration-step strong { display: block; font-size: 14px; }
+    .integration-step p { margin-bottom: 0; }
+    .integration-downloads { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+    a.btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+    .integration-table { overflow: auto; }
+    .integration-table td { vertical-align: top; font-size: 13px; white-space: normal; min-width: 120px; font-weight: 500; line-height: 1.6; }
+    .integration-table code { overflow-wrap: anywhere; }
+    .integration-table th { white-space: normal; }
+    .integration-note { padding: 14px 16px; background: #f1f6ff; border-left: 3px solid #1677ff; border-radius: 4px; }
+    .integration-product { max-width: 480px; margin: 12px 0; }
+    .integration-code { margin: 12px 0; }
+    .integration-section details { padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .integration-section summary { font-size: 14px; font-weight: 750; cursor: pointer; }
+    .integration-section ul, .integration-section ol { margin: 12px 0; padding-left: 22px; line-height: 1.9; font-size: 13px; color: #526176; }
+    .integration-section .copy-field input { background: #f8fafc; }
+    .integration-status { min-height: 22px; color: #1764ca !important; }
+
+    @media (max-width: 1050px) {
+      .integration-steps, .integration-meta { grid-template-columns: 1fr; }
+      .integration-head, .integration-section { padding: 22px 18px; }
+    }
+
     @media (max-width: 800px) {
       .shell {
         padding: 16px;
@@ -600,9 +635,10 @@
           </div>
           <div class="actions">
             <button class="btn" type="submit">登录</button>
-            <a class="btn secondary" href="/">返回管理端</a>
+            <a class="btn secondary" href="./">返回管理端</a>
           </div>
           <p id="loginMessage" class="muted" style="margin-top:14px"></p>
+          <p class="muted" style="margin-top:10px;line-height:1.7">管理员已登录时可从管理端快捷进入；其他访问者请使用自己的商户号和 MD5 登录凭据。</p>
         </form>
       </div>
     </div>
@@ -619,7 +655,8 @@
 
     <section class="portal-card">
       <div class="portal-tabs">
-        <button class="portal-tab active" type="button" data-tab="api">API信息</button>
+        <button class="portal-tab active" type="button" data-tab="api">网站接入</button>
+        <button class="portal-tab" type="button" data-tab="credentials">密钥管理</button>
         <button class="portal-tab" type="button" data-tab="qr">收款二维码</button>
         <button class="portal-tab" type="button" data-tab="docs">开发文档</button>
         <button class="portal-tab" type="button" data-tab="orders">订单列表</button>
@@ -627,31 +664,75 @@
 
       <div class="portal-content">
         <div id="tab-api" class="tab-pane active">
+          <header class="integration-head">
+            <span class="integration-badge">MERCHANT API · JSON / UTF-8</span>
+            <h2>把支付接到自己的网站</h2>
+            <p>下载服务端示例，先验证商户和签名，再创建订单。支付完成后，由平台通知你的网站服务器。</p>
+            <div class="integration-downloads">
+              <a id="sdkClientDownload" class="btn" download>下载 SDK</a>
+              <a id="sdkExampleDownload" class="btn secondary" download>下载运行示例</a>
+              <a id="apiDocDownload" class="btn secondary" download>下载完整文档</a>
+              <button id="copyIntegrationChecklistBtn" class="btn secondary" type="button">复制接入清单</button>
+            </div>
+            <p id="integrationMessage" class="integration-status" role="status" aria-live="polite"></p>
+          </header>
+          <section class="integration-section">
+            <h3>你的接入信息</h3>
+            <div class="integration-meta">
+              <label class="wide">商户 API 根地址（每个操作在后面追加路径）
+                <div class="copy-field"><input id="apiBase" readonly><button class="copy-btn" type="button" data-copy-source="apiBase">复制</button></div>
+              </label>
+              <label>商户号<div class="copy-field"><input id="merchantApiId" readonly><button class="copy-btn" type="button" data-copy-source="merchantApiId">复制</button></div></label>
+              <label>已开启签名方式<input id="integrationSignMode" readonly></label>
+            </div>
+            <p>所有接口由你的网站服务器发起 POST JSON 请求。MD5 与 RSA2 使用同一组接口，选择已开启的签名方式即可。密钥在“密钥管理”中单独配置。</p>
+          </section>
+          <section class="integration-section">
+            <h3>从检查接入到确认到账</h3>
+            <div class="integration-steps">
+              <div class="integration-step"><strong>1 · 在服务器验证接入</strong><p>安装 Node.js 20.6 或更新版本，将两个示例文件放入同一目录。配置环境变量，运行 check；此操作不创建订单、不扣款。</p></div>
+              <div class="integration-step"><strong>2 · 用自己的网站订单支付</strong><p>选择当前商户可用的支付产品，填写唯一订单号、金额和你的网站通知地址，运行 pay。</p></div>
+              <div class="integration-step"><strong>3 · 验签后更新订单</strong><p>处理平台通知，核对商户、订单和金额，并幂等更新业务订单。用 query 查询最终状态。</p></div>
+            </div>
+            <label class="integration-product">当前配置可用的支付产品<select id="integrationProduct" class="api-select"><option value="">正在读取通道配置…</option></select></label>
+            <p id="integrationProductsMessage">产品列表以当前商户绑定且启用的支付通道为准。</p>
+            <p class="integration-note">先使用下方 check 命令检查接入。示例中的金额和通知地址需要换成你自己网站的配置；页面不会替你发起支付。</p>
+            <h3 style="margin-top:20px">服务器配置示例</h3>
+            <p>以下为 .env 文件内容，保存到你自己服务器的示例目录。占位凭据必须替换；接入清单与下载文件都不包含你的密钥。</p>
+            <pre id="integrationEnv" class="integration-code"></pre>
+            <p>RSA2 模式使用商户私钥文件签请求，使用平台公钥文件验签平台响应。先在“密钥管理”确认已开启 RSA2。</p>
+            <pre id="integrationRsaEnv" class="integration-code"></pre>
+            <pre class="integration-code">node --env-file=.env merchant-example.mjs check
+node --env-file=.env merchant-example.mjs pay ./pay.json
+node --env-file=.env merchant-example.mjs query ./query.json</pre>
+            <p>运行示例会自动生成 timestamp、nonce 和签名。check 成功后，再根据“开发文档”填写 pay.json；查看返回的 data.status 判断订单状态。</p>
+          </section>
+          <section class="integration-section">
+            <h3>完整接口地址</h3>
+            <div class="integration-table"><table><thead><tr><th>操作</th><th>请求地址</th><th>用途</th></tr></thead><tbody id="integrationEndpoints"></tbody></table></div>
+          </section>
+        </div>
+
+        <div id="tab-credentials" class="tab-pane">
           <div class="portal-section">
-            <div class="api-row">
-              <div class="api-label">接口地址</div>
-              <div class="copy-field"><input id="apiBase" readonly><button class="copy-btn" type="button" data-copy-source="apiBase">复制</button></div>
-            </div>
-            <div class="api-row">
-              <div class="api-label">商户ID</div>
-              <div class="copy-field"><input id="merchantApiId" readonly><button class="copy-btn" type="button" data-copy-source="merchantApiId">复制</button></div>
-            </div>
+            <h2 class="section-title">服务端签名凭据</h2>
+            <p class="portal-message">将凭据配置在你自己的网站服务器。重置或重新生成后，原凭据立即失效。</p>
           </div>
 
           <div class="portal-section">
-            <h2 class="section-title">V1接口（MD5签名方式）：</h2>
+            <h2 class="section-title">MD5 签名</h2>
             <div class="api-row">
               <div class="api-label">商户MD5密钥</div>
               <div class="copy-field"><input id="md5Key" readonly><button class="copy-btn" type="button" data-copy-source="md5Key">复制</button></div>
             </div>
             <div class="api-actions">
-              <button class="btn info" id="showV1DocBtn" type="button">V1参数提示</button>
+              <button class="btn info" id="showV1DocBtn" type="button">MD5 配置说明</button>
               <button class="btn warning" id="resetMd5Btn" type="button">重置商户MD5密钥</button>
             </div>
           </div>
 
           <div class="portal-section">
-            <h2 class="section-title">V2接口（RSA签名方式）：</h2>
+            <h2 class="section-title">RSA2 签名</h2>
             <div class="api-row">
               <div class="api-label">平台公钥</div>
               <div class="copy-field"><textarea id="platformPublicKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="platformPublicKey">复制</button></div>
@@ -665,7 +746,7 @@
               <div class="copy-field"><textarea id="rsaPrivateKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="rsaPrivateKey">复制</button></div>
             </div>
             <div class="api-actions">
-              <button class="btn info" id="showV2DocBtn" type="button">V2参数提示</button>
+              <button class="btn info" id="showV2DocBtn" type="button">RSA2 配置说明</button>
               <button class="btn success" id="generateRsaBtn" type="button">生成商户RSA密钥对</button>
             </div>
           </div>
@@ -711,7 +792,7 @@
                 <thead>
                 <tr>
                   <th>订单号</th>
-                  <th>支付宝交易号</th>
+                  <th>支付平台交易号</th>
                   <th>通道</th>
                   <th>类型</th>
                   <th>金额</th>
@@ -726,116 +807,89 @@
         </div>
 
         <div id="tab-docs" class="tab-pane">
-          <section class="doc-section">
-            <h2>协议规则</h2>
-            <div class="doc-grid">
-              <div class="doc-card"><span>接口地址</span><strong id="docApiBase">-</strong></div>
-              <div class="doc-card"><span>商户号</span><strong id="docMerchantId">-</strong></div>
-              <div class="doc-card"><span>请求方式</span><strong>POST / JSON / UTF-8</strong></div>
-              <div class="doc-card"><span>返回格式</span><strong>JSON</strong></div>
-            </div>
-            <p>所有商户开放接口都使用当前页面上方显示的接口地址。发起支付、查单、退款都必须带 <code>merchantId</code>、<code>signType</code>、<code>timestamp</code>、<code>nonce</code> 和 <code>sign</code>，系统会按后台给该商户配置的支付通道自动路由。</p>
+          <header class="integration-head">
+            <span class="integration-badge">INTEGRATION GUIDE</span>
+            <h2>服务端接入说明</h2>
+            <p>以下字段与商户 JSON API 一致。可下载运行示例来完成签名、发送请求与验签响应；不要把商户私钥放入网页脚本。</p>
+          </header>
+          <section class="integration-section">
+            <h3>先检查签名与通道配置</h3>
+            <p><code>POST <span id="docCheckUrl"></span></code>。只校验接入信息，不创建订单、不扣款。</p>
+            <pre id="docCheckExample" class="integration-code"></pre>
+            <p>返回的 data 包含 merchantId、serverTime、signMode、channelIds 和 readiness。查看 readiness.availableChannelCount、availableChannelIds、products 确认商户可用配置；数量为 0 时，请联系平台配置通道。</p>
+            <p>readiness.configurationWarnings 列出需要平台处理的通道配置问题；出现 GATEWAY_CALLBACK_NOT_CONFIGURED 时，请让平台管理员配置网关支付回调地址后重新检查。</p>
           </section>
-
-          <section class="doc-section">
-            <h2>发起支付</h2>
-            <p>接口：<code>POST <span id="docPayUrl">/api/v1/payments/pay</span></code></p>
-            <div class="doc-table">
-              <table>
-                <thead><tr><th>字段</th><th>必填</th><th>示例</th><th>说明</th></tr></thead>
-                <tbody>
-                <tr><td>product</td><td>是</td><td>ALIPAY_ORDER_CODE</td><td>支付产品，见下方支付产品列表</td></tr>
-                <tr><td>outTradeNo</td><td>是</td><td>ORDER202605140001</td><td>商户订单号，需要保持唯一</td></tr>
-                <tr><td>subject</td><td>是</td><td>会员充值</td><td>订单标题</td></tr>
-                <tr><td>totalAmount</td><td>是</td><td>1.00</td><td>订单金额，单位元，最小 0.01</td></tr>
-                <tr><td>notifyUrl</td><td>否</td><td>https://你的域名/notify</td><td>异步通知地址</td></tr>
-                <tr><td>returnUrl</td><td>否</td><td>https://你的域名/return</td><td>同步返回地址</td></tr>
-                <tr><td>merchantId</td><td>是</td><td id="docMerchantIdCell">M10001</td><td>当前商户号</td></tr>
-                <tr><td>signType</td><td>是</td><td>MD5</td><td>MD5 或 RSA2，需和商户签名开关匹配</td></tr>
-                <tr><td>timestamp</td><td>是</td><td>2026-06-01T12:00:00Z</td><td>请求时间，允许 15 分钟误差</td></tr>
-                <tr><td>nonce</td><td>是</td><td>RANDOM123</td><td>随机字符串，15 分钟内不能重复</td></tr>
-                <tr><td>sign</td><td>是</td><td>9F...</td><td>商户请求签名</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <pre id="docPayExample"></pre>
+          <section class="integration-section">
+            <h3>创建支付订单</h3>
+            <p><code>POST <span id="docPayUrl"></span></code>。下方是完整签名请求的结构预览；SDK 的 pay.json 只需业务字段，签名字段由 SDK 自动生成。</p>
+            <div class="integration-table"><table><thead><tr><th>字段</th><th>要求</th></tr></thead><tbody>
+              <tr><td>product</td><td>必填。选择“网站接入”页列出的当前可用产品。</td></tr>
+              <tr><td>outTradeNo / subject</td><td>必填。自己网站的唯一订单号与订单标题。</td></tr>
+              <tr><td>totalAmount</td><td>必填。单位元，至少 0.01。SDK 使用两位小数的字符串，例如 "1.00"。</td></tr>
+              <tr><td>notifyUrl</td><td>填写你自己网站可接收通知的服务器地址，如 https://merchant.example/payments/notify。</td></tr>
+              <tr><td>returnUrl</td><td>客户付款后的页面返回地址。页面跳转本身不能作为支付成功依据。</td></tr>
+              <tr><td>merchantId / signType / timestamp / nonce / sign</td><td>每次请求必填。由 SDK 生成，signType 必须在商户已开启的范围内。</td></tr>
+            </tbody></table></div>
+            <pre id="docPayExample" class="integration-code"></pre>
+            <p id="docProductNote"></p>
+            <details><summary>pay.json：可供运行示例读取的业务参数</summary><pre id="docPayBusinessExample" class="integration-code"></pre></details>
           </section>
-
-          <section class="doc-section">
-            <h2>查询订单</h2>
-            <p>接口：<code>POST <span id="docQueryUrl">/api/v1/payments/query</span></code>。商户订单号和支付宝交易号二选一即可。</p>
-            <pre id="docQueryExample"></pre>
+          <section class="integration-section">
+            <h3>查询、关闭与退款</h3>
+            <p>三个接口都需要 outTradeNo 或 tradeNo 至少一个，只能操作当前商户的订单。两个编号同时提供时，必须属于同一笔订单。建议保留自己网站的 outTradeNo 便于核对。</p>
+            <details open><summary>查询订单 · POST <span id="docQueryUrl"></span></summary><pre id="docQueryExample" class="integration-code"></pre></details>
+            <details><summary>关闭未支付订单 · POST <span id="docCancelUrl"></span></summary><pre id="docCancelExample" class="integration-code"></pre></details>
+            <details><summary>申请退款 · POST <span id="docRefundUrl"></span></summary><p>退款金额 refundAmount 使用两位小数字符串。同一笔退款保持同一 outRequestNo；需要再次申请不同退款时使用新的请求号。</p><pre id="docRefundExample" class="integration-code"></pre></details>
+            <p>下方业务参数可分别保存到 query.json、cancel.json、refund.json，运行同名命令。每次请求由 SDK 生成新的 timestamp 与 nonce。</p>
           </section>
-
-          <section class="doc-section">
-            <h2>支付结果通知</h2>
-            <p>创建订单时传入 <code>notifyUrl</code> 后，上游支付结果会通知到该地址。商户系统收到通知后建议再调用查单接口确认最终状态，处理成功后返回 <code>success</code>。</p>
-            <div class="doc-table">
-              <table>
-                <thead><tr><th>字段</th><th>说明</th></tr></thead>
-                <tbody>
-                <tr><td>out_trade_no / outTradeNo</td><td>商户订单号</td></tr>
-                <tr><td>trade_no / tradeNo</td><td>支付宝交易号</td></tr>
-                <tr><td>trade_status</td><td>支付状态，成功状态通常为 TRADE_SUCCESS 或 TRADE_FINISHED</td></tr>
-                <tr><td>total_amount</td><td>支付金额</td></tr>
-                <tr><td>sign</td><td>上游通知签名，生产环境需要验签</td></tr>
-                </tbody>
-              </table>
-            </div>
+          <section class="integration-section">
+            <h3>读取并验证平台响应</h3>
+            <p>先检查 HTTP 状态并验签，再读取 data。外层 code=SUCCESS 仅表示请求处理成功；支付是否成功必须查看 data.status。</p>
+            <pre id="docResponseExample" class="integration-code"></pre>
+            <div class="integration-table"><table><thead><tr><th>路径</th><th>含义</th></tr></thead><tbody>
+              <tr><td>code / message</td><td>商户接口处理结果。错误响应可能只有这两个字段及校验详情，并不包含签名。</td></tr>
+              <tr><td>data.status</td><td>当前操作的网关状态。普通支付经核对为 SUCCESS 才可作为收款依据；退款 SUCCESS 表示退款成功，预授权冻结成功也不代表收款。CREATED / PAYING / PENDING / UNKNOWN 需要继续核对；FAILED / CLOSED 不能当作已付款。</td></tr>
+              <tr><td>data.outTradeNo / data.tradeNo</td><td>商户订单号与支付平台交易号。</td></tr>
+              <tr><td>data.qrCode / data.redirectUrl / data.redirectHtml</td><td>按产品返回二维码内容、跳转链接或支付表单。APP 产品也可能使用 data.raw.order_string。</td></tr>
+              <tr><td>timestamp / signType / sign</td><td>平台响应签名。SDK 会请求可跨语言验签的响应格式并自动校验。</td></tr>
+            </tbody></table></div>
           </section>
-
-          <section class="doc-section">
-            <h2>订单退款</h2>
-            <p>接口：<code>POST <span id="docRefundUrl">/api/v1/payments/refund</span></code>。退款请求号 <code>outRequestNo</code> 需要保持唯一。</p>
-            <pre id="docRefundExample"></pre>
+          <section class="integration-section">
+            <h3>接收平台支付通知</h3>
+            <p>平台向你提供的 notifyUrl 发起 POST，Content-Type 为 application/x-www-form-urlencoded; charset=UTF-8。下面展示表单解码后的 camelCase 字段；此通知由本平台重新签名。</p>
+            <pre id="docCallbackExample" class="integration-code"></pre>
+            <ol>
+              <li>先按表单解码，使用 signType 指定的方式验证除 sign 外的完整参数。</li>
+              <li>MD5 使用商户密钥验签；RSA2 使用平台公钥验签。通知签名方式可能与原请求不同，以通知的 signType 为准。</li>
+              <li>核对 merchantId、outTradeNo、tradeNo、totalAmount 与本地订单。仅 status=COMPLETED 可作为普通支付完成依据；tradeStatus 保留上游支付状态，其他状态不能直接发货。</li>
+              <li>按订单号幂等更新业务，确认处理完成后返回 HTTP 2xx，纯文本正文 success。重复通知也应安全处理。</li>
+            </ol>
+            <p>notifyTime 是通知时间；通知不含请求用的 nonce。不要把商户请求的 timestamp / nonce 校验规则套到回调上。未及时收到通知时，可调用 query 核对订单。</p>
+            <p>未收到 HTTP 2xx 和正文 success 确认的通知会记录并重试。重试可能重复到达，请始终按商户订单号幂等处理。</p>
           </section>
-
-          <section class="doc-section">
-            <h2>返回字段</h2>
-            <div class="doc-table">
-              <table>
-                <thead><tr><th>字段</th><th>说明</th></tr></thead>
-                <tbody>
-                <tr><td>status</td><td>SUCCESS、PENDING、FAILED 等支付状态</td></tr>
-                <tr><td>code</td><td>网关或上游接口返回码</td></tr>
-                <tr><td>message</td><td>处理结果说明</td></tr>
-                <tr><td>outTradeNo</td><td>商户订单号</td></tr>
-                <tr><td>tradeNo</td><td>支付宝交易号</td></tr>
-                <tr><td>qrCode</td><td>订单码/当面付类产品返回的二维码内容</td></tr>
-                <tr><td>redirectHtml</td><td>手机网站/电脑网站类产品返回的跳转表单</td></tr>
-                <tr><td>redirectUrl / raw.order_string</td><td>APP支付返回的支付宝 App SDK 订单信息字符串</td></tr>
-                <tr><td>attempts</td><td>通道轮询尝试记录</td></tr>
-                </tbody>
-              </table>
-            </div>
+          <section class="integration-section">
+            <h3>签名与金额规则</h3>
+            <p>每次请求都必须签名。SDK 保持现有商户请求签名规则，并为响应使用 X-Merchant-Response-Signature: canonical-v1。MD5 与 RSA2 都通过同一个 API 根地址调用。</p>
+            <ul>
+              <li>递归移除 sign、null 及对象中的空白字符串；对象字段按名称排序。signType、false、0、空对象和空数组仍参与签名。</li>
+              <li>数组保留顺序并移除 null。对象和数组使用紧凑 JSON；顶层用 key=value 以 &amp; 连接，签名前不做 URL 编码。</li>
+              <li>MD5：UTF-8 编码的签名原文后直接拼接商户 MD5 密钥，计算 MD5。RSA2：商户私钥使用 SHA256withRSA 签名并 Base64 编码。</li>
+              <li>timestamp 支持 ISO 8601 UTC、10 位秒或 13 位毫秒时间戳，允许前后 15 分钟误差。每个请求使用新的 nonce。</li>
+              <li>金额保持两位小数字符串。扩展参数中的小数也使用字符串，避免不同语言的数字序列化改变签名。</li>
+            </ul>
+            <p>完整规范、字段说明和跨语言规则见下载文档。请直接使用 SDK 的签名及响应校验逻辑，避免自行拼接产生差异。</p>
           </section>
-
-          <section class="doc-section">
-            <h2>签名说明</h2>
-            <p>商户后台提供 MD5 密钥、平台公钥、商户 RSA2 密钥对和签名方式开关。正式接入时建议所有请求都带签名，签名字段不要参与自身签名，空值不参与签名，参数按字段名升序拼接后再计算。</p>
-            <pre>MD5示例：sign = md5(排序后的参数键值对 + 商户MD5密钥)
-RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使用商户公钥验签</pre>
-          </section>
-
-          <section class="doc-section">
-            <h2>支付产品</h2>
-            <div class="doc-table">
-              <table>
-                <thead><tr><th>产品值</th><th>说明</th></tr></thead>
-                <tbody>
-                <tr><td>ALIPAY_ORDER_CODE</td><td>支付宝订单码</td></tr>
-                <tr><td>ALIPAY_F2F</td><td>支付宝当面付</td></tr>
-                <tr><td>ALIPAY_PAYMENT_CODE</td><td>支付宝付款码，输入顾客付款码数字收款</td></tr>
-                <tr><td>ALIPAY_APP</td><td>支付宝 APP 支付</td></tr>
-                <tr><td>ALIPAY_WAP</td><td>支付宝手机网站</td></tr>
-                <tr><td>ALIPAY_PAGE</td><td>支付宝电脑网站</td></tr>
-                <tr><td>ALIPAY_JSAPI</td><td>支付宝 JSAPI</td></tr>
-                <tr><td>ALIPAY_PREAUTH</td><td>支付宝线下预授权</td></tr>
-                <tr><td>ALIPAY_PREAUTH_H5</td><td>支付宝 H5 预授权</td></tr>
-                <tr><td>ALIPAY_DIRECT_ORDER_CODE / ALIPAY_DIRECT_APP / ALIPAY_DIRECT_WAP / ALIPAY_DIRECT_PAGE / ALIPAY_DIRECT_JSAPI</td><td>支付宝直付通支付产品</td></tr>
-                </tbody>
-              </table>
-            </div>
+          <section class="integration-section">
+            <h3>接入失败时，按返回信息排查</h3>
+            <div class="integration-table"><table><thead><tr><th>现象</th><th>检查项</th></tr></thead><tbody>
+              <tr><td>404 / 返回 HTML</td><td>使用“网站接入”中的完整地址，检查域名、部署前缀和 /merchant-api 路径；请求使用 POST JSON。</td></tr>
+              <tr><td>signature verification failed</td><td>核对商户号、商户密钥和 signType；检查金额小数位、扩展 JSON 及签名前后的字段是否一致。不要使用支付宝或抖音商户的上游密钥。</td></tr>
+              <tr><td>timestamp is expired / nonce has already been used</td><td>同步服务器时间；每次调用生成新 nonce 和当前 timestamp，再重新签名。业务订单号仍保持原值。</td></tr>
+              <tr><td>Sign type is not enabled</td><td>检查“密钥管理”中已开启的签名方式；RSA2 请求用商户私钥，平台响应验签用平台公钥。</td></tr>
+              <tr><td>check 可用通道数量为 0 / 无匹配通道</td><td>核对商户绑定通道、通道启用状态、产品及金额范围。check 不创建订单，可在调整配置后再次检查。</td></tr>
+              <tr><td>外层 SUCCESS，但客户尚未付款</td><td>读取 data.status，并展示产品对应的支付链接或二维码；继续查单或等待通知。</td></tr>
+              <tr><td>未收到通知 / 重复通知</td><td>检查 notifyUrl 是否是你网站的公网服务端地址，支持 POST 表单；验签、幂等处理后返回 2xx 和 success。需要确认时主动查单。</td></tr>
+            </tbody></table></div>
           </section>
         </div>
       </div>
@@ -843,16 +897,20 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
   </section>
 </main>
 
+<script src="merchant-integration.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   let currentPortal = null;
+  let integrationProducts = [];
+  let channelLoadSequence = 0;
 
   function json(value) {
     return JSON.stringify(value, null, 2);
   }
 
   async function request(path, options = {}) {
+    if (path.startsWith("/api/v1/")) path = dynamicApiBase(currentPortal?.apiBase) + path.slice("/api/v1".length);
     const response = await fetch(path, {
       headers: { "Content-Type": "application/json; charset=utf-8" },
       ...options
@@ -872,12 +930,19 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
     return status === "COMPLETED" || status === "SUCCESS" ? "status" : "status pending";
   }
 
-  function copyValue(sourceId) {
+  async function copyValue(sourceId) {
     const element = $(sourceId);
     const text = element?.value || element?.textContent || "";
     if (!text) return;
-    navigator.clipboard?.writeText(text);
-    $("apiMessage").textContent = "已复制";
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error();
+      await navigator.clipboard.writeText(text);
+      $("apiMessage").textContent = "已复制";
+      $("integrationMessage").textContent = "已复制";
+    } catch (_) {
+      element?.select?.();
+      $("integrationMessage").textContent = "未能自动复制，请选中文字后复制。";
+    }
   }
 
   function switchTab(tab) {
@@ -890,20 +955,18 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
   }
 
   function dynamicApiBase(fallback = "") {
-    return window.location.origin && window.location.origin !== "null"
-      ? `${window.location.origin}/api/v1`
-      : fallback;
+    return MerchantIntegration.apiRoot(fallback, window.location.href);
   }
 
   function merchantCashierUrl(merchantId) {
-    return `${window.location.origin}/cashier.html?merchantId=${encodeURIComponent(merchantId)}`;
+    return `${MerchantIntegration.assetUrl(dynamicApiBase(currentPortal?.apiBase), "cashier.html")}?merchantId=${encodeURIComponent(merchantId)}`;
   }
 
   function updateMerchantFields(merchant, apiBase) {
     const apiRoot = dynamicApiBase(apiBase);
     $("merchantTitle").textContent = merchant.name;
     $("merchantSub").textContent = `${merchant.merchantId} · 费率 ${merchant.feeRateText}`;
-    $("apiBase").value = apiRoot;
+    $("apiBase").value = `${apiRoot}/merchant-api`;
     $("merchantApiId").value = merchant.merchantId;
     $("md5Key").value = merchant.md5Key || "";
     $("platformPublicKey").value = merchant.platformPublicKey || "";
@@ -913,55 +976,69 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
     const cashierUrl = merchantCashierUrl(merchant.merchantId);
     $("merchantCashierUrl").value = cashierUrl;
     $("merchantCashierUrl").setAttribute("value", cashierUrl);
-    $("merchantQrImage").src = `/api/v1/merchants/${encodeURIComponent(merchant.merchantId)}/cashier-qr?t=${Date.now()}`;
+    $("merchantQrImage").src = `${apiRoot}/merchants/${encodeURIComponent(merchant.merchantId)}/cashier-qr?t=${Date.now()}`;
     updateDeveloperDocs(merchant, apiRoot);
   }
 
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[character]));
+  }
+
   function updateDeveloperDocs(merchant, apiRoot) {
-    const payUrl = `${apiRoot}/merchant-api/pay`;
-    const queryUrl = `${apiRoot}/merchant-api/query`;
-    const refundUrl = `${apiRoot}/merchant-api/refund`;
-    $("docApiBase").textContent = apiRoot;
-    $("docMerchantId").textContent = merchant.merchantId;
-    $("docMerchantIdCell").textContent = merchant.merchantId;
-    $("docPayUrl").textContent = payUrl;
-    $("docQueryUrl").textContent = queryUrl;
-    $("docRefundUrl").textContent = refundUrl;
-    $("docPayExample").textContent = json({
-      merchantId: merchant.merchantId,
-      product: "ALIPAY_ORDER_CODE",
-      outTradeNo: "ORDER202605140001",
-      subject: `${merchant.name} 订单`,
-      totalAmount: 1.00,
-      notifyUrl: `${window.location.origin}/notify`,
-      returnUrl: `${window.location.origin}/return`,
-      signType: "MD5",
-      timestamp: "2026-06-01T12:00:00Z",
-      nonce: "RANDOM123",
-      sign: "签名结果",
-      extra: {
-        merchantName: merchant.name
-      }
-    });
-    $("docQueryExample").textContent = json({
-      merchantId: merchant.merchantId,
-      outTradeNo: "ORDER202605140001",
-      signType: "MD5",
-      timestamp: "2026-06-01T12:00:00Z",
-      nonce: "RANDOM124",
-      sign: "签名结果"
-    });
-    $("docRefundExample").textContent = json({
-      merchantId: merchant.merchantId,
-      outTradeNo: "ORDER202605140001",
-      refundAmount: 1.00,
-      outRequestNo: "REFUND202605140001",
-      refundReason: "用户申请退款",
-      signType: "MD5",
-      timestamp: "2026-06-01T12:00:00Z",
-      nonce: "RANDOM125",
-      sign: "签名结果"
-    });
+    const selectedProduct = $("integrationProduct").value;
+    $("integrationSignMode").value = merchant.signMode || "MD5_RSA2";
+    $("sdkClientDownload").href = MerchantIntegration.assetUrl(apiRoot, "sdk/merchant-client.mjs");
+    $("sdkExampleDownload").href = MerchantIntegration.assetUrl(apiRoot, "sdk/merchant-example.mjs");
+    $("apiDocDownload").href = MerchantIntegration.assetUrl(apiRoot, "docs/merchant-api.md");
+    const endpointList = MerchantIntegration.endpoints(apiRoot);
+    $("integrationEndpoints").innerHTML = endpointList.map(item => `<tr><td>${escapeHtml(item.name)}</td><td><code>${item.method} ${escapeHtml(item.url)}</code></td><td>${escapeHtml(item.description)}</td></tr>`).join("");
+    for (const item of endpointList) $("doc" + item.operation[0].toUpperCase() + item.operation.slice(1) + "Url").textContent = item.url;
+    const type = MerchantIntegration.signType(merchant);
+    const baseConfig = `MERCHANT_API_BASE=${apiRoot}/merchant-api\nMERCHANT_ID=${merchant.merchantId}`;
+    $("integrationEnv").textContent = `${baseConfig}\nSIGN_TYPE=${type}\n${type === "RSA2" ? "MERCHANT_PRIVATE_KEY_FILE=./merchant-private.pem\nPLATFORM_PUBLIC_KEY_FILE=./platform-public.pem" : "MERCHANT_MD5_KEY=替换为自己的商户MD5密钥"}`;
+    $("integrationRsaEnv").textContent = "# 使用 RSA2 时替换签名配置\nSIGN_TYPE=RSA2\nMERCHANT_PRIVATE_KEY_FILE=./merchant-private.pem\nPLATFORM_PUBLIC_KEY_FILE=./platform-public.pem";
+    const previews = MerchantIntegration.examples(merchant, selectedProduct);
+    for (const name of ["check", "pay"]) $("doc" + name[0].toUpperCase() + name.slice(1) + "Example").textContent = json(previews[name]);
+    for (const name of ["query", "cancel", "refund"]) {
+      const { merchantId, signType, timestamp, nonce, sign, ...business } = previews[name];
+      $("doc" + name[0].toUpperCase() + name.slice(1) + "Example").textContent = json(business);
+    }
+    const { merchantId, signType, timestamp, nonce, sign, ...payBusiness } = previews.pay;
+    $("docPayBusinessExample").textContent = json(payBusiness);
+    $("docProductNote").textContent = !selectedProduct ? "请先确认商户可用通道和支付产品，再创建订单。"
+      : selectedProduct.includes("JSAPI") ? "此产品还需要用户身份参数 buyerId、buyerOpenId 或 authCode；请按完整文档填写。"
+      : selectedProduct === "ALIPAY_PAYMENT_CODE" ? "此产品还必须填写顾客付款码 authCode。"
+      : selectedProduct.includes("PREAUTH") ? "此产品为预授权，冻结结果不等于订单收款成功，请按预授权业务流程处理。"
+      : "展开下方“pay.json”并保存其中的业务参数，再运行服务端示例。通知地址必须替换为你自己网站的服务器地址。";
+    $("docResponseExample").textContent = json({ code: "SUCCESS", message: "OK", data: { channelId: "示例通道", status: "PENDING", outTradeNo: "你的网站订单号", tradeNo: "支付平台交易号", qrCode: "按产品返回的支付内容" }, timestamp: new Date().toISOString(), signType: type, sign: "平台生成的响应签名" });
+    $("docCallbackExample").textContent = json({ merchantId: merchant.merchantId, outTradeNo: "你的网站订单号", tradeNo: "支付平台交易号", channelId: "示例通道", productName: "所选支付产品", totalAmount: "1.00", tradeStatus: "上游成功状态", status: "COMPLETED", notifyTime: new Date().toISOString(), signType: type, sign: "平台生成的通知签名" });
+  }
+
+  async function loadIntegrationProducts() {
+    const sequence = ++channelLoadSequence;
+    const portal = currentPortal;
+    if (!portal) return;
+    try {
+      const channels = await request("/api/v1/channels");
+      if (sequence !== channelLoadSequence || currentPortal !== portal) return;
+      integrationProducts = MerchantIntegration.availableProducts(portal.merchant, channels);
+      const previous = $("integrationProduct").value;
+      $("integrationProduct").innerHTML = integrationProducts.length
+        ? integrationProducts.map(product => `<option value="${escapeHtml(product)}">${escapeHtml(product)}</option>`).join("")
+        : '<option value="">暂无已绑定且启用的支付产品</option>';
+      $("integrationProduct").value = integrationProducts.includes(previous) ? previous
+        : ["ALIPAY_PAGE", "ALIPAY_WAP", "DOUYIN_H5", "DOUYIN_NATIVE", "ALIPAY_F2F"].find(product => integrationProducts.includes(product)) || integrationProducts[0] || "";
+      $("integrationProductsMessage").textContent = integrationProducts.length
+        ? `当前配置共 ${integrationProducts.length} 种产品。请先运行 check，确认签名和通道配置；实际支付还受通道金额范围等规则约束。`
+        : "当前未找到已绑定且启用的支付产品。请运行 check 并联系平台核对通道配置。";
+      updateDeveloperDocs(portal.merchant, dynamicApiBase(portal.apiBase));
+    } catch (_) {
+      if (sequence !== channelLoadSequence || currentPortal !== portal) return;
+      integrationProducts = [];
+      $("integrationProduct").innerHTML = '<option value="">产品配置读取失败</option>';
+      $("integrationProductsMessage").textContent = "暂时无法读取通道配置，请运行服务器 check 命令核对，或重新登录后重试。";
+      updateDeveloperDocs(portal.merchant, dynamicApiBase(portal.apiBase));
+    }
   }
 
   function renderOrders(orders) {
@@ -980,11 +1057,13 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
 
   function renderPortal(data) {
     currentPortal = data;
+    integrationProducts = [];
     const merchant = data.merchant;
     $("loginView").classList.add("hidden");
     $("portalView").classList.remove("hidden");
     updateMerchantFields(merchant, data.apiBase);
     renderOrders(data.orders);
+    loadIntegrationProducts();
   }
 
   async function mutateMerchant(path, body = {}) {
@@ -1029,6 +1108,9 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
     $("portalView").classList.add("hidden");
     $("loginView").classList.remove("hidden");
     $("loginMd5Key").value = "";
+    currentPortal = null;
+    integrationProducts = [];
+    channelLoadSequence++;
   });
 
   document.querySelectorAll(".portal-tab").forEach((button) => {
@@ -1040,11 +1122,27 @@ RSA2示例：使用商户私钥对排序后的参数键值对签名，平台使�
   });
 
   $("showV1DocBtn").addEventListener("click", () => {
-    $("apiMessage").textContent = "V1 使用 MD5 签名方式，对接参数使用接口地址、商户ID和商户MD5密钥。";
+    $("apiMessage").textContent = "MD5 使用商户API根地址、商户号及商户MD5密钥。将密钥配置在自己的服务器，使用 SDK 自动签名和验签。";
   });
 
   $("showV2DocBtn").addEventListener("click", () => {
-    $("apiMessage").textContent = "V2 使用 RSA2 签名方式，对接参数使用平台公钥、商户公钥和商户私钥。";
+    $("apiMessage").textContent = "RSA2 与 MD5 使用同一组接口。商户私钥签请求，平台公钥验响应及通知；平台使用商户公钥验请求。";
+  });
+
+  $("integrationProduct").addEventListener("change", () => {
+    if (currentPortal) updateDeveloperDocs(currentPortal.merchant, dynamicApiBase(currentPortal.apiBase));
+  });
+
+  $("copyIntegrationChecklistBtn").addEventListener("click", async () => {
+    if (!currentPortal) return;
+    const text = MerchantIntegration.checklist(currentPortal.merchant, dynamicApiBase(currentPortal.apiBase), integrationProducts);
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error();
+      await navigator.clipboard.writeText(text);
+      $("integrationMessage").textContent = "接入清单已复制，包含接口与文档地址，不包含密钥。";
+    } catch (_) {
+      $("integrationMessage").textContent = "未能自动复制。请手动复制页面上的接口信息，并单独下载文档。";
+    }
   });
 
   $("resetMd5Btn").addEventListener("click", async () => {

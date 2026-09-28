@@ -12,7 +12,7 @@ final class RequestUrlSupport {
     }
 
     static String apiBase(HttpServletRequest request) {
-        return origin(request) + "/api/v1";
+        return origin(request) + request.getContextPath() + "/api/v1";
     }
 
     static String alipayNotifyUrl(HttpServletRequest request, String channelId) {

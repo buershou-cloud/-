@@ -5,13 +5,18 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.RefundCreateRequest;
+import com.example.payments.domain.PaymentProduct;
+import com.example.payments.merchant.api.MerchantApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,6 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 public class DemoOrderService {
@@ -34,6 +40,8 @@ public class DemoOrderService {
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private final Map<String, DemoOrder> orders = new LinkedHashMap<>();
+    private final Map<String, MerchantNotifyTarget> merchantNotifyTargets = new LinkedHashMap<>();
+    private final Map<String, MemoryRefund> memoryRefunds = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
 
     public DemoOrderService() {
@@ -386,7 +394,23 @@ public class DemoOrderService {
             recordRefundOrder(order, request, response, refundAmount);
             order.setRefundedAmount(successfulRefundAmount(order.getOutTradeNo()));
         } else {
-            order.setRefundedAmount(money(order.getRefundedAmount().add(refundAmount)));
+            MemoryRefund previous = memoryRefunds.get(request.outRequestNo());
+            if (previous != null && (!previous.outTradeNo().equals(order.getOutTradeNo())
+                    || previous.amount().compareTo(refundAmount) != 0)) {
+                throw refundConflict();
+            }
+            PaymentStatus next = switch (response.status()) {
+                case SUCCESS -> PaymentStatus.SUCCESS;
+                case FAILED, CLOSED -> PaymentStatus.FAILED;
+                default -> PaymentStatus.PENDING;
+            };
+            // A delayed pending response cannot undo a confirmed refund, nor count it twice.
+            if (previous != null && previous.status() == PaymentStatus.SUCCESS) {
+                next = PaymentStatus.SUCCESS;
+            } else if (next == PaymentStatus.SUCCESS) {
+                order.setRefundedAmount(money(order.getRefundedAmount().add(refundAmount)));
+            }
+            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.getOutTradeNo(), refundAmount, next));
         }
         if (hasText(response.tradeNo())) {
             order.setTradeNo(response.tradeNo().trim());
@@ -614,7 +638,8 @@ public class DemoOrderService {
                 order.setTradeNo(tradeNo.trim());
             }
             order.setSubject(firstText(subject, order.getSubject(), productName));
-            order.setStatus(preserveRefundStatus(order.getStatus(), initialStatus));
+            order.setStatus(preserveRefundStatus(order.getStatus(),
+                    statusFromGateway(paymentStatus, preAuthorization, order.getStatus())));
         }
         persist(order);
         return DemoOrderView.from(order);
@@ -625,7 +650,16 @@ public class DemoOrderService {
             PayCreateRequest request,
             GatewayResponse response
     ) {
-        if (!databaseBacked() || !hasText(outTradeNo) || request == null) {
+        if (!hasText(outTradeNo) || request == null) {
+            return;
+        }
+        if (!databaseBacked()) {
+            DemoOrder order = orders.get(outTradeNo);
+            if (order != null && hasText(request.notifyUrl())) {
+                merchantNotifyTargets.put(outTradeNo, new MerchantNotifyTarget(order.getMerchantId(), request.notifyUrl().trim()));
+            } else {
+                merchantNotifyTargets.remove(outTradeNo);
+            }
             return;
         }
         jdbcTemplate.update("""
@@ -702,19 +736,143 @@ public class DemoOrderService {
     }
 
     public synchronized void ensureMerchantOrder(String merchantId, String outTradeNo, String tradeNo) {
-        if (!hasText(merchantId)) {
-            throw new IllegalArgumentException("merchantId is required");
+        resolveMerchantOrder(merchantId, outTradeNo, tradeNo);
+    }
+
+    public synchronized DemoOrderView resolveMerchantOrder(String merchantId, String outTradeNo, String tradeNo) {
+        if (!hasText(merchantId) || (!hasText(outTradeNo) && !hasText(tradeNo))) {
+            throw new MerchantApiException("INVALID_ORDER_ID", "merchantId and at least one of outTradeNo or tradeNo are required");
         }
-        DemoOrder order = databaseBacked()
-                ? findOrderByIdentifier(outTradeNo, tradeNo)
-                : memoryOrderByIdentifier(outTradeNo, tradeNo);
-        if (order == null) {
-            throw new IllegalArgumentException("Order does not exist or does not belong to this merchant");
+        // Resolve tradeNo inside the merchant namespace; different channels may reuse upstream IDs.
+        List<DemoOrderView> candidates;
+        if (hasText(outTradeNo)) {
+            DemoOrder found = databaseBacked() ? findOrder(outTradeNo.trim()) : orders.get(outTradeNo.trim());
+            candidates = found == null ? List.of() : List.of(DemoOrderView.from(found));
+        } else {
+            candidates = byMerchant(merchantId).stream().filter(order -> tradeNo.trim().equals(order.tradeNo())).toList();
         }
-        if (!merchantId.trim().equals(order.getMerchantId())) {
-            throw new IllegalArgumentException("Order does not exist or does not belong to this merchant");
+        if (candidates.size() != 1 || !merchantId.equals(candidates.getFirst().merchantId())) {
+            throw new MerchantApiException("ORDER_NOT_FOUND", "Order is unavailable for this merchant; use outTradeNo if tradeNo is ambiguous");
+        }
+        DemoOrderView order = candidates.getFirst();
+        if (hasText(tradeNo) && !tradeNo.trim().equals(order.tradeNo())) {
+            throw new MerchantApiException("ORDER_IDENTIFIER_MISMATCH", "outTradeNo and tradeNo must identify the same order");
+        }
+        return order;
+    }
+
+    public synchronized DemoOrderView reserveMerchantPayment(String merchantId, String merchantName,
+                                                              String channelId, PayCreateRequest request) {
+        DemoOrder order = new DemoOrder(request.outTradeNo(), null, channelId, merchantId, merchantName,
+                request.product().label(), request.subject(), request.totalAmount(), DemoOrderStatus.UNPAID,
+                LocalDateTime.now().format(DISPLAY_TIME), request.product() == PaymentProduct.ALIPAY_PREAUTH
+                || request.product() == PaymentProduct.ALIPAY_PREAUTH_H5);
+        if (databaseBacked()) {
+            try {
+                // INSERT (never upsert) lets the primary key arbitrate across server instances.
+                insertOrder(order);
+            } catch (DuplicateKeyException ex) {
+                throw orderConflict();
+            }
+        } else {
+            if (orders.containsKey(request.outTradeNo())) {
+                throw orderConflict();
+            }
+            seed(order);
+        }
+        recordPaymentMetadata(request.outTradeNo(), request, null);
+        return DemoOrderView.from(order);
+    }
+
+    public synchronized void ensureNewPaymentOrder(String outTradeNo) {
+        if (databaseBacked() ? exists(outTradeNo) : orders.containsKey(outTradeNo)) {
+            throw orderConflict();
         }
     }
+
+    private static MerchantApiException orderConflict() {
+        return new MerchantApiException("ORDER_CONFLICT", "outTradeNo already exists or is processing; query the original order before any further payment attempt");
+    }
+
+    public synchronized Optional<MerchantNotifyTarget> merchantNotifyTarget(String outTradeNo) {
+        if (!hasText(outTradeNo)) {
+            return Optional.empty();
+        }
+        if (!databaseBacked()) {
+            return Optional.ofNullable(merchantNotifyTargets.get(outTradeNo));
+        }
+        return jdbcTemplate.query("SELECT merchant_id, notify_url FROM pay_order WHERE out_trade_no = ?", rs -> {
+            if (!rs.next() || !hasText(rs.getString("notify_url"))) {
+                return Optional.empty();
+            }
+            return Optional.of(new MerchantNotifyTarget(rs.getString("merchant_id"), rs.getString("notify_url").trim()));
+        }, outTradeNo);
+    }
+
+    public record MerchantNotifyTarget(String merchantId, String notifyUrl) { }
+
+    public synchronized void reserveMerchantRefund(String merchantId, RefundCreateRequest request) {
+        if (!hasText(request.outRequestNo()) || !request.outRequestNo().equals(request.outRequestNo().trim())) {
+            throw new MerchantApiException("INVALID_REFUND_ID", "outRequestNo must be nonblank without surrounding whitespace");
+        }
+        if (request.refundAmount() == null || request.refundAmount().signum() <= 0
+                || request.refundAmount().stripTrailingZeros().scale() > 2) {
+            throw new MerchantApiException("INVALID_AMOUNT", "refundAmount must be positive with at most two decimal places");
+        }
+        if (databaseBacked()) {
+            new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .executeWithoutResult(status -> {
+                        // Lock the original order while checking pending refunds and reserving this request.
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                                String.class, request.outTradeNo());
+                        reserveMerchantRefundInternal(merchantId, request);
+                    });
+        } else {
+            reserveMerchantRefundInternal(merchantId, request);
+        }
+    }
+
+    private void reserveMerchantRefundInternal(String merchantId, RefundCreateRequest request) {
+        DemoOrderView order = resolveMerchantOrder(merchantId, request.outTradeNo(), request.tradeNo());
+        if (databaseBacked()) {
+            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM refund_order WHERE out_request_no = ?",
+                    Integer.class, request.outRequestNo());
+            if (count != null && count > 0) {
+                throw refundConflict();
+            }
+        } else if (memoryRefunds.containsKey(request.outRequestNo())) {
+            throw refundConflict();
+        }
+        ensureRefundable(order.outTradeNo(), order.tradeNo(), request.refundAmount());
+        BigDecimal pending = databaseBacked() ? jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(refund_amount), 0) FROM refund_order WHERE out_trade_no = ? AND status = 'PENDING'",
+                BigDecimal.class, order.outTradeNo()) : memoryRefunds.values().stream()
+                .filter(refund -> refund.outTradeNo().equals(order.outTradeNo()) && refund.status() == PaymentStatus.PENDING)
+                .map(MemoryRefund::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (request.refundAmount().add(money(pending)).compareTo(order.refundableAmount()) > 0) {
+            throw new MerchantApiException("REFUND_PENDING", "Refund amount exceeds the balance after pending refunds; reconcile pending requests first");
+        }
+        if (databaseBacked()) {
+            try {
+                jdbcTemplate.update("""
+                        INSERT INTO refund_order (out_request_no, out_trade_no, trade_no, merchant_id, channel_id,
+                                                  refund_amount, status, refund_reason)
+                        VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                        """, request.outRequestNo(), order.outTradeNo(), order.tradeNo(), merchantId,
+                        order.channelId(), request.refundAmount(), nullIfBlank(request.refundReason()));
+            } catch (DuplicateKeyException ex) {
+                throw refundConflict();
+            }
+        } else {
+            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.outTradeNo(), request.refundAmount(), PaymentStatus.PENDING));
+        }
+    }
+
+    private static MerchantApiException refundConflict() {
+        return new MerchantApiException("REFUND_CONFLICT", "outRequestNo already exists or is processing; reconcile the original refund instead of submitting it again");
+    }
+
+    private record MemoryRefund(String outTradeNo, BigDecimal amount, PaymentStatus status) { }
 
     public synchronized DemoOrderView recordAlipayNotify(
             String outTradeNo,
@@ -1171,6 +1329,17 @@ public class DemoOrderService {
             GatewayResponse response,
             BigDecimal refundAmount
     ) {
+        List<Map<String, Object>> existing = jdbcTemplate.queryForList(
+                "SELECT out_trade_no, merchant_id, refund_amount FROM refund_order WHERE out_request_no = ?",
+                request.outRequestNo());
+        if (!existing.isEmpty()) {
+            Map<String, Object> previous = existing.getFirst();
+            if (!Objects.equals(previous.get("out_trade_no"), order.getOutTradeNo())
+                    || !Objects.equals(previous.get("merchant_id"), order.getMerchantId())
+                    || new BigDecimal(previous.get("refund_amount").toString()).compareTo(refundAmount) != 0) {
+                throw refundConflict();
+            }
+        }
         String refundStatus = switch (response.status()) {
             case SUCCESS -> "SUCCESS";
             case FAILED, CLOSED -> "FAILED";
@@ -1185,12 +1354,12 @@ public class DemoOrderService {
                     trade_no = VALUES(trade_no),
                     channel_id = VALUES(channel_id),
                     refund_amount = VALUES(refund_amount),
-                    status = VALUES(status),
+                    status = IF(status = 'SUCCESS', status, VALUES(status)),
                     refund_reason = VALUES(refund_reason),
                     code = VALUES(code),
                     message = VALUES(message),
                     raw_response = VALUES(raw_response),
-                    completed_at = VALUES(completed_at)
+                    completed_at = COALESCE(completed_at, VALUES(completed_at))
                 """,
                 request.outRequestNo(),
                 order.getOutTradeNo(),

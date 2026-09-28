@@ -26,6 +26,7 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,10 +51,18 @@ public class MerchantSignatureService {
     }
 
     public DemoMerchantView verify(MerchantSignedRequest request) {
-        DemoMerchantView merchant = merchantService.detail(required(request.merchantId(), "merchantId is required"));
+        DemoMerchantView merchant;
+        try {
+            merchant = merchantService.detail(required(request.merchantId(), "merchantId is required"));
+        } catch (IllegalArgumentException ex) {
+            throw new MerchantApiException("MERCHANT_NOT_FOUND", "Merchant credentials are invalid");
+        }
+        if (merchant.status() == null || !ACTIVE_STATUSES.contains(merchant.status().trim())) {
+            throw new MerchantApiException("MERCHANT_DISABLED", "Merchant is disabled");
+        }
         String signType = normalizeSignType(request.signType());
         if (!signTypeAllowed(merchant.signMode(), signType)) {
-            throw new IllegalArgumentException("Sign type is not enabled for merchant: " + signType);
+            throw new MerchantApiException("SIGN_TYPE_DISABLED", "Sign type is not enabled for merchant: " + signType);
         }
         Instant timestamp = parseTimestamp(required(request.timestamp(), "timestamp is required"));
         ensureFreshTimestamp(timestamp);
@@ -67,7 +76,7 @@ public class MerchantSignatureService {
             default -> false;
         };
         if (!verified) {
-            throw new IllegalArgumentException("Merchant API signature verification failed");
+            throw new MerchantApiException("INVALID_SIGNATURE", "Merchant API signature verification failed");
         }
         rememberNonce(merchant.merchantId(), required(request.nonce(), "nonce is required"), timestamp);
         return merchant;
@@ -75,6 +84,32 @@ public class MerchantSignatureService {
 
     public <T> MerchantApiResponse<T> success(DemoMerchantView merchant, String signType, T data) {
         return response(merchant, signType, "SUCCESS", "OK", data);
+    }
+
+    /** Opt-in response contract for portable clients; legacy responses remain unchanged. */
+    public MerchantApiResponse<Object> successCanonical(DemoMerchantView merchant, String signType, Object data) {
+        Object tree = objectMapper.convertValue(data, Object.class);
+        return response(merchant, signType, "SUCCESS", "OK", normalizeResponseValue(tree));
+    }
+
+    private Object normalizeResponseValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<String, Object> result = new TreeMap<>();
+            map.forEach((key, item) -> {
+                Object normalized = normalizeResponseValue(item);
+                if (key != null && !"sign".equals(key.toString()) && normalized != null
+                        && !(normalized instanceof String text && text.isBlank())) {
+                    result.put(key.toString(), normalized);
+                }
+            });
+            return result;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(this::normalizeResponseValue).filter(java.util.Objects::nonNull).toList();
+        }
+        if (value instanceof BigDecimal decimal) return decimal.toPlainString();
+        if (value instanceof Number number) return number.toString();
+        return value;
     }
 
     public <T> MerchantApiResponse<T> response(
@@ -112,7 +147,7 @@ public class MerchantSignatureService {
     }
 
     public String defaultSignType(DemoMerchantView merchant) {
-        String mode = merchant.signMode() == null ? "" : merchant.signMode().trim().toUpperCase();
+        String mode = merchant.signMode() == null ? "" : merchant.signMode().trim().toUpperCase(Locale.ROOT);
         return mode.contains("MD5") ? "MD5" : "RSA2";
     }
 
@@ -191,7 +226,7 @@ public class MerchantSignatureService {
     private void ensureFreshTimestamp(Instant timestamp) {
         Instant now = Instant.now();
         if (timestamp.isBefore(now.minus(TIMESTAMP_SKEW)) || timestamp.isAfter(now.plus(TIMESTAMP_SKEW))) {
-            throw new IllegalArgumentException("timestamp is expired or too far in the future");
+            throw new MerchantApiException("TIMESTAMP_EXPIRED", "timestamp is expired or too far in the future");
         }
     }
 
@@ -200,20 +235,20 @@ public class MerchantSignatureService {
         usedNonces.entrySet().removeIf(entry -> entry.getValue().isBefore(threshold));
         String key = merchantId + ":" + nonce;
         if (usedNonces.putIfAbsent(key, timestamp) != null) {
-            throw new IllegalArgumentException("nonce has already been used");
+            throw new MerchantApiException("NONCE_REUSED", "nonce has already been used");
         }
     }
 
     private static String normalizeSignType(String signType) {
-        String value = required(signType, "signType is required").trim().toUpperCase();
+        String value = required(signType, "signType is required").trim().toUpperCase(Locale.ROOT);
         if (!"MD5".equals(value) && !"RSA2".equals(value)) {
-            throw new IllegalArgumentException("Unsupported signType: " + signType);
+            throw new MerchantApiException("UNSUPPORTED_SIGN_TYPE", "Unsupported signType: " + signType);
         }
         return value;
     }
 
     private static boolean signTypeAllowed(String signMode, String signType) {
-        String mode = signMode == null ? "MD5_RSA2" : signMode.trim().toUpperCase();
+        String mode = signMode == null ? "MD5_RSA2" : signMode.trim().toUpperCase(Locale.ROOT);
         return "MD5_RSA2".equals(mode) || mode.equals(signType);
     }
 
@@ -228,7 +263,7 @@ public class MerchantSignatureService {
             }
             return Instant.parse(value);
         } catch (DateTimeParseException | NumberFormatException ex) {
-            throw new IllegalArgumentException("timestamp format is invalid");
+            throw new MerchantApiException("INVALID_TIMESTAMP", "timestamp format is invalid");
         }
     }
 
@@ -267,7 +302,7 @@ public class MerchantSignatureService {
             signature.update(content.getBytes(StandardCharsets.UTF_8));
             return signature.verify(Base64.getDecoder().decode(sign));
         } catch (Exception ex) {
-            throw new GatewayException("MERCHANT_RSA2_VERIFY_ERROR", "Failed to verify merchant RSA2 signature", ex);
+            return false;
         }
     }
 
@@ -296,4 +331,7 @@ public class MerchantSignatureService {
         }
         return value;
     }
+
+    // Keep the historic in-memory default readable until those merchants are edited.
+    private static final java.util.Set<String> ACTIVE_STATUSES = java.util.Set.of("正常", "姝ｅ父", "ACTIVE", "ENABLED");
 }
