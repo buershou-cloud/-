@@ -162,7 +162,7 @@ public class ProfitSharingRecordService {
 
     /** The controller must verify/decrypt the whole split event before calling this method. */
     public synchronized void recordDouyinNotification(PaymentGatewayProperties.Channel channel, Map<String, Object> payload) {
-        if (payload.containsKey("finish_amount") || payload.containsKey("finish_description")) return;
+        if (DouyinProfitSharingState.hasFinishEvidence(payload)) return;
         String id = required(text(payload, "out_order_no"));
         String transaction = required(text(payload, "transaction_id"));
         PaymentStatus status = DouyinProfitSharingState.toPaymentStatus(payload, false);
@@ -374,7 +374,8 @@ public class ProfitSharingRecordService {
 
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> receivers(Map<String, Object> data) {
-        return data.get("receivers") instanceof List<?> list ? (List<Map<String, Object>>) list : List.of();
+        return data.get("receivers") instanceof List<?> list && list.stream().allMatch(item -> item instanceof Map<?, ?>)
+                ? (List<Map<String, Object>>) list : List.of();
     }
 
     private static Timestamp timestamp(String value) {

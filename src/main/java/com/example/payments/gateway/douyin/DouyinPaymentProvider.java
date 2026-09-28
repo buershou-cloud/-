@@ -329,7 +329,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         body.put("transaction_id", transactionId);
         body.put("out_order_no", sharingRequestId(request.outRequestNo()));
         body.put("receivers", douyinReceivers(channel, request.royaltyParameters()));
-        body.put("unfreeze_unsplit", booleanExtra(request.extra(), "unfreeze_unsplit", false));
+        body.put("unfreeze_unsplit", booleanExtra(request.extra(), "unfreeze_unsplit", true));
         putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
 
         DouyinGatewayResponse response = client.postSensitive(channel, PROFIT_SHARING_ORDER_PATH, body);
@@ -418,8 +418,12 @@ public class DouyinPaymentProvider implements PaymentProvider {
                 + "?mchid=" + query(channel.getDouyin().getMchId())
                 + "&transaction_id=" + query(transactionId);
         DouyinGatewayResponse response = client.get(channel, path);
+        boolean finishQuery = "FINISH".equalsIgnoreCase(extraText(request.extra(), "operation"));
+        if (finishQuery && responseData(response.body()).get("receivers") instanceof List<?> receivers && !receivers.isEmpty()) {
+            throw new GatewayException("DOUYIN_FINISH_QUERY_MISMATCH", "完结查询返回了分账接收方，请核对原完结请求号；不能认定剩余资金已解冻");
+        }
         return profitSharingResponse(
-                channel.getId(), response, request.outTradeNo(), transactionId, request.outRequestNo(), path
+                channel.getId(), response, request.outTradeNo(), transactionId, request.outRequestNo(), path, false, finishQuery
         );
     }
 
@@ -433,7 +437,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
         putIfText(body, "notify_url", firstText(extraText(request.extra(), "notify_url"), channel.getDouyin().getNotifyUrl()));
         DouyinGatewayResponse response = client.post(channel, PROFIT_SHARING_FINISH_PATH, body);
         return profitSharingResponse(
-                channel.getId(), response, request.outTradeNo(), request.tradeNo(), request.outRequestNo(), PROFIT_SHARING_FINISH_PATH, true
+                channel.getId(), response, request.outTradeNo(), request.tradeNo(), request.outRequestNo(), PROFIT_SHARING_FINISH_PATH, true, false
         );
     }
 
@@ -566,7 +570,7 @@ public class DouyinPaymentProvider implements PaymentProvider {
             String outOrderNo,
             String requestPath
     ) {
-        return profitSharingResponse(channelId, response, outTradeNo, transactionId, outOrderNo, requestPath, false);
+        return profitSharingResponse(channelId, response, outTradeNo, transactionId, outOrderNo, requestPath, false, false);
     }
 
     private static GatewayResponse profitSharingResponse(
@@ -576,19 +580,28 @@ public class DouyinPaymentProvider implements PaymentProvider {
             String transactionId,
             String outOrderNo,
             String requestPath,
-            boolean finishRequest
+            boolean finishRequest,
+            boolean finishQuery
     ) {
         Map<String, Object> raw = responseRaw(response, requestPath);
         Map<String, Object> data = responseData(response.body());
         raw.putIfAbsent("profit_sharing_out_order_no", firstText(text(data, "out_order_no"), outOrderNo));
         String state = firstText(text(data, "state"), text(data, "result"), "PROCESSING");
-        boolean finishResult = finishRequest || (data.containsKey("finish_amount") && data.containsKey("finish_description"));
+        boolean sharingQuery = requestPath.startsWith(PROFIT_SHARING_ORDER_PATH + "/");
+        boolean observedFinish = sharingQuery && DouyinProfitSharingState.hasFinishEvidence(data);
+        boolean finishResult = finishRequest || finishQuery || observedFinish;
         if (finishResult) {
             raw.put("profit_sharing_operation", "FINISH");
+        } else if (sharingQuery || PROFIT_SHARING_ORDER_PATH.equals(requestPath)) {
+            raw.put("profit_sharing_operation", "SPLIT");
         }
         PaymentStatus status = DouyinProfitSharingState.toPaymentStatus(
-                data, finishResult || requestPath.startsWith(PROFIT_SHARING_RETURN_PATH));
-        String defaultMessage = switch (status) {
+                data, finishRequest || observedFinish || requestPath.startsWith(PROFIT_SHARING_RETURN_PATH));
+        String defaultMessage = finishResult ? switch (status) {
+            case SUCCESS -> "抖音剩余资金解冻成功";
+            case FAILED -> "抖音剩余资金解冻失败，请使用原完结请求号核对结果";
+            default -> "抖音剩余资金解冻处理中，请使用原完结请求号查询结果";
+        } : switch (status) {
             case SUCCESS -> "抖音分账处理成功";
             case FAILED -> "抖音分账存在失败结果，请核对各接收方明细；部分接收方可能已到账";
             default -> "抖音分账处理中，请使用原请求号查询结果";

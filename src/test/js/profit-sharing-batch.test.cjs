@@ -21,7 +21,8 @@ const names = [
   'profitShareMoneyFromUnits', 'prepareSelectedProfitShares', 'confirmSelectedProfitShares',
   'submitSelectedProfitShares', 'renderProfitShareBatchResults', 'gatewayFailed',
   'gatewayFailure', 'gatewayAttemptsText', 'confirmSingleProfitShare', 'sendSingleProfitShare', 'openBatchProfitShareOrder',
-  'matchingDouyinProfitShareResponse', 'reconcileDouyinProfitShare', 'douyinProfitQueryPayload', 'queryProfitShare'
+  'matchingDouyinProfitShareResponse', 'reconcileDouyinProfitShare', 'douyinProfitQueryPayload', 'queryProfitShare',
+  'syncProfitShareFinishRequest', 'readProfitShareFinish', 'profitShareFinishKey'
 ];
 const order = (number, extra = {}) => ({ outTradeNo: `ORDER-${number}`, tradeNo: `TRADE-${number}`,
   channelId: 'ali-main', amount: 10, amountText: '10.00', status: 'COMPLETED', profitShared: false, ...extra });
@@ -293,11 +294,19 @@ test('batch session storage never persists receiver details or authorization', a
 });
 
 test('Douyin batch retains amount and unfreeze options', async () => {
-  const t = setup({ provider: 'DOUYIN' });
-  t.elements.profitShareAmount.value = '2';
-  t.elements.profitShareUnfreezeUnsplit.value = 'true';
-  await t.ctx.submitSelectedProfitShares();
-  assert.ok(t.calls.every(call => payload(call).royaltyParameters[0].amount === 2 && payload(call).extra.unfreeze_unsplit === true));
+  for (const unfreeze of [true, false]) {
+    const t = setup({ provider: 'DOUYIN' });
+    t.elements.profitShareAmount.value = '2';
+    t.elements.profitShareUnfreezeUnsplit.value = String(unfreeze);
+    await t.ctx.submitSelectedProfitShares();
+    assert.equal(t.calls.length, 2);
+    assert.ok(t.calls.every(call => payload(call).royaltyParameters.length === 1
+      && payload(call).royaltyParameters[0].amount === 2 && payload(call).extra.unfreeze_unsplit === unfreeze));
+    assert.match(t.confirmations[0].valueNote, unfreeze ? /完成后解冻.*不能再次分账/ : /保留冻结/);
+    t.elements.profitShareUnfreezeUnsplit.value = String(!unfreeze);
+    await t.ctx.openBatchProfitShareOrder('ORDER-1');
+    assert.equal(t.elements.profitShareUnfreezeUnsplit.value, String(unfreeze));
+  }
 });
 
 const douyinResponse = (body, status = 'PENDING') => ({ status, channelId: body.channelIds[0],

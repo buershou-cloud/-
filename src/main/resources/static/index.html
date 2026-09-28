@@ -2680,6 +2680,13 @@
                     <input id="profitShareAmount" type="number" min="0.01" max="100" step="0.01" placeholder="例如 30">
                   </label>
                   <label class="wide">分账说明<input id="profitShareDesc" value="订单分账"></label>
+                  <label id="profitShareUnfreezeField" class="wide hidden">抖音剩余资金
+                    <select id="profitShareUnfreezeUnsplit">
+                      <option value="true" selected>本次分账完成后解冻剩余</option>
+                      <option value="false">保留冻结，之后继续分账</option>
+                    </select>
+                    <span class="hint">解冻后，该订单不能再次分账。若还要给其他收入方分账，请选择保留冻结。</span>
+                  </label>
                 </div>
                 <details class="advanced-options">
                   <summary>高级选项</summary>
@@ -2687,12 +2694,6 @@
                     <label>请求号前缀<input id="profitShareOutRequestPrefix" value="PS" maxlength="16" pattern="[A-Za-z0-9_]+"></label>
                     <label>操作员 ID<input id="profitShareOperatorId" placeholder="可选"></label>
                     <label>App Auth Token<input id="profitShareAppAuthToken" placeholder="服务商模式填写"></label>
-                    <label id="profitShareUnfreezeField" class="hidden">抖音剩余资金
-                      <select id="profitShareUnfreezeUnsplit">
-                        <option value="false">保留，后续继续分账</option>
-                        <option value="true">本次提交后解冻</option>
-                      </select>
-                    </label>
                     <label class="wide">扩展参数 JSON<textarea id="profitShareExtra">{}</textarea></label>
                   </div>
                 </details>
@@ -2712,9 +2713,11 @@
               </details>
               <details id="douyinProfitAdvanced" class="advanced-options hidden">
                 <summary>抖音分账高级操作</summary>
+                <fieldset id="profitShareAdvancedFields" class="profit-share-fields">
                 <div class="form-grid">
                   <label>抖音交易单号<input id="profitShareTradeNo" placeholder="选择订单后自动填写"></label>
                   <label>分账请求号<input id="profitShareQueryOutRequestNo" placeholder="提交后自动填写"></label>
+                  <label class="wide">解冻请求号<input id="profitShareFinishRequestNo" placeholder="结束分账后自动保存；查询历史解冻可填写原请求号"></label>
                   <label>回退请求号<input id="profitShareReturnNo" placeholder="留空自动生成"></label>
                   <label>回退接收方商户号<input id="profitShareReturnAccount" placeholder="仅支持商户号"></label>
                   <label>回退金额<input id="profitShareReturnAmount" type="number" min="0.01" step="0.01"></label>
@@ -2723,10 +2726,13 @@
                 <div class="form-actions">
                   <button class="btn secondary" id="queryProfitShareBtn" type="button">查询结果</button>
                   <button class="btn secondary" id="profitShareRemainingBtn" type="button">查询剩余金额</button>
-                  <button class="btn secondary" id="finishProfitShareBtn" type="button">完成分账</button>
+                  <button class="btn secondary" id="finishProfitShareBtn" type="button">结束分账并解冻剩余</button>
+                  <button class="btn secondary" id="queryProfitShareFinishBtn" type="button">查询解冻结果</button>
                   <button class="btn secondary" id="returnProfitShareBtn" type="button">提交回退</button>
                   <button class="btn secondary" id="queryProfitShareReturnBtn" type="button">查询回退</button>
                 </div>
+                <p class="hint">仅在该订单不再需要分账时结束。分账处理中请先查询分账结果；解冻提交后请用原解冻请求号查询，勿重新分账。请求号保留在当前标签页会话中，关闭前请保存。</p>
+                </fieldset>
               </details>
             </div>
           </section>
@@ -5179,6 +5185,7 @@
       const douyin = channelById(order.channelId)?.provider === "DOUYIN";
       $("profitShareAmount").value = douyin || $("profitShareMode").value === "AMOUNT" ? (order.amount ?? "") : "100";
       $("profitShareTradeNo").value = order.tradeNo || "";
+      syncProfitShareFinishRequest();
       $("profitShareDesc").value = `订单 ${order.outTradeNo} 分账`;
       loadProfitSharingRelations(order.channelId, true).catch((error) => setProfitShareResult(error));
     }
@@ -5510,7 +5517,7 @@
       kind: "batch", title: "确认批量分账", subtitle: "仅处理下列已勾选订单，不处理整个通道",
       badge: `${plans.length} 笔订单`, valueLabel: "本批预计分账合计",
       value: `¥ ${profitShareMoneyFromUnits(plans.reduce((sum, plan) => sum + plan.units, 0n))}`,
-      valueNote: `${rule}；最终以支付平台校验结果为准`,
+      valueNote: `${rule}；最终以支付平台校验结果为准${channel?.provider === "DOUYIN" ? `。剩余资金：${payload.extra?.unfreeze_unsplit === true ? "本次分账完成后解冻，每笔订单解冻后不能再次分账" : "保留冻结，之后继续分账"}` : ""}`,
       order: `已选择 ${plans.length} 笔${shared ? `，其中 ${shared} 笔曾分账` : ""}`,
       channel: channel?.name || channel?.channelName || payload.channelIds[0],
       receiver: receiver.receiver_name || receiver.trans_in,
@@ -5601,7 +5608,9 @@
       badge: review ? "人工核对" : retry ? "原请求重试" : "新增分账",
       valueLabel: review ? "操作类型" : percentage ? "本次分账比例" : "本次分账金额",
       value: review ? "解除新增限制" : percentage ? `${receiver.amount_percentage}%` : `¥ ${receiver.amount}`,
-      valueNote: review ? "此操作本身不会发起资金划拨" : percentage ? "按订单总金额计算，非剩余可分账金额" : "币种：人民币（元）",
+      valueNote: review ? "此操作本身不会发起资金划拨" : channel?.provider === "DOUYIN"
+        ? `币种：人民币（元）。剩余资金：${payload.extra?.unfreeze_unsplit === true ? "本次分账完成后解冻；解冻后该订单不能再次分账" : "保留冻结，之后继续分账"}`
+        : percentage ? "按订单总金额计算，非剩余可分账金额" : "币种：人民币（元）",
       order: payload.outTradeNo,
       channel: channel?.name || channel?.channelName || channelId || "—",
       receiver: receiver?.receiver_name || receiver?.trans_in || "",
@@ -5660,10 +5669,11 @@
 
   function setSingleProfitShareBusy(busy) {
     state.singleProfitShareBusy = busy;
-    ["shareSingleBtn", "retrySingleProfitShareBtn", "reviewSingleProfitShareBtn", "shareChannelBtn"].forEach(id => {
+    ["shareSingleBtn", "retrySingleProfitShareBtn", "reviewSingleProfitShareBtn", "shareChannelBtn", "finishProfitShareBtn", "queryProfitShareFinishBtn"].forEach(id => {
       $(id).disabled = busy;
     });
     $("profitShareFormFields").disabled = busy;
+    $("profitShareAdvancedFields").disabled = busy;
     renderProfitShareOrders();
     if (state.profitShareBatchResults?.length) renderProfitShareBatchResults();
   }
@@ -5710,6 +5720,7 @@
       $("profitShareLastRequestNo").value = attempt.outRequestNo;
       $("profitShareQueryOutRequestNo").value = attempt.outRequestNo;
       $("profitShareTradeNo").value = payload.tradeNo || "";
+      syncProfitShareFinishRequest();
       setProfitShareResult({ message: `正在${retry ? "重试原" : "提交新"}分账，请勿重复操作。请求号：${attempt.outRequestNo}` });
       const data = await request("/api/v1/payments/profit-sharing", { method: "POST", body });
       if (!data || typeof data !== "object" || !["SUCCESS", "PENDING", "PAYING", "FAILED", "UNKNOWN", "CREATED", "CLOSED"].includes(data.status)) {
@@ -5730,7 +5741,7 @@
         saveSingleProfitShare(key, attempt);
       }
       if (gatewayFailed(data)) throw gatewayFailure("分账", data);
-      setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n${data.status === "SUCCESS" ? "分账接口已受理；如需额外分账，请明确新增一笔。" : "分账结果尚未确认，请核对原请求，不要重新生成请求号。"}`, response: data });
+      setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n${data.status === "SUCCESS" ? (channelById(payload.channelIds?.[0])?.provider === "DOUYIN" && payload.extra?.unfreeze_unsplit === true ? "分账返回成功，已按本次分账完成后解冻剩余资金提交；请核对平台资金状态，解冻后不可再分账。" : "分账接口已受理；如需额外分账，请明确新增一笔。") : "分账结果尚未确认，请核对原请求，不要重新生成请求号。"}`, response: data });
       // Refresh failure must not turn an accepted transfer into a failed transfer.
       try { await loadOrders(); } catch (error) {
         setProfitShareResult({ message: `请求号：${attempt.outRequestNo}\n分账返回状态：${data.status}；订单列表刷新失败，请单独刷新列表，不要因此重复分账。`, response: data });
@@ -5872,6 +5883,7 @@
       $("profitShareOutTradeNo").value = payload.outTradeNo;
       $("profitShareChannel").value = item.channelId;
       $("profitShareTradeNo").value = payload.tradeNo || "";
+      syncProfitShareFinishRequest();
       $("profitShareMode").value = receiver.amount_percentage != null ? "PERCENTAGE" : "AMOUNT";
       $("profitShareAmount").value = receiver.amount_percentage ?? receiver.amount;
       $("profitShareDesc").value = receiver.desc || "";
@@ -5975,21 +5987,143 @@
     setProfitShareResult({ message: "抖音剩余待分金额查询完成", response: data });
   }
 
-  async function finishProfitShare() {
+  function profitShareFinishKey(payload) {
+    return `payment.profit-share-finish.v1:${JSON.stringify([payload.channelIds[0], payload.tradeNo])}`;
+  }
+
+  function readProfitShareFinish(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const record = JSON.parse(raw);
+      if (!/^[A-Za-z0-9_*-]{6,32}$/.test(record.outRequestNo || "") || typeof record.outTradeNo !== "string"
+          || !["UNCONFIRMED", "PENDING", "SUCCESS", "FAILED"].includes(record.status)) throw new Error();
+      return record;
+    } catch (error) {
+      throw { message: "无法读取原解冻请求号，已停止操作。请先核对支付平台，不要清除记录后重新提交。" };
+    }
+  }
+
+  function saveProfitShareFinish(key, record) {
+    try {
+      // Identity and status only; never persist payment credentials or receiver details.
+      sessionStorage.setItem(key, JSON.stringify({ outRequestNo: record.outRequestNo, outTradeNo: record.outTradeNo, status: record.status }));
+    } catch (error) {
+      throw { message: "无法保存解冻请求记录。请保存已显示的解冻请求号并查询原请求，不要重新分账。" };
+    }
+  }
+
+  function syncProfitShareFinishRequest() {
+    $("profitShareFinishRequestNo").value = "";
+    const channelId = $("profitShareChannel").value;
+    const tradeNo = $("profitShareTradeNo").value.trim();
+    if (channelById(channelId)?.provider !== "DOUYIN" || !tradeNo) return;
+    const record = readProfitShareFinish(profitShareFinishKey({ channelIds: [channelId], tradeNo }));
+    $("profitShareFinishRequestNo").value = record?.outRequestNo || "";
+  }
+
+  function profitShareFinishPayload() {
     const payload = douyinProfitQueryPayload(false);
-    const data = await request("/api/v1/payments/profit-sharing/finish", {
-      method: "POST",
-      body: JSON.stringify({
-        outTradeNo: payload.outTradeNo,
-        tradeNo: payload.tradeNo,
-        outRequestNo: `PSF_${Date.now()}`,
-        description: "完成分账并解冻剩余资金",
-        channelIds: payload.channelIds,
-        extra: {}
-      })
-    });
-    if (gatewayFailed(data)) throw gatewayFailure("完成抖音分账", data);
-    setProfitShareResult({ message: "完成分账请求已提交", response: data });
+    payload.outRequestNo = "";
+    const channelId = payload.channelIds[0];
+    const order = state.orders.find(item => item.channelId === channelId && item.tradeNo === payload.tradeNo);
+    const namedOrder = state.orders.find(item => item.outTradeNo === payload.outTradeNo);
+    if ((namedOrder && (namedOrder.channelId !== channelId || namedOrder.tradeNo !== payload.tradeNo))
+        || (order && payload.outTradeNo && order.outTradeNo !== payload.outTradeNo)) {
+      throw { message: "订单号、抖音交易单号和通道不一致，请重新选择原订单后操作。" };
+    }
+    payload.outTradeNo = order?.outTradeNo || payload.outTradeNo;
+    return payload;
+  }
+
+  function showProfitShareFinishResult(payload, data, key) {
+    const matching = data?.channelId === payload.channelIds[0] && data.tradeNo === payload.tradeNo
+      && (data.outTradeNo || "") === (payload.outTradeNo || "")
+      && data.raw?.profit_sharing_out_order_no === payload.outRequestNo
+      && data.raw?.profit_sharing_operation === "FINISH";
+    const knownStatus = matching && ["SUCCESS", "PENDING", "FAILED"].includes(data?.status);
+    if (knownStatus) {
+      const previous = readProfitShareFinish(key);
+      if (!previous || (previous.outRequestNo === payload.outRequestNo && (previous.status !== "SUCCESS" || data.status === "SUCCESS"))) {
+        saveProfitShareFinish(key, { outRequestNo: payload.outRequestNo, outTradeNo: payload.outTradeNo, status: data.status });
+      }
+    }
+    const message = !knownStatus ? "尚未确认解冻结果，请继续查询原解冻请求或核对支付平台。"
+      : data.status === "SUCCESS" ? "已确认结束分账并解冻剩余资金，该订单不能再次分账。"
+      : data.status === "PENDING" ? "解冻请求已提交，平台处理中；请继续查询原解冻请求。"
+      : "解冻返回失败，请查询原解冻请求或核对支付平台；不要重新分账。";
+    setProfitShareResult({ message: `解冻请求号：${payload.outRequestNo}\n${message}`, response: data });
+  }
+
+  async function queryProfitShareFinish() {
+    if (state.singleProfitShareBusy) return;
+    setSingleProfitShareBusy(true);
+    let payload;
+    try {
+      payload = profitShareFinishPayload();
+      const key = profitShareFinishKey(payload);
+      const record = readProfitShareFinish(key);
+      payload.outRequestNo = $("profitShareFinishRequestNo").value.trim() || record?.outRequestNo || "";
+      if (!/^[A-Za-z0-9_*-]{6,32}$/.test(payload.outRequestNo)) throw { message: "请填写 6–32 位原解冻请求号，仅限字母、数字、下划线、短横线和星号。" };
+      if (record?.outRequestNo === payload.outRequestNo) payload.outTradeNo = record.outTradeNo;
+      $("profitShareFinishRequestNo").value = payload.outRequestNo;
+      payload.extra = { operation: "FINISH" };
+      const data = await request("/api/v1/payments/profit-sharing/query", { method: "POST", body: JSON.stringify(payload) });
+      showProfitShareFinishResult(payload, data, key);
+    } catch (error) {
+      throw { message: `${error?.message || "解冻结果查询异常"}${payload?.outRequestNo ? `\n原解冻请求号：${payload.outRequestNo}。请继续查询原请求，不要重新分账。` : ""}`, response: error?.response };
+    } finally {
+      setSingleProfitShareBusy(false);
+    }
+  }
+
+  async function finishProfitShare() {
+    if (state.singleProfitShareBusy) return;
+    setSingleProfitShareBusy(true);
+    let payload;
+    try {
+      payload = profitShareFinishPayload();
+      const key = profitShareFinishKey(payload);
+      let record = readProfitShareFinish(key);
+      if (record) {
+        payload.outRequestNo = record.outRequestNo;
+        payload.outTradeNo = record.outTradeNo;
+        $("profitShareFinishRequestNo").value = record.outRequestNo;
+        payload.extra = { operation: "FINISH" };
+        const data = await request("/api/v1/payments/profit-sharing/query", { method: "POST", body: JSON.stringify(payload) });
+        showProfitShareFinishResult(payload, data, key);
+        return;
+      }
+      if (payload.outTradeNo) {
+        const split = readSingleProfitShare(singleProfitShareKey({ outTradeNo: payload.outTradeNo, channelId: payload.channelIds[0] }));
+        if (split?.status === "UNCONFIRMED") throw { message: `该订单分账请求 ${split.outRequestNo} 尚未核对，请先查询分账结果或核对支付平台，再结束分账。` };
+      }
+      if (!window.crypto?.getRandomValues) throw { message: "浏览器不支持安全请求号生成，请使用新版浏览器" };
+      const bytes = window.crypto.getRandomValues(new Uint8Array(12));
+      payload.outRequestNo = `PSF_${Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("")}`;
+      const channel = channelById(payload.channelIds[0]);
+      if (!await openProfitShareConfirm({
+        kind: "finish", title: "结束分账并解冻剩余", subtitle: "请确认该订单已不再需要向其他收入方分账",
+        badge: "解冻剩余", valueLabel: "操作类型", value: "结束该订单分账",
+        valueNote: `抖音交易单号：${payload.tradeNo}`, order: payload.outTradeNo || "仅按抖音交易单号操作",
+        channel: channel?.name || channel?.channelName || payload.channelIds[0], request: payload.outRequestNo,
+        noticeTitle: "解冻后，该订单不能再次分账",
+        notice: "此操作不新增接收方分账。请先确认已有分账的最终结果；提交后使用原解冻请求号查询，不要重复分账。",
+        confirmText: "确认结束并解冻剩余"
+      })) return;
+      $("profitShareFinishRequestNo").value = payload.outRequestNo;
+      record = { outRequestNo: payload.outRequestNo, outTradeNo: payload.outTradeNo, status: "UNCONFIRMED" };
+      saveProfitShareFinish(key, record);
+      setProfitShareResult({ message: `正在提交解冻请求，请勿重复操作。解冻请求号：${payload.outRequestNo}` });
+      const data = await request("/api/v1/payments/profit-sharing/finish", {
+        method: "POST", body: JSON.stringify({ ...payload, description: "完成分账并解冻剩余资金" })
+      });
+      showProfitShareFinishResult(payload, data, key);
+    } catch (error) {
+      throw { message: `${error?.message || "解冻操作异常"}${payload?.outRequestNo ? `\n原解冻请求号：${payload.outRequestNo}。请保存并查询原请求，不要重新分账。` : ""}`, response: error?.response };
+    } finally {
+      setSingleProfitShareBusy(false);
+    }
   }
 
   async function returnProfitShare() {
@@ -7878,6 +8012,7 @@
       state.selectedProfitShareOrders.clear();
       renderProfitShareOrders();
       syncProfitShareModeFields();
+      syncProfitShareFinishRequest();
       await loadProfitSharingRelations($("profitShareChannel").value);
     } catch (error) {
       setProfitShareResult(error);
@@ -7887,6 +8022,10 @@
   $("profitShareTransIn").addEventListener("change", syncProfitShareRelationType);
 
   $("profitShareMode").addEventListener("change", syncProfitShareModeFields);
+
+  $("profitShareTradeNo").addEventListener("change", () => {
+    try { syncProfitShareFinishRequest(); } catch (error) { setProfitShareResult(error); }
+  });
 
   $("refreshProfitRelationsBtn").addEventListener("click", async () => {
     try {
@@ -7930,6 +8069,10 @@
 
   $("finishProfitShareBtn").addEventListener("click", async () => {
     try { await finishProfitShare(); } catch (error) { setProfitShareResult(error); }
+  });
+
+  $("queryProfitShareFinishBtn").addEventListener("click", async () => {
+    try { await queryProfitShareFinish(); } catch (error) { setProfitShareResult(error); }
   });
 
   $("returnProfitShareBtn").addEventListener("click", async () => {

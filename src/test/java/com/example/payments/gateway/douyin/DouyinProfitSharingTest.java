@@ -12,18 +12,25 @@ import com.example.payments.domain.ProfitSharingRequest;
 import com.example.payments.domain.ProfitSharingReturnQueryRequest;
 import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.gateway.GatewayException;
+import com.example.payments.order.DemoOrderService;
+import com.example.payments.sharing.ProfitSharingRecordService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -47,7 +54,7 @@ class DouyinProfitSharingTest {
     private final PaymentGatewayProperties.Channel channel = channel();
 
     @Test
-    void submitsExactDirectMerchantRequestAndKeepsRemainingFundsFrozenByDefault() {
+    void submitsExactDirectMerchantRequestAndUnfreezesRemainingFundsByDefault() {
         when(client.postSensitive(any(), eq(ORDERS), anyMap()))
                 .thenReturn(response(Map.of("state", "PROCESSING", "out_order_no", "SPLIT_1001")));
 
@@ -58,10 +65,40 @@ class DouyinProfitSharingTest {
         verify(client).postSensitive(eq(channel), eq(ORDERS), body.capture());
         assertThat(body.getValue()).isEqualTo(Map.of(
                 "appid", "dy-app-1", "mchid", "dy-mch-1", "transaction_id", "DY1001",
-                "out_order_no", "SPLIT_1001", "unfreeze_unsplit", false,
+                "out_order_no", "SPLIT_1001", "unfreeze_unsplit", true,
                 "notify_url", "https://merchant.example.com/api/v1/douyin/notify/douyin-test",
                 "receivers", List.of(Map.of("type", "PERSONAL_OPENID", "account", "receiver-openid",
                         "amount", 123L, "description", "合作方分账"))));
+    }
+
+    @ParameterizedTest
+    @MethodSource("unfreezeOptions")
+    void defaultUnfreezePreservesExplicitChoicesAndNeverChangesRequest(Map<String, Object> extra, boolean expected) {
+        when(client.postSensitive(any(), eq(ORDERS), anyMap()))
+                .thenReturn(response(Map.of("state", "PROCESSING")));
+        Map<String, Object> before = extra == null ? null : new LinkedHashMap<>(extra);
+        ProfitSharingRequest request = new ProfitSharingRequest("ORDER-1001", "DY1001", "SPLIT_1001",
+                List.of(receiver("1.23")), null, null, List.of("douyin-test"), extra);
+
+        provider.profitSharing(channel, request);
+
+        ArgumentCaptor<Map<String, Object>> body = bodyCaptor();
+        verify(client).postSensitive(eq(channel), eq(ORDERS), body.capture());
+        assertThat(body.getValue()).containsEntry("unfreeze_unsplit", expected);
+        assertThat(receivers(body.getValue())).singleElement().satisfies(value -> assertThat(value).containsEntry("amount", 123L));
+        assertThat(request.extra()).isSameAs(extra).isEqualTo(before);
+    }
+
+    private static Stream<Arguments> unfreezeOptions() {
+        return Stream.of(
+                Arguments.of(null, true),
+                Arguments.of(Map.of(), true),
+                Arguments.of(Collections.singletonMap("unfreeze_unsplit", null), true),
+                Arguments.of(Map.of("unfreeze_unsplit", false), false),
+                Arguments.of(Map.of("unfreeze_unsplit", true), true),
+                Arguments.of(Map.of("unfreeze_unsplit", "false"), false),
+                Arguments.of(Map.of("unfreeze_unsplit", "TrUe"), true)
+        );
     }
 
     @Test
@@ -201,7 +238,20 @@ class DouyinProfitSharingTest {
         verify(client).post(eq(channel), eq(FINISH), body.capture());
         assertThat(body.getValue()).containsEntry("transaction_id", "DY1001")
                 .containsEntry("out_order_no", "FINISH_1001").containsEntry("mchid", "dy-mch-1")
-                .containsEntry("description", "全部完成");
+                .containsEntry("description", "全部完成").doesNotContainKeys("receivers", "unfreeze_unsplit");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"FINISHED,SUCCESS,解冻成功", "PROCESSING,PENDING,解冻处理中", "FAILED,FAILED,解冻失败"})
+    void finishMessagesDescribeUnfreezingAndItsActualState(String upstreamState, PaymentStatus expected, String message) {
+        when(client.post(any(), eq(FINISH), anyMap())).thenReturn(response(Map.of("state", upstreamState)));
+
+        GatewayResponse result = provider.finishProfitSharing(channel, new ProfitSharingFinishRequest(
+                "ORDER-1001", "DY1001", "FINISH_1001", "全部完成", List.of("douyin-test"), Map.of()));
+
+        assertThat(result.status()).isEqualTo(expected);
+        assertThat(result.message()).contains("剩余资金", message).doesNotContain("分账处理成功", "接收方");
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
     }
 
     @Test
@@ -226,6 +276,140 @@ class DouyinProfitSharingTest {
 
         assertThat(result.status()).isEqualTo(PaymentStatus.SUCCESS);
         assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"finish_amount", "finish_description"})
+    void eitherFinishMarkerPreventsQueryFromCreatingASplitRecord(String marker) {
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("state", "FINISHED");
+        data.put(marker, "finish_amount".equals(marker) ? 123 : "解冻剩余资金");
+        when(client.get(channel, QUERY)).thenReturn(response(Map.of("data", data)));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, query("SPLIT_1001"));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
+        assertThat(result.message()).contains("剩余资金解冻成功");
+        DemoOrderService orders = new DemoOrderService();
+        ProfitSharingRecordService records = new ProfitSharingRecordService(orders);
+        records.recordQuery(channel, query("SPLIT_1001"), result);
+        assertThat(records.search(null, null, null, null, null)).isEmpty();
+        assertThat(orders.recent()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void splitPostNeverBecomesFinishWhenPlatformAlsoReportsUnfreezing(boolean includesReceivers) {
+        Map<String, Object> data = new LinkedHashMap<>(Map.of("state", "FINISHED", "finish_amount", 500,
+                "finish_description", "自动解冻剩余资金"));
+        if (includesReceivers) data.put("receivers", List.of(Map.of("result", "SUCCESS", "amount", 123)));
+        when(client.postSensitive(any(), eq(ORDERS), anyMap())).thenReturn(response(data));
+
+        GatewayResponse result = provider.profitSharing(channel, split("SPLIT_1001", List.of(receiver("1.23"))));
+
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "SPLIT");
+        assertThat(result.status()).isEqualTo(includesReceivers ? PaymentStatus.SUCCESS : PaymentStatus.PENDING);
+    }
+
+    @Test
+    void queryWithReceiversAndUnfreezeFieldsRecordsTheSplitAmountOnly() {
+        Map<String, Object> data = Map.of("state", "FINISHED", "finish_amount", 500, "finish_description", "自动解冻",
+                "receivers", List.of(Map.of("result", "SUCCESS", "account", "receiver-account", "amount", 123)));
+        when(client.get(channel, QUERY)).thenReturn(response(Map.of("data", data)));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, query("SPLIT_1001"));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "SPLIT");
+        ProfitSharingRecordService records = new ProfitSharingRecordService(new DemoOrderService());
+        records.recordQuery(channel, query("SPLIT_1001"), result);
+        assertThat(records.search(null, null, null, null, null)).hasSize(1)
+                .allSatisfy(record -> assertThat(record.amount()).isEqualByComparingTo("1.23"));
+    }
+
+    @ParameterizedTest
+    @MethodSource("malformedReceivers")
+    void malformedReceiversWithFinishFieldsRemainUnconfirmed(Object receivers) {
+        Map<String, Object> data = new LinkedHashMap<>(Map.of("state", "FINISHED", "finish_amount", 500));
+        data.put("receivers", receivers);
+        when(client.get(channel, QUERY)).thenReturn(response(data));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, query("SPLIT_1001"));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "SPLIT");
+        ProfitSharingRecordService records = new ProfitSharingRecordService(new DemoOrderService());
+        records.recordQuery(channel, query("SPLIT_1001"), result);
+        assertThat(records.search(null, null, null, null, null)).hasSize(1)
+                .allMatch(record -> "PENDING".equals(record.status()) && record.amount() == null);
+    }
+
+    private static Stream<Arguments> malformedReceivers() {
+        return Stream.of(Arguments.of("invalid"),
+                Arguments.of(Map.of("result", "SUCCESS")), Arguments.of(List.of("invalid")));
+    }
+
+    @Test
+    void nullReceiversAndZeroFinishAmountAreValidFinishEvidence() {
+        Map<String, Object> data = new LinkedHashMap<>(Map.of("state", "FINISHED", "finish_amount", BigDecimal.ZERO));
+        data.put("receivers", null);
+        when(client.get(channel, QUERY)).thenReturn(response(data));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, query("SPLIT_1001"));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.SUCCESS);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NULL", "", "bad", "-1"})
+    void nullEmptyOrInvalidFinishMarkersCannotConfirmUnfreezing(String amount) {
+        Map<String, Object> data = new LinkedHashMap<>(Map.of("state", "FINISHED"));
+        data.put("finish_amount", "NULL".equals(amount) ? null : amount);
+        data.put("finish_description", "NULL".equals(amount) ? null : " ");
+        when(client.get(channel, QUERY)).thenReturn(response(data));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, query("SPLIT_1001"));
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "SPLIT");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"PROCESSING", "FINISHED", "SUCCESS"})
+    void finishQueryHintAloneCannotProveUnfreezingOrCreateASplitRecord(String state) {
+        when(client.get(channel, QUERY)).thenReturn(response(Map.of("state", state)));
+        ProfitSharingQueryRequest request = new ProfitSharingQueryRequest("ORDER-1001", "DY1001", "SPLIT_1001", null,
+                List.of("douyin-test"), Map.of("operation", "FINISH"));
+
+        GatewayResponse result = provider.queryProfitSharing(channel, request);
+
+        assertThat(result.status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
+        ProfitSharingRecordService records = new ProfitSharingRecordService(new DemoOrderService());
+        records.recordQuery(channel, request, result);
+        assertThat(records.search(null, null, null, null, null)).isEmpty();
+        assertThat(request.extra()).containsExactlyEntriesOf(Map.of("operation", "FINISH"));
+    }
+
+    @Test
+    void finishQueryHintPreservesConfirmedFailure() {
+        when(client.get(channel, QUERY)).thenReturn(response(Map.of("state", "FAILED")));
+        GatewayResponse result = provider.queryProfitSharing(channel, new ProfitSharingQueryRequest("ORDER-1001", "DY1001",
+                "SPLIT_1001", null, List.of("douyin-test"), Map.of("operation", "FINISH")));
+        assertThat(result.status()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(result.raw()).containsEntry("profit_sharing_operation", "FINISH");
+    }
+
+    @Test
+    void finishQueryHintConflictingWithRecipientsCannotClaimUnfreezingSucceeded() {
+        when(client.get(channel, QUERY)).thenReturn(response(Map.of("state", "FINISHED", "finish_amount", 500,
+                "receivers", List.of(Map.of("result", "SUCCESS")))));
+        ProfitSharingQueryRequest request = new ProfitSharingQueryRequest("ORDER-1001", "DY1001", "SPLIT_1001", null,
+                List.of("douyin-test"), Map.of("operation", "FINISH"));
+        assertThatThrownBy(() -> provider.queryProfitSharing(channel, request))
+                .isInstanceOf(GatewayException.class).hasMessageContaining("不能认定剩余资金已解冻");
     }
 
     @Test

@@ -13,7 +13,8 @@ const functions = [
   'saveSingleProfitShare', 'newSingleProfitShareRequestNo', 'canonicalProfitShare',
   'singleProfitShareFingerprint', 'confirmSingleProfitShare', 'setSingleProfitShareBusy',
   'sendSingleProfitShare', 'reviewSingleProfitShare', 'gatewayFailed',
-  'gatewayFailure', 'gatewayAttemptsText', 'matchingDouyinProfitShareResponse'
+  'gatewayFailure', 'gatewayAttemptsText', 'matchingDouyinProfitShareResponse',
+  'syncProfitShareFinishRequest', 'readProfitShareFinish', 'profitShareFinishKey'
 ];
 
 function pageFunction(name) {
@@ -251,13 +252,19 @@ test('retry of a different order cannot reuse another order request', async () =
 });
 
 test('Douyin keeps amount and unfreeze options while gaining stable retry identity', async () => {
-  const { ctx, calls, elements } = setup({ provider: 'DOUYIN', request: timeout });
-  elements.profitShareUnfreezeUnsplit.value = 'true';
-  await rejection(ctx.submitSingleProfitShare(), /请求超时/);
-  await rejection(ctx.sendSingleProfitShare(true), /请求超时/);
-  assert.equal(payload(calls[0]).royaltyParameters[0].amount, 20);
-  assert.equal(payload(calls[0]).extra.unfreeze_unsplit, true);
-  assert.equal(calls[0].body, calls[1].body);
+  for (const unfreeze of [true, false]) {
+    const { ctx, calls, elements, confirmations } = setup({ provider: 'DOUYIN', request: timeout });
+    elements.profitShareUnfreezeUnsplit.value = String(unfreeze);
+    await rejection(ctx.submitSingleProfitShare(), /请求超时/);
+    elements.profitShareUnfreezeUnsplit.value = String(!unfreeze);
+    await rejection(ctx.sendSingleProfitShare(true), /请求超时/);
+    assert.equal(payload(calls[0]).royaltyParameters[0].amount, 20);
+    assert.equal(payload(calls[0]).extra.unfreeze_unsplit, unfreeze);
+    assert.equal(calls[0].body, calls[1].body);
+    for (const confirmation of confirmations) {
+      assert.match(JSON.parse(confirmation).valueNote, unfreeze ? /完成后解冻.*不能再次分账/ : /保留冻结/);
+    }
+  }
 });
 
 test('acknowledged Douyin pending requests stay blocked against replay after page reload', async () => {
