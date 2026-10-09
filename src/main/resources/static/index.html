@@ -2154,8 +2154,11 @@
     }
 
     .payout-query-feedback {
-      margin: 0;
-      max-height: none;
+      display: inline-block;
+      margin-left: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     .work-grid {
@@ -2604,7 +2607,6 @@
           <section class="panel wide-panel">
             <div class="panel-head"><h2 class="panel-title">代付记录</h2></div>
             <div class="panel-body">
-              <pre id="payoutQueryResult" class="operation-result payout-query-feedback" role="status" aria-live="polite" hidden></pre>
               <div class="table-wrap">
                 <table>
                   <thead><tr><th>代付单号</th><th>平台</th><th>通道</th><th>收款人</th><th>金额</th><th>状态</th><th>平台单号</th><th>结果</th><th>时间</th><th>操作</th></tr></thead>
@@ -3480,7 +3482,6 @@
     profitShareBatchResults: [],
     payouts: [],
     payoutQueries: new Map(),
-    payoutQueryLatest: {},
     payoutLoadSequence: 0,
     paymentPasswordConfigured: false,
     superAdministrator: false,
@@ -5097,8 +5098,8 @@
       <td class="muted">不适用</td>
       <td><span class="status ${record.status === "SUCCESS" ? "success" : record.status === "FAILED" ? "refunded" : "pending"}">${operationStatusText(record)}</span></td>
       <td class="muted">${html(record.createdAt || "-")}</td>
-      <td><button class="btn secondary small" type="button" data-operation-action="detail" ${attributes}>查看结果</button>${record.recordType === "PAYOUT" ? `<button class="btn secondary small" type="button" data-operation-action="query" ${attributes}${querying ? " disabled" : ""}>${querying ? "查询中…" : "查询原单"}</button>` : ""}</td>
-    </tr>${record.recordType === "PAYOUT" ? payoutQueryFeedback(record) : ""}`;
+      <td><button class="btn secondary small" type="button" data-operation-action="detail" ${attributes}>查看结果</button>${record.recordType === "PAYOUT" ? `<button class="btn secondary small" type="button" data-operation-action="query" ${attributes}${querying ? " disabled" : ""}>${querying ? "查询中…" : "查询原单"}</button>${payoutQueryFeedback(record)}` : ""}</td>
+    </tr>`;
   }
 
   async function handleOperationAction(button) {
@@ -5106,10 +5107,9 @@
       && item.orderNo === button.dataset.operationNo && (item.channelId || "") === button.dataset.operationChannel);
     if (!record) return;
     if (button.dataset.operationAction === "query" && record.recordType === "PAYOUT") {
-      await handlePayoutQuery(button, record, "orders");
+      await handlePayoutQuery(button, record);
       return;
     }
-    if (state.payoutQueryLatest) state.payoutQueryLatest.orders = null;
     const lines = [`本地${operationTypeText(record)}记录：${record.orderNo}`, `状态：${operationStatusText(record)}`,
       `金额：${record.amount == null ? "未记录" : money(record.amount)}（支出）`,
       `支付通道：${record.channelId || "-"}`, `平台单号：${record.tradeNo || "-"}`];
@@ -6550,10 +6550,10 @@
         <td class="amount-green">${money(payout.amount)}</td>
         <td>${payoutStatusBadge(payout.status)}</td>
         <td>${html(payout.platformOrderNo || payout.platformFundOrderNo || "-")}</td>
-            <td>${html(payoutBusinessText(payout.failReason || payout.message || payout.code))}</td>
+        <td>${payoutQueryFeedback(payout) || `<span title="${html(payoutBusinessText(payout.failReason || payout.message || payout.code))}">${html(payoutQueryHeading(payout.status))}</span>`}</td>
         <td class="muted">${html(payout.updatedAt || payout.createdAt || "-")}</td>
         <td><button class="btn secondary small" type="button" data-payout-query="${html(payout.outBizNo)}" data-payout-provider="${html(payout.provider || "")}" data-payout-channel="${html(payout.channelId || "")}"${payoutQueryState(payout)?.busy ? " disabled" : ""}>${payoutQueryState(payout)?.busy ? "查询中…" : "查询原单"}</button></td>
-      </tr>${payoutQueryFeedback(payout)}
+      </tr>
     `).join("");
   }
 
@@ -6708,40 +6708,29 @@
 
   function payoutQueryFeedback(record) {
     const query = payoutQueryState(record);
-    return query ? `<tr><td colspan="10"><pre class="operation-result payout-query-feedback" role="status" aria-live="polite" aria-busy="${query.busy}">${html(query.message)}</pre></td></tr>` : "";
+    return query ? `<span class="payout-query-feedback" role="status" aria-live="polite" aria-busy="${query.busy}" title="${html(query.detail || query.message)}">${html(query.message)}</span>` : "";
   }
 
-  function publishPayoutQuery(query) {
+  function publishPayoutQuery() {
     renderPayouts();
     renderOrders();
-    if (state.payoutQueryLatest.payouts === query.key) {
-      const result = $("payoutQueryResult");
-      if (result) {
-        result.hidden = false;
-        result.textContent = query.message;
-      }
-    }
-    if (state.payoutQueryLatest.orders === query.key) {
-      setDashboardResult({ message: query.message });
-    }
   }
 
   function payoutQueryHeading(status) {
     switch (normalizeStatusCode(status)) {
-      case "SUCCESS": return "查询完成：平台确认代付成功。";
-      case "FAILED": return "查询完成：平台确认代付失败。请核对原因，请勿直接重新转账。";
-      case "PROCESSING": return "查询完成：上游仍在处理中，尚未确认到账。请勿重复转账。";
-      case "PENDING": return "查询完成：原单仍为待提交，尚未确认到账。请勿重复转账。";
-      default: return "查询完成：原单结果仍待核对。请继续查询原单或联系平台，请勿重新转账。";
+      case "SUCCESS": return "成功";
+      case "FAILED": return "失败";
+      case "PROCESSING": return "处理中";
+      default: return "待确认";
     }
   }
 
-  async function handlePayoutQuery(button, record, source) {
+  async function handlePayoutQuery(button, record) {
     if (button.disabled) return;
     button.disabled = true;
     button.textContent = "查询中…";
     try {
-      await queryPayout(record.outBizNo || record.orderNo, record, source);
+      await queryPayout(record.outBizNo || record.orderNo, record);
     } catch (_) {
       // queryPayout keeps the error beside this original record.
     } finally {
@@ -6750,7 +6739,7 @@
     }
   }
 
-  function queryPayout(outBizNo, originalRecord, source = "payouts") {
+  function queryPayout(outBizNo, originalRecord) {
     const record = originalRecord || (state.payouts || []).find(item => item.outBizNo === outBizNo)
       || (state.orderOperations || []).find(item => item.recordType === "PAYOUT" && item.orderNo === outBizNo)
       || { outBizNo };
@@ -6758,17 +6747,14 @@
     const identity = { outBizNo, provider: record.provider || "", channelId: record.channelId || "" };
     const key = payoutQueryKey(identity);
     if (!state.payoutQueries) state.payoutQueries = new Map();
-    if (!state.payoutQueryLatest) state.payoutQueryLatest = {};
-    state.payoutQueryLatest[source] = key;
     const existing = state.payoutQueries.get(key);
     if (existing?.busy) {
-      publishPayoutQuery(existing);
+      publishPayoutQuery();
       return existing.promise;
     }
-    const context = `代付单号：${outBizNo}\n支付平台：${payoutProviderText(identity.provider)}\n支付通道：${identity.channelId || "-"}`;
-    const query = { key, busy: true, message: `正在向平台查询原单，请稍候…\n${context}` };
+    const query = { key, busy: true, message: "查询中" };
     state.payoutQueries.set(key, query);
-    publishPayoutQuery(query);
+    publishPayoutQuery();
     query.promise = (async () => {
       try {
         const data = await request(`/api/v1/payouts/${encodeURIComponent(outBizNo)}/query`, {
@@ -6778,19 +6764,23 @@
             || (identity.channelId && data.channelId !== identity.channelId)) {
           throw new Error("平台返回的原单、平台或通道信息不匹配，需人工核对");
         }
-        query.message = payoutOperationSummary(data, payoutQueryHeading(data.status))
-          + `\n支付平台：${payoutProviderText(identity.provider || data.provider)}\n支付通道：${identity.channelId || data.channelId || "-"}`;
-        publishPayoutQuery(query);
+        query.message = payoutQueryHeading(data.status);
+        query.detail = payoutBusinessText(data.failReason || data.message || data.code, query.message);
+        publishPayoutQuery();
         let refreshed = false;
         try { refreshed = await refreshAfterPayout(false); } catch (_) { /* Keep the confirmed query result. */ }
-        if (!refreshed) query.message += "\n\n记录刷新失败；以上查询结果仍有效，请刷新记录核对，不要重复转账。";
+        if (!refreshed) {
+          query.message += "（刷新失败）";
+          query.detail += "；列表刷新失败，以上查询结果仍有效。";
+        }
         return data;
       } catch (error) {
-        query.message = `原单查询失败：${payoutBusinessText(error?.message, "请稍后重试")}\n${context}\n此次查询未确认代付结果，请勿重新转账。`;
+        query.message = "查询失败";
+        query.detail = payoutBusinessText(error?.message, "此次查询未确认结果");
         throw error;
       } finally {
         query.busy = false;
-        publishPayoutQuery(query);
+        publishPayoutQuery();
       }
     })();
     return query.promise;
@@ -7942,7 +7932,7 @@
     if (!button) return;
     const record = state.payouts.find(item => item.outBizNo === button.dataset.payoutQuery
       && (item.provider || "") === button.dataset.payoutProvider && (item.channelId || "") === button.dataset.payoutChannel);
-    if (record) handlePayoutQuery(button, record, "payouts");
+    if (record) handlePayoutQuery(button, record);
   });
 
   $("closeProfitShareConfirmBtn").addEventListener("click", () => closeProfitShareConfirm(false));
