@@ -49,6 +49,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -163,7 +164,7 @@ public class PaymentGatewayService {
 
     public GatewayResponse query(PaymentQueryRequest request) {
         GatewayResponse response = execute(null, request.channelIds(), null, null, channel -> provider(channel).query(channel, request));
-        syncLocalPaymentStatus(request.outTradeNo(), response);
+        syncLocalPaymentStatus(request.outTradeNo(), response, receiptEvidence(response, true));
         return response;
     }
 
@@ -217,7 +218,17 @@ public class PaymentGatewayService {
                 channel -> provider(channel).preauthCapture(channel, prepared)
         );
         if (response.status() != PaymentStatus.FAILED && hasText(prepared.preauthOutTradeNo())) {
-            orderService.convertPreauthToPay(prepared.preauthOutTradeNo(), firstText(response.tradeNo(), prepared.outTradeNo()));
+            ReceiptEvidence receipt = receiptEvidence(response, false);
+            if (response.status() != PaymentStatus.SUCCESS && response.status() != PaymentStatus.CLOSED
+                    && Objects.equals(prepared.outTradeNo(), response.outTradeNo())
+                    && response.raw() != null
+                    && "alipay.trade.pay".equals(textValue(response.raw().get("request_method")))) {
+                orderService.rememberPendingCapture(prepared.preauthOutTradeNo(), prepared.outTradeNo(),
+                        response.channelId(), prepared.totalAmount());
+            }
+            orderService.convertPreauthToPay(prepared.preauthOutTradeNo(), firstText(response.tradeNo(), prepared.outTradeNo()),
+                    response.channelId(), prepared.totalAmount(), receipt.matchesAmount(prepared.totalAmount())
+                            && Objects.equals(prepared.outTradeNo(), response.outTradeNo()));
         }
         return response;
     }
@@ -948,6 +959,7 @@ public class PaymentGatewayService {
         if (response.status() == PaymentStatus.FAILED || request.outTradeNo() == null || request.outTradeNo().isBlank()) {
             return;
         }
+        ReceiptEvidence receipt = receiptEvidence(response, false);
         orderService.recordPaymentCreated(
                 request.outTradeNo(),
                 response.tradeNo(),
@@ -959,12 +971,17 @@ public class PaymentGatewayService {
                 request.totalAmount(),
                 request.product() == PaymentProduct.ALIPAY_PREAUTH
                         || request.product() == PaymentProduct.ALIPAY_PREAUTH_H5,
-                response.status()
+                response.status(),
+                receipt.matchesAmount(request.totalAmount()) && request.outTradeNo().equals(response.outTradeNo())
         );
         orderService.recordPaymentMetadata(request.outTradeNo(), request, response);
     }
 
     private void syncLocalPaymentStatus(String outTradeNo, GatewayResponse response) {
+        syncLocalPaymentStatus(outTradeNo, response, ReceiptEvidence.NONE);
+    }
+
+    private void syncLocalPaymentStatus(String outTradeNo, GatewayResponse response, ReceiptEvidence receipt) {
         if (response == null || response.status() == PaymentStatus.FAILED) {
             return;
         }
@@ -975,11 +992,80 @@ public class PaymentGatewayService {
             return;
         }
         try {
-            orderService.recordPaymentResult(localOutTradeNo, response.tradeNo(), response.channelId(), response.status());
+            if (receipt.confirmed() && localOutTradeNo.equals(response.outTradeNo())
+                    && orderService.recordPendingCaptureQuery(localOutTradeNo, response.tradeNo(),
+                    response.channelId(), receipt.amount())) return;
+            orderService.recordPaymentResult(localOutTradeNo, response.tradeNo(), response.channelId(), response.status(),
+                    receipt.confirmed() && localOutTradeNo.equals(response.outTradeNo()), receipt.amount());
         } catch (RuntimeException ex) {
             // The payment platform remains authoritative; keep returning its response while exposing the local sync error.
             log.warn("Failed to sync payment result locally: outTradeNo={}, channel={}, tradeNo={}, status={}",
                     localOutTradeNo, response.channelId(), response.tradeNo(), response.status(), ex);
+        }
+    }
+
+    /** Qualifies only actual collection responses; generic SUCCESS also covers freezes and refunds. */
+    private static ReceiptEvidence receiptEvidence(GatewayResponse response, boolean query) {
+        if (response == null || response.status() != PaymentStatus.SUCCESS || !hasText(response.tradeNo())
+                || !hasText(response.channelId()) || response.raw() == null) {
+            return ReceiptEvidence.NONE;
+        }
+        Map<String, Object> raw = response.raw();
+        String method = textValue(raw.get("request_method"));
+        String expectedMethod = query ? "alipay.trade.query" : "alipay.trade.pay";
+        if (expectedMethod.equals(method)) {
+            Object bodyValue = raw.get(method.replace('.', '_') + "_response");
+            if (!(bodyValue instanceof Map<?, ?> body) || !"10000".equals(textValue(body.get("code")))) {
+                return ReceiptEvidence.NONE;
+            }
+            String tradeStatus = textValue(body.get("trade_status"));
+            boolean paid = "TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus);
+            if ((query || tradeStatus != null) && !paid) return ReceiptEvidence.NONE;
+            if (!receiptResponseIdentityMatches(body, response, "trade_no")) return ReceiptEvidence.NONE;
+            return receiptAmount(body, "total_amount", false);
+        }
+        String path = textValue(raw.get("request_path"));
+        if (!query || path == null || (!path.startsWith("/v1/trade/transactions/out-trade-no/")
+                && !path.startsWith("/v1/trade/transactions/id/")) || path.contains("/close")) {
+            return ReceiptEvidence.NONE;
+        }
+        Map<?, ?> body = raw;
+        if (!hasText(textValue(body.get("trade_state"))) && raw.get("data") instanceof Map<?, ?> data) body = data;
+        if (!"SUCCESS".equalsIgnoreCase(textValue(body.get("trade_state")))
+                || !receiptResponseIdentityMatches(body, response, "transaction_id")) {
+            return ReceiptEvidence.NONE;
+        }
+        if (!body.containsKey("amount")) return new ReceiptEvidence(true, null);
+        if (!(body.get("amount") instanceof Map<?, ?> amount) || !amount.containsKey("total")) return ReceiptEvidence.NONE;
+        return receiptAmount(amount, "total", true);
+    }
+
+    private static boolean receiptResponseIdentityMatches(Map<?, ?> body, GatewayResponse response, String tradeKey) {
+        return (!body.containsKey(tradeKey) || response.tradeNo().equals(textValue(body.get(tradeKey))))
+                && (!body.containsKey("out_trade_no") || Objects.equals(response.outTradeNo(), textValue(body.get("out_trade_no"))));
+    }
+
+    private static ReceiptEvidence receiptAmount(Map<?, ?> body, String key, boolean fen) {
+        if (!body.containsKey(key)) return new ReceiptEvidence(true, null);
+        try {
+            BigDecimal amount = new BigDecimal(String.valueOf(body.get(key)));
+            if (fen) amount = amount.setScale(0, RoundingMode.UNNECESSARY).movePointLeft(2);
+            if (amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 2) return ReceiptEvidence.NONE;
+            return new ReceiptEvidence(true, amount);
+        } catch (NumberFormatException | ArithmeticException ex) {
+            return ReceiptEvidence.NONE;
+        }
+    }
+
+    private static String textValue(Object value) {
+        return value == null ? null : value.toString().trim();
+    }
+
+    private record ReceiptEvidence(boolean confirmed, BigDecimal amount) {
+        private static final ReceiptEvidence NONE = new ReceiptEvidence(false, null);
+
+        boolean matchesAmount(BigDecimal expectedAmount) {
+            return confirmed && expectedAmount != null && (amount == null || expectedAmount.compareTo(amount) == 0);
         }
     }
 

@@ -26,6 +26,8 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Locale;
 import java.util.Map;
 
@@ -161,16 +163,35 @@ public class DouyinNotifyController {
 
         String outTradeNo = required(payload, "out_trade_no");
         String tradeState = required(payload, "trade_state");
+        BigDecimal confirmedAmount = receiptAmount(payload);
         DemoOrderView order = orderService.recordPaymentResult(
                 outTradeNo,
                 text(payload, "transaction_id"),
                 channelId,
-                DouyinTradeState.toPaymentStatus(tradeState)
+                DouyinTradeState.toPaymentStatus(tradeState),
+                "SUCCESS".equals(upper(tradeState)) && (confirmedAmount == null || confirmedAmount.signum() > 0)
+                        && hasText(channel.getDouyin().getAppId())
+                        && channel.getDouyin().getAppId().equals(text(payload, "appid"))
+                        && hasText(channel.getDouyin().getMchId())
+                        && channel.getDouyin().getMchId().equals(text(payload, "mchid")),
+                confirmedAmount
         );
         merchantNotifyService.notifyPayment(order, tradeState);
         log.info("Processed Douyin payment notification channel={} outTradeNo={} tradeState={} localStatus={}",
                 channelId, outTradeNo, tradeState, order.status());
         return ResponseEntity.ok().build();
+    }
+
+    private static BigDecimal receiptAmount(Map<String, Object> payload) {
+        if (!payload.containsKey("amount")) return null;
+        if (!(payload.get("amount") instanceof Map<?, ?> amount) || !amount.containsKey("total")) return BigDecimal.ZERO;
+        try {
+            return new BigDecimal(String.valueOf(amount.get("total")))
+                    .setScale(0, RoundingMode.UNNECESSARY).movePointLeft(2);
+        } catch (NumberFormatException | ArithmeticException ex) {
+            // Preserve existing callback processing; malformed receipt evidence simply cannot notify.
+            return BigDecimal.ZERO;
+        }
     }
 
     private void validateMerchant(PaymentGatewayProperties.Channel channel, Map<String, Object> payload) {

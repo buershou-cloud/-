@@ -813,6 +813,10 @@
       gap: 14px;
     }
 
+    #telegramNotifyForm .form-grid {
+      align-items: start;
+    }
+
     .scene-report-editor {
       display: grid;
       gap: 10px;
@@ -2652,6 +2656,24 @@
               </div>
             </div>
           </section>
+          <section id="telegramNotifyPanel" class="panel wide-panel hidden">
+            <div class="panel-head"><h2 class="panel-title">收款提醒</h2></div>
+            <div class="panel-body">
+              <p class="muted">先把机器人加入 Telegram 群，再填写机器人密钥和接收群 ID。</p>
+              <form id="telegramNotifyForm">
+                <div class="form-grid">
+                  <div class="wide"><label class="check"><input id="telegramNotifyEnabled" type="checkbox" disabled>收款成功后提醒</label></div>
+                  <label>机器人密钥<input id="telegramNotifyToken" type="password" autocomplete="new-password" placeholder="填写机器人密钥" disabled><span class="muted" id="telegramNotifyTokenStatus">未设置</span></label>
+                  <label>接收群 ID<input id="telegramNotifyChatId" type="text" autocomplete="off" placeholder="例如 -1001234567890" disabled></label>
+                </div>
+                <div class="form-actions">
+                  <button class="btn" id="saveTelegramNotifyBtn" type="submit" disabled>保存</button>
+                  <button class="btn secondary" id="testTelegramNotifyBtn" type="button" disabled>发送测试提醒</button>
+                </div>
+              </form>
+              <p id="telegramNotifyResult" class="muted" role="status" aria-live="polite"></p>
+            </div>
+          </section>
         </div>
       </section>
 
@@ -3488,6 +3510,8 @@
     superAdministratorUsername: "admin",
     administrators: [],
     adminDeleteTarget: null,
+    telegramNotifySettings: null,
+    telegramNotifyBusy: "",
     editingChannelId: null,
     editingMerchantId: null,
     productEditorChannelId: null,
@@ -3905,6 +3929,7 @@
     setText("accountCurrentRole", state.superAdministrator ? "超级管理员" : "普通管理员");
     $("accountAdministratorPanel").classList.toggle("hidden", !state.superAdministrator);
     $("accountPaymentPasswordPanel").classList.toggle("hidden", !state.superAdministrator);
+    renderTelegramNotifyControls();
     setText("accountPaymentPasswordStatus", state.paymentPasswordConfigured ? "已设置" : "未设置");
     setText("paymentPasswordBtn", state.paymentPasswordConfigured ? "修改支付密码" : "设置支付密码");
     const tableBody = $("accountTableBody");
@@ -4003,6 +4028,106 @@
     applyAdminSecurity(security);
     renderAccountManagement();
     return { message: "代付支付密码已保存" };
+  }
+
+  function telegramNotifyMessage(error, secret = "") {
+    let message = typeof error?.message === "string" ? error.message : "操作失败，请稍后重试";
+    if (secret) message = message.split(secret).join("[已隐藏]");
+    return message.replace(/\b\d{5,}:[A-Za-z0-9_-]{20,}\b/g, "[已隐藏]").slice(0, 180);
+  }
+
+  function setTelegramNotifyResult(message) {
+    $("telegramNotifyResult").textContent = message;
+  }
+
+  function renderTelegramNotifyControls() {
+    $("telegramNotifyPanel").classList.toggle("hidden", !state.superAdministrator);
+    const disabled = !state.superAdministrator || !state.telegramNotifySettings || Boolean(state.telegramNotifyBusy);
+    ["telegramNotifyEnabled", "telegramNotifyToken", "telegramNotifyChatId", "saveTelegramNotifyBtn"].forEach((id) => {
+      $(id).disabled = disabled;
+    });
+    $("testTelegramNotifyBtn").disabled = disabled || !state.telegramNotifySettings?.tokenConfigured || !state.telegramNotifySettings?.chatId;
+    $("saveTelegramNotifyBtn").textContent = state.telegramNotifyBusy === "save" ? "保存中…" : "保存";
+    $("testTelegramNotifyBtn").textContent = state.telegramNotifyBusy === "test" ? "发送中…" : "发送测试提醒";
+    $("telegramNotifyResult").setAttribute("aria-busy", String(Boolean(state.telegramNotifyBusy)));
+  }
+
+  function applyTelegramNotifySettings(settings) {
+    if (typeof settings?.enabled !== "boolean" || typeof settings?.tokenConfigured !== "boolean" || typeof settings?.chatId !== "string") {
+      throw { message: "收款提醒设置读取失败，请刷新页面重试" };
+    }
+    state.telegramNotifySettings = { enabled: settings.enabled, tokenConfigured: settings.tokenConfigured, chatId: settings.chatId };
+    $("telegramNotifyEnabled").checked = settings.enabled;
+    $("telegramNotifyChatId").value = settings.chatId;
+    $("telegramNotifyToken").value = "";
+    $("telegramNotifyToken").placeholder = settings.tokenConfigured ? "已设置，留空不修改" : "填写机器人密钥";
+    $("telegramNotifyTokenStatus").textContent = settings.tokenConfigured ? "已设置" : "未设置";
+  }
+
+  async function loadTelegramNotifySettings() {
+    if (!state.superAdministrator || state.telegramNotifyBusy) return;
+    state.telegramNotifyBusy = "load";
+    $("telegramNotifyToken").value = "";
+    renderTelegramNotifyControls();
+    setTelegramNotifyResult("正在读取设置…");
+    try {
+      const settings = await request("/api/v1/admin-notifications/telegram");
+      applyTelegramNotifySettings(settings);
+      const lastError = typeof settings.lastError === "string" ? settings.lastError.trim() : "";
+      setTelegramNotifyResult(lastError ? telegramNotifyMessage({ message: lastError }) : "");
+    } finally {
+      state.telegramNotifyBusy = "";
+      renderTelegramNotifyControls();
+    }
+  }
+
+  async function saveTelegramNotifySettings() {
+    if (!state.superAdministrator || !state.telegramNotifySettings || state.telegramNotifyBusy) return;
+    const botToken = $("telegramNotifyToken").value.trim();
+    const payload = { enabled: $("telegramNotifyEnabled").checked, chatId: $("telegramNotifyChatId").value.trim() };
+    if (botToken) payload.botToken = botToken;
+    if (payload.enabled && (!payload.chatId || (!state.telegramNotifySettings.tokenConfigured && !botToken))) {
+      setTelegramNotifyResult("请填写机器人密钥和接收群 ID");
+      return;
+    }
+    state.telegramNotifyBusy = "save";
+    $("telegramNotifyToken").value = "";
+    renderTelegramNotifyControls();
+    setTelegramNotifyResult("正在保存…");
+    try {
+      applyTelegramNotifySettings(await request("/api/v1/admin-notifications/telegram", { method: "PUT", body: JSON.stringify(payload) }));
+      setTelegramNotifyResult("已保存");
+    } catch (error) {
+      setTelegramNotifyResult(telegramNotifyMessage(error, botToken));
+    } finally {
+      state.telegramNotifyBusy = "";
+      renderTelegramNotifyControls();
+    }
+  }
+
+  async function testTelegramNotifySettings() {
+    if (!state.superAdministrator || !state.telegramNotifySettings || state.telegramNotifyBusy) return;
+    const saved = state.telegramNotifySettings;
+    if ($("telegramNotifyToken").value.trim() || $("telegramNotifyChatId").value.trim() !== saved.chatId || $("telegramNotifyEnabled").checked !== saved.enabled) {
+      setTelegramNotifyResult("请先保存修改，再发送测试提醒");
+      return;
+    }
+    if (!saved.tokenConfigured || !saved.chatId) {
+      setTelegramNotifyResult("请先保存机器人密钥和接收群 ID");
+      return;
+    }
+    state.telegramNotifyBusy = "test";
+    renderTelegramNotifyControls();
+    setTelegramNotifyResult("正在发送测试提醒…");
+    try {
+      const result = await request("/api/v1/admin-notifications/telegram/test", { method: "POST", body: "{}" });
+      setTelegramNotifyResult(result?.success === true ? "测试提醒已发送" : telegramNotifyMessage(result));
+    } catch (error) {
+      setTelegramNotifyResult(telegramNotifyMessage(error));
+    } finally {
+      state.telegramNotifyBusy = "";
+      renderTelegramNotifyControls();
+    }
   }
 
   function parseJson(id, fallback) {
@@ -7784,6 +7909,13 @@
 
   $("paymentPasswordBtn").addEventListener("click", openPaymentPasswordModal);
 
+  $("telegramNotifyForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveTelegramNotifySettings();
+  });
+
+  $("testTelegramNotifyBtn").addEventListener("click", testTelegramNotifySettings);
+
   $("logoutBtn").addEventListener("click", async () => {
     try {
       await logoutAdmin();
@@ -8529,6 +8661,7 @@
       loadMerchants(),
       loadOnboardingRecords(),
       loadComplaintAutoStatus(),
+      loadTelegramNotifySettings().catch((error) => setTelegramNotifyResult(telegramNotifyMessage(error))),
       loadPayouts().catch((error) => {
         $("payoutResult").textContent = payoutErrorSummary(error);
         renderPayouts();
