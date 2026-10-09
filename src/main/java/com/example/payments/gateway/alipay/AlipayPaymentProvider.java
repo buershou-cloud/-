@@ -21,6 +21,7 @@ import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.PaymentProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -58,10 +59,18 @@ public class AlipayPaymentProvider implements PaymentProvider {
 
     private final PaymentGatewayProperties properties;
     private final AlipayOpenApiClient client;
+    private final AlipayPageQrClient pageQrClient;
 
     public AlipayPaymentProvider(PaymentGatewayProperties properties, AlipayOpenApiClient client) {
+        this(properties, client, new AlipayPageQrClient());
+    }
+
+    @Autowired
+    public AlipayPaymentProvider(PaymentGatewayProperties properties, AlipayOpenApiClient client,
+                                 AlipayPageQrClient pageQrClient) {
         this.properties = properties;
         this.client = client;
+        this.pageQrClient = pageQrClient;
     }
 
     @Override
@@ -80,7 +89,9 @@ public class AlipayPaymentProvider implements PaymentProvider {
         return switch (request.product()) {
             case ALIPAY_WAP -> pagePay(channel, request, METHOD_WAP_PAY, "QUICK_WAP_WAY");
             case ALIPAY_APP -> appPay(channel, request);
-            case ALIPAY_PAGE -> pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
+            case ALIPAY_PAGE -> isMobileCashierPageQr(request)
+                    ? mobileCashierPageQr(channel, request)
+                    : pagePay(channel, request, METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
             case ALIPAY_F2F -> faceToFaceQrPay(channel, request);
             case ALIPAY_PAYMENT_CODE -> paymentCodePay(channel, request);
             case ALIPAY_ORDER_CODE -> orderCodePay(channel, request);
@@ -319,6 +330,37 @@ public class AlipayPaymentProvider implements PaymentProvider {
         return apiResponse(channel.getId(), response, null, null, bizContent);
     }
 
+    private static boolean isMobileCashierPageQr(PayCreateRequest request) {
+        return request.extra() != null
+                && Boolean.TRUE.equals(request.extra().get("cashier"))
+                && Boolean.TRUE.equals(request.extra().get("cashierMobilePageQr"));
+    }
+
+    private GatewayResponse mobileCashierPageQr(PaymentGatewayProperties.Channel channel, PayCreateRequest request) {
+        Map<String, Object> bizContent = tradeBiz(channel, request);
+        bizContent.put("product_code", "FAST_INSTANT_TRADE_PAY");
+        bizContent.put("qr_pay_mode", "4");
+        bizContent.put("integration_type", "PCWEB");
+        Map<String, Object> raw = requestRaw(METHOD_PAGE_PAY, "FAST_INSTANT_TRADE_PAY");
+        raw.put("qr_pay_mode", "4");
+        raw.put("integration_type", "PCWEB");
+        try {
+            String signedPageUrl = client.pageUrl(channel, METHOD_PAGE_PAY, bizContent, options(request));
+            String qrCode = pageQrClient.resolve(signedPageUrl);
+            if (!hasText(qrCode)) {
+                throw new GatewayException("PAGE_QR_MISSING", "Official payment QR is missing");
+            }
+            return new GatewayResponse(channel.getId(), PaymentStatus.CREATED, "PAGE_QR_CREATED",
+                    "已取得本订单的支付宝官方付款二维码", request.outTradeNo(), null, qrCode,
+                    null, null, raw, List.of());
+        } catch (GatewayException ex) {
+            // The page request may already have created the upstream order. Never create a fallback order.
+            return new GatewayResponse(channel.getId(), PaymentStatus.PENDING, "PAGE_QR_UNCONFIRMED",
+                    "暂未取得本订单的支付宝付款入口，请核对原订单，不要重复下单", request.outTradeNo(), null, null,
+                    null, null, raw, List.of());
+        }
+    }
+
     private GatewayResponse pagePay(
             PaymentGatewayProperties.Channel channel,
             PayCreateRequest request,
@@ -526,6 +568,7 @@ public class AlipayPaymentProvider implements PaymentProvider {
         bizContent.remove("cashier");
         bizContent.remove("cashierDesktopQr");
         bizContent.remove("cashierMobileDirect");
+        bizContent.remove("cashierMobilePageQr");
         bizContent.remove("cashierOriginalProduct");
         bizContent.remove("merchantId");
         bizContent.remove("merchantName");

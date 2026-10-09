@@ -152,6 +152,20 @@
       cursor: pointer;
     }
 
+    .mobile-page-new {
+      background: #eef6ff;
+      color: var(--primary);
+    }
+
+    .mobile-page-new[hidden] {
+      display: none;
+    }
+
+    .mobile-page-new:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
     .payment-code-panel {
       display: grid;
       gap: 10px;
@@ -404,6 +418,7 @@
         </div>
       </div>
       <button id="payButton" class="btn" type="submit" disabled>确认支付</button>
+      <button id="newMobilePagePaymentButton" class="btn mobile-page-new" type="button" hidden disabled>新一笔付款</button>
     </form>
     <div class="meta">
       <div class="mini"><span>支付通道</span><strong id="channelText">-</strong></div>
@@ -426,6 +441,8 @@
 
 <script>
   const params = new URLSearchParams(location.search);
+  const cashierEntryOrigin = location.origin;
+  const cashierEntryPath = location.pathname;
   const oauthState = oauthStateParams(params.get("state"));
   const channelId = params.get("channelId");
   const merchantId = params.get("merchantId");
@@ -488,6 +505,11 @@
   let alipaySubmitForm;
   let paymentPollTimer;
   let paymentPollAttempts = 0;
+  let mobilePageAttempt;
+  let mobilePageAttemptLoaded = false;
+  let mobilePageStorageFailed = false;
+  let mobilePageBusy = false;
+  let mobilePageExpiryTimer;
 
   const $ = (id) => document.getElementById(id);
 
@@ -744,6 +766,207 @@
 
   function isPagePayProduct(product) {
     return product === "ALIPAY_PAGE" || product === "ALIPAY_DIRECT_PAGE";
+  }
+
+  function isMobilePageQr() {
+    return currentProduct === "ALIPAY_PAGE" && isMobilePayClient();
+  }
+
+  function mobilePageCashierKey() {
+    const identity = currentChannel ? ["channel", currentChannel.id] : ["merchant", currentMerchant?.merchantId];
+    return `cashier:alipay-page:v1:${JSON.stringify([cashierEntryOrigin, cashierEntryPath, ...identity])}`;
+  }
+
+  function officialMobilePageQr(value) {
+    if (typeof value !== "string" || !/^https:\/\/qr\.alipay\.com(?::443)?\/upx[A-Za-z0-9_-]{8,128}$/i.test(value)
+        || /[\\\s\u0000-\u001f\u007f]/.test(value)) return false;
+    try {
+      const url = new URL(value);
+      return url.protocol === "https:" && url.hostname === "qr.alipay.com" && !url.port
+        && !url.username && !url.password && !url.search && !url.hash && /^\/upx[A-Za-z0-9_-]{8,128}$/.test(url.pathname);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function saveMobilePageAttempt(attempt) {
+    const key = mobilePageCashierKey();
+    const value = JSON.stringify(attempt);
+    window.sessionStorage.setItem(key, value);
+    if (window.sessionStorage.getItem(key) !== value) throw new Error("Attempt was not saved");
+    mobilePageAttempt = attempt;
+  }
+
+  function restoreMobilePageAttempt() {
+    if (!isMobilePageQr() || mobilePageAttemptLoaded) return;
+    mobilePageAttemptLoaded = true;
+    try {
+      const raw = window.sessionStorage.getItem(mobilePageCashierKey());
+      if (raw !== null) {
+        const saved = JSON.parse(raw);
+        if (!saved || saved.version !== 1 || saved.cashierKey !== mobilePageCashierKey()
+            || !/^[A-Za-z0-9_*-]{6,64}$/.test(saved.outTradeNo || "")
+            || typeof saved.amount !== "string" || !/^\d+\.\d{2}$/.test(saved.amount)
+            || !Number.isFinite(Number(saved.amount)) || Number(saved.amount) < 0.01
+            || !Number.isSafeInteger(Math.round(Number(saved.amount) * 100))
+            || typeof saved.subject !== "string" || !saved.subject.trim()
+            || !Number.isFinite(saved.createdAt) || saved.createdAt <= 0
+            || saved.expiresAt !== saved.createdAt + 10 * 60 * 1000
+            || !["PENDING", "READY"].includes(saved.state)
+            || (saved.state === "READY" && !officialMobilePageQr(saved.qrCode))) {
+          throw new Error("Invalid saved attempt");
+        }
+        mobilePageAttempt = saved;
+      }
+    } catch (_) {
+      mobilePageStorageFailed = true;
+    }
+    renderMobilePageAttempt();
+  }
+
+  function renderMobilePageAttempt() {
+    if (!isMobilePageQr()) return;
+    const button = $("payButton");
+    const newPaymentButton = $("newMobilePagePaymentButton");
+    newPaymentButton.hidden = !mobilePageAttempt;
+    newPaymentButton.disabled = mobilePageBusy || mobilePageStorageFailed || !mobilePageAttempt
+      || (mobilePageAttempt.state !== "READY" && Date.now() < mobilePageAttempt.expiresAt);
+    if (mobilePageExpiryTimer) clearTimeout(mobilePageExpiryTimer);
+    mobilePageExpiryTimer = null;
+    if (mobilePageAttempt && Date.now() < mobilePageAttempt.expiresAt) {
+      // Expiry only refreshes the controls; it never clears an order or sends a payment.
+      mobilePageExpiryTimer = setTimeout(() => renderMobilePageAttempt(), mobilePageAttempt.expiresAt - Date.now());
+    }
+    if (!mobilePageAttempt && !mobilePageStorageFailed) return;
+    $("amount").disabled = true;
+    $("subject").disabled = true;
+    if (mobilePageAttempt) {
+      $("amount").value = mobilePageAttempt.amount;
+      $("subject").value = mobilePageAttempt.subject;
+    }
+    button.disabled = true;
+    if (mobilePageStorageFailed) {
+      button.textContent = "暂时无法付款";
+      writeResult("暂时无法发起付款，请联系商家。", "bad");
+    } else if (mobilePageBusy) {
+      button.textContent = "正在获取付款码…";
+      writeResult("正在获取付款码，请稍候…", "loading");
+    } else if (Date.now() >= mobilePageAttempt.expiresAt) {
+      button.textContent = "付款入口已结束";
+      writeResult("当前付款入口已结束，请核对原单。", "bad");
+    } else if (mobilePageAttempt.state !== "READY") {
+      button.textContent = "待商家确认";
+      writeResult("付款码未取得，请联系商家查询原单。", "bad");
+    } else {
+      button.disabled = false;
+      button.textContent = "继续付款";
+      writeResult("请在支付宝完成付款。", "loading");
+    }
+  }
+
+  function openMobilePageAttempt() {
+    renderMobilePageAttempt();
+    if (mobilePageStorageFailed || mobilePageBusy || mobilePageAttempt?.state !== "READY"
+        || Date.now() >= mobilePageAttempt.expiresAt || !officialMobilePageQr(mobilePageAttempt.qrCode)) return;
+    const qrCode = mobilePageAttempt.qrCode;
+    window.location.href = isAlipayClient() ? qrCode
+      : `alipays://platformapi/startapp?appId=10000007&actionType=route&qrcode=${encodeURIComponent(qrCode)}`;
+  }
+
+  function startNewMobilePagePayment() {
+    if (!isMobilePageQr() || mobilePageBusy || mobilePageStorageFailed || !mobilePageAttempt) return;
+    if (mobilePageAttempt.state !== "READY" && Date.now() < mobilePageAttempt.expiresAt) {
+      renderMobilePageAttempt();
+      return;
+    }
+    try {
+      const key = mobilePageCashierKey();
+      window.sessionStorage.removeItem(key);
+      if (window.sessionStorage.getItem(key) !== null) throw new Error("Attempt was not cleared");
+    } catch (_) {
+      mobilePageStorageFailed = true;
+      renderMobilePageAttempt();
+      return;
+    }
+    mobilePageAttempt = undefined;
+    renderMobilePageAttempt();
+    $("amount").value = "";
+    $("amount").disabled = false;
+    $("subject").disabled = false;
+    $("payButton").disabled = false;
+    $("payButton").textContent = "确认支付";
+    writeResult("请输入金额后确认支付。");
+  }
+
+  async function submitMobilePageQr() {
+    if (mobilePageBusy) return;
+    restoreMobilePageAttempt();
+    if (mobilePageStorageFailed) { renderMobilePageAttempt(); return; }
+    if (mobilePageAttempt) { openMobilePageAttempt(); return; }
+    const availableChannels = (currentChannel ? [currentChannel] : currentAvailableChannels)
+      .filter(channel => channel.enabled !== false && channel.dailyEnabled !== false && productOptions(channel).includes("ALIPAY_PAGE"));
+    if (!availableChannels.length) {
+      writeResult("当前暂时无法付款，请联系商家。", "bad");
+      return;
+    }
+    const rawAmount = $("amount").value.trim();
+    const amount = Number(rawAmount);
+    if (!/^\d+(?:\.\d{1,2})?$/.test(rawAmount) || !Number.isFinite(amount) || amount < 0.01
+        || !Number.isSafeInteger(Math.round(amount * 100))) {
+      writeResult("请输入至少 0.01 元、最多两位小数的正确金额。", "bad");
+      return;
+    }
+    const subject = $("subject").value;
+    if (!subject.trim()) { writeResult("请填写订单标题。", "bad"); return; }
+    const createdAt = Date.now();
+    const attempt = { version: 1, cashierKey: mobilePageCashierKey(), outTradeNo: orderNo(), amount: amount.toFixed(2),
+      subject, state: "PENDING", createdAt, expiresAt: createdAt + 10 * 60 * 1000 };
+    const extra = { ...cashierPaymentExtra(), cashierMobilePageQr: true };
+    const backUrl = new URL(cashierEntryPath, cashierEntryOrigin);
+    backUrl.searchParams.set(currentChannel ? "channelId" : "merchantId", currentChannel?.id || currentMerchant.merchantId);
+    backUrl.searchParams.set("product", "ALIPAY_PAGE");
+    const payload = { product: "ALIPAY_PAGE", outTradeNo: attempt.outTradeNo, totalAmount: amount,
+      subject, timeoutExpress: "10m", extra, returnUrl: backUrl.href, quitUrl: backUrl.href };
+    if (currentChannel) {
+      payload.channelIds = [currentChannel.id];
+      payload.notifyUrl = `${cashierEntryOrigin}/api/v1/alipay/notify/${encodeURIComponent(currentChannel.id)}`;
+    }
+    mobilePageBusy = true;
+    try {
+      // Save the original identity before the first request; unresolved attempts are never resubmitted.
+      saveMobilePageAttempt(attempt);
+    } catch (_) {
+      mobilePageStorageFailed = true;
+      mobilePageBusy = false;
+      renderMobilePageAttempt();
+      return;
+    }
+    renderMobilePageAttempt();
+    let timer;
+    try {
+      const controller = new AbortController();
+      timer = setTimeout(() => controller.abort(), 30000);
+      const data = await request("/api/v1/payments/pay", {
+        method: "POST", body: JSON.stringify(payload), signal: controller.signal
+      });
+      if (data.status !== "CREATED" || data.code !== "PAGE_QR_CREATED" || data.outTradeNo !== attempt.outTradeNo
+          || !availableChannels.some(channel => channel.id === data.channelId) || !officialMobilePageQr(data.qrCode)) {
+        return;
+      }
+      try {
+        saveMobilePageAttempt({ ...attempt, state: "READY", qrCode: data.qrCode });
+      } catch (_) {
+        mobilePageStorageFailed = true;
+        return;
+      }
+    } catch (_) {
+      // Timeout, conflict and unconfirmed results keep the original pending attempt locked.
+    } finally {
+      if (timer) clearTimeout(timer);
+      mobilePageBusy = false;
+      renderMobilePageAttempt();
+    }
+    openMobilePageAttempt();
   }
 
   function alipayFormActionUrl(form) {
@@ -1306,6 +1529,7 @@
       writeResult({ code: "NO_PRODUCT", message: noProductMessage(), products: currentProductOptions }, "bad");
     } else {
       $("payButton").disabled = false;
+      if (isMobilePageQr()) restoreMobilePageAttempt();
       if (oauthAuthCode && isJsapiProduct(currentProduct)) {
         writeResult("支付宝授权已完成，请确认金额后再次点击确认支付。", "loading");
       } else if (autoPayRequested && isH5PreauthProduct(currentProduct) && isAlipayClient()) {
@@ -1345,6 +1569,7 @@
   }
 
   $("profitSharingEnabled").addEventListener("change", rememberCashierProfitSharingChoice);
+  $("newMobilePagePaymentButton").addEventListener("click", startNewMobilePagePayment);
   ["amount", "subject", "profitSharingEnabled"].forEach(id => {
     $(id).addEventListener("input", invalidateDouyinH5Handoff);
   });
@@ -1399,6 +1624,10 @@
     const payButton = $("payButton");
     if (!currentProduct || !currentProductOptions.includes(currentProduct)) {
       writeResult({ code: "PRODUCT_NOT_ENABLED", message: "请先加载有效的支付通道和产品。" }, "bad");
+      return;
+    }
+    if (isMobilePageQr()) {
+      await submitMobilePageQr();
       return;
     }
     if (isDouyinH5Product(currentProduct)) {
