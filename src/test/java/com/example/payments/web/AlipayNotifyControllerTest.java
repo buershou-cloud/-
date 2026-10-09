@@ -38,7 +38,7 @@ class AlipayNotifyControllerTest {
                 eq("AUTH-001"),
                 eq("ali-main"),
                 eq(new BigDecimal("1.00")),
-                eq("TRADE_SUCCESS")
+                eq("TRADE_SUCCESS"), eq(false)
         )).thenReturn(order);
 
         AlipayNotifyController controller = new AlipayNotifyController(
@@ -62,7 +62,7 @@ class AlipayNotifyControllerTest {
                 "AUTH-001",
                 "ali-main",
                 new BigDecimal("1.00"),
-                "TRADE_SUCCESS"
+                "TRADE_SUCCESS", false
         );
         verify(merchantNotifyService).notifyPayment(order, "TRADE_SUCCESS");
     }
@@ -75,6 +75,7 @@ class AlipayNotifyControllerTest {
         MerchantNotifyService merchantNotifyService = mock(MerchantNotifyService.class);
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("ali-main");
+        channel.getAlipay().setAppId("APP");
         when(channelRegistry.find("ali-main")).thenReturn(Optional.of(channel));
         when(openApiClient.verifyNotify(eq(channel), anyMap())).thenReturn(true);
         DemoOrderView order = orderView("PAY-001", "TRADE-001");
@@ -83,7 +84,7 @@ class AlipayNotifyControllerTest {
                 eq("TRADE-001"),
                 eq("ali-main"),
                 eq(new BigDecimal("2.00")),
-                eq("TRADE_SUCCESS")
+                eq("TRADE_SUCCESS"), eq(true)
         )).thenReturn(order);
 
         AlipayNotifyController controller = new AlipayNotifyController(
@@ -99,6 +100,7 @@ class AlipayNotifyControllerTest {
         form.add("trade_no", "TRADE-001");
         form.add("total_amount", "2.00");
         form.add("trade_status", "TRADE_SUCCESS");
+        form.add("app_id", "APP");
 
         controller.notify("ali-main", form);
 
@@ -107,7 +109,7 @@ class AlipayNotifyControllerTest {
                 "TRADE-001",
                 "ali-main",
                 new BigDecimal("2.00"),
-                "TRADE_SUCCESS"
+                "TRADE_SUCCESS", true
         );
     }
 

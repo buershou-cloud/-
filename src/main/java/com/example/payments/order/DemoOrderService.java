@@ -18,6 +18,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -35,6 +37,7 @@ import java.util.Optional;
 @Service
 public class DemoOrderService {
 
+    private static final Logger log = LoggerFactory.getLogger(DemoOrderService.class);
     private static final DateTimeFormatter SERIAL_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final DateTimeFormatter DISPLAY_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -43,18 +46,29 @@ public class DemoOrderService {
     private final Map<String, MerchantNotifyTarget> merchantNotifyTargets = new LinkedHashMap<>();
     private final Map<String, MemoryRefund> memoryRefunds = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
+    private final ConfirmedReceiptSink confirmedReceiptSink;
 
     public DemoOrderService() {
         this((JdbcTemplate) null);
     }
 
-    @Autowired
     public DemoOrderService(ObjectProvider<JdbcTemplate> jdbcTemplateProvider) {
         this(jdbcTemplateProvider.getIfAvailable());
     }
 
+    @Autowired
+    public DemoOrderService(ObjectProvider<JdbcTemplate> jdbcTemplateProvider,
+                            ObjectProvider<ConfirmedReceiptSink> confirmedReceiptSinkProvider) {
+        this(jdbcTemplateProvider.getIfAvailable(), confirmedReceiptSinkProvider.getIfAvailable());
+    }
+
     private DemoOrderService(JdbcTemplate jdbcTemplate) {
+        this(jdbcTemplate, null);
+    }
+
+    DemoOrderService(JdbcTemplate jdbcTemplate, ConfirmedReceiptSink confirmedReceiptSink) {
         this.jdbcTemplate = jdbcTemplate;
+        this.confirmedReceiptSink = confirmedReceiptSink;
         if (jdbcTemplate != null) {
             ensurePreauthUnfreezeTable();
         }
@@ -494,6 +508,12 @@ public class DemoOrderService {
     }
 
     public synchronized DemoOrderView convertPreauthToPay(String outTradeNo, String captureTradeNo) {
+        return convertPreauthToPay(outTradeNo, captureTradeNo, null, null, false);
+    }
+
+    public synchronized DemoOrderView convertPreauthToPay(String outTradeNo, String captureTradeNo,
+                                                         String channelId, BigDecimal confirmedAmount,
+                                                         boolean confirmedReceipt) {
         DemoOrder order = order(outTradeNo);
         if (!order.isPreAuthorization()) {
             throw new IllegalStateException("鍙湁棰勬巿鏉冭鍗曞彲浠ヨ浆鏀粯");
@@ -501,6 +521,8 @@ public class DemoOrderService {
         if (order.getStatus() != DemoOrderStatus.FROZEN) {
             throw new IllegalStateException("鍙湁鍐荤粨涓殑棰勬巿鏉冭鍗曞彲浠ヨ浆鏀粯");
         }
+        DemoOrderStatus previousStatus = order.getStatus();
+        boolean matchesReceipt = captureReceiptIdentityMatches(order, captureTradeNo, channelId, confirmedAmount);
         order.setStatus(DemoOrderStatus.COMPLETED);
         order.setPreAuthorization(false);
         order.setProductName("棰勬巿鏉冭浆鏀粯");
@@ -510,7 +532,23 @@ public class DemoOrderService {
             ensureTradeNo(order, "CAPTURE");
         }
         persist(order);
-        return DemoOrderView.from(order);
+        return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt, false, confirmedAmount);
+    }
+
+    /** A narrow notification marker, captured before the legacy pending-capture status conversion. */
+    public synchronized void rememberPendingCapture(String parentOutTradeNo, String captureOutTradeNo,
+                                                     String channelId, BigDecimal amount) {
+        if (confirmedReceiptSink == null) return;
+        try {
+            DemoOrder parent = order(parentOutTradeNo);
+            if (!parent.isPreAuthorization() || parent.getStatus() != DemoOrderStatus.FROZEN
+                    || !Objects.equals(parentOutTradeNo, preauthCaptureParentOutTradeNo(captureOutTradeNo))
+                    || !captureReceiptIdentityMatches(parent, captureOutTradeNo, channelId, amount)) return;
+            confirmedReceiptSink.rememberPendingCapture(DemoOrderView.from(parent), captureOutTradeNo, amount);
+        } catch (Exception ex) {
+            log.warn("Pending receipt could not be remembered: outTradeNo={}, reason={}",
+                    parentOutTradeNo, ex.getClass().getSimpleName());
+        }
     }
 
     public synchronized void ensurePreauthUnfreezable(String outTradeNo, String authNo, BigDecimal amount) {
@@ -616,8 +654,19 @@ public class DemoOrderService {
             boolean preAuthorization,
             PaymentStatus paymentStatus
     ) {
+        return recordPaymentCreated(outTradeNo, tradeNo, channelId, merchantId, merchantName, productName,
+                subject, amount, preAuthorization, paymentStatus, false);
+    }
+
+    public synchronized DemoOrderView recordPaymentCreated(
+            String outTradeNo, String tradeNo, String channelId, String merchantId, String merchantName,
+            String productName, String subject, BigDecimal amount, boolean preAuthorization,
+            PaymentStatus paymentStatus, boolean confirmedReceipt
+    ) {
         DemoOrderStatus initialStatus = statusFromGateway(paymentStatus, preAuthorization, DemoOrderStatus.UNPAID);
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
+        DemoOrderStatus previousStatus = order == null ? null : order.getStatus();
+        boolean matchesReceipt = order == null || receiptIdentityMatches(order, tradeNo, channelId, amount);
         if (order == null) {
             order = new DemoOrder(
                     outTradeNo,
@@ -638,11 +687,12 @@ public class DemoOrderService {
                 order.setTradeNo(tradeNo.trim());
             }
             order.setSubject(firstText(subject, order.getSubject(), productName));
-            order.setStatus(preserveRefundStatus(order.getStatus(),
+            order.setStatus(preserveCollectedStatus(order.getStatus(),
                     statusFromGateway(paymentStatus, preAuthorization, order.getStatus())));
         }
         persist(order);
-        return DemoOrderView.from(order);
+        return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
+                && paymentStatus == PaymentStatus.SUCCESS && !preAuthorization);
     }
 
     public synchronized void recordPaymentMetadata(
@@ -690,19 +740,28 @@ public class DemoOrderService {
             String channelId,
             PaymentStatus paymentStatus
     ) {
+        return recordPaymentResult(outTradeNo, tradeNo, channelId, paymentStatus, false, null);
+    }
+
+    public synchronized DemoOrderView recordPaymentResult(String outTradeNo, String tradeNo, String channelId,
+                                                          PaymentStatus paymentStatus, boolean confirmedReceipt,
+                                                          BigDecimal confirmedAmount) {
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
         if (order == null) {
             throw new IllegalArgumentException("Order does not exist: " + outTradeNo);
         }
+        DemoOrderStatus previousStatus = order.getStatus();
+        boolean matchesReceipt = receiptIdentityMatches(order, tradeNo, channelId, confirmedAmount);
         if (hasText(tradeNo)) {
             order.setTradeNo(tradeNo.trim());
         }
-        order.setStatus(preserveRefundStatus(
+        order.setStatus(preserveCollectedStatus(
                 order.getStatus(),
                 statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus())
         ));
         persist(order);
-        return DemoOrderView.from(order);
+        return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
+                && paymentStatus == PaymentStatus.SUCCESS);
     }
 
     public synchronized DemoOrderView recordPreauthAuthNo(String outTradeNo, String authNo, String channelId) {
@@ -881,11 +940,21 @@ public class DemoOrderService {
             BigDecimal amount,
             String tradeStatus
     ) {
-        DemoOrderView capturedPreauth = recordPreauthCaptureNotify(outTradeNo, tradeNo, channelId, tradeStatus);
+        return recordAlipayNotify(outTradeNo, tradeNo, channelId, amount, tradeStatus, false);
+    }
+
+    public synchronized DemoOrderView recordAlipayNotify(String outTradeNo, String tradeNo, String channelId,
+                                                         BigDecimal amount, String tradeStatus,
+                                                         boolean confirmedReceipt) {
+        DemoOrderView capturedPreauth = recordPreauthCaptureNotify(outTradeNo, tradeNo, channelId, amount,
+                tradeStatus, confirmedReceipt);
         if (capturedPreauth != null) {
             return capturedPreauth;
         }
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
+        DemoOrderStatus previousStatus = order == null ? null : order.getStatus();
+        // Unknown callbacks do not have a local merchant/channel/amount to confirm against.
+        boolean matchesReceipt = order != null && receiptIdentityMatches(order, tradeNo, channelId, amount);
         if (order == null) {
             order = new DemoOrder(
                     outTradeNo,
@@ -905,17 +974,22 @@ public class DemoOrderService {
             if (hasText(tradeNo)) {
                 order.setTradeNo(tradeNo.trim());
             }
-            order.setStatus(preserveRefundStatus(order.getStatus(), statusFromAlipay(tradeStatus, order.isPreAuthorization())));
+            DemoOrderStatus next = statusFromAlipay(tradeStatus, order.isPreAuthorization());
+            // Stale waiting/closed callbacks must not turn a historical receipt into a new success transition.
+            order.setStatus(preserveCollectedStatus(order.getStatus(), next));
         }
         persist(order);
-        return DemoOrderView.from(order);
+        return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
+                && ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)));
     }
 
     private DemoOrderView recordPreauthCaptureNotify(
             String outTradeNo,
             String tradeNo,
             String channelId,
-            String tradeStatus
+            BigDecimal amount,
+            String tradeStatus,
+            boolean confirmedReceipt
     ) {
         String preauthOutTradeNo = preauthCaptureParentOutTradeNo(outTradeNo);
         if (!hasText(preauthOutTradeNo)) {
@@ -925,9 +999,93 @@ public class DemoOrderService {
         if (parent == null) {
             return null;
         }
+        DemoOrderStatus previousStatus = parent.getStatus();
+        boolean matchesReceipt = captureReceiptIdentityMatches(parent, tradeNo, channelId, amount);
+        boolean rememberedCapture = confirmedReceipt && matchesReceipt
+                && hasPendingCapture(parent.getOutTradeNo(), outTradeNo, channelId, amount);
+        boolean frozenCapture = parent.isPreAuthorization() && previousStatus == DemoOrderStatus.FROZEN;
         applyPreauthCaptureResult(parent, tradeNo, channelId, statusFromAlipay(tradeStatus, false));
         persist(parent);
-        return DemoOrderView.from(parent);
+        return receiptResult(parent, previousStatus, confirmedReceipt && matchesReceipt && (frozenCapture || rememberedCapture)
+                && ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)),
+                rememberedCapture, amount);
+    }
+
+    private boolean hasPendingCapture(String parentOutTradeNo, String captureOutTradeNo,
+                                      String channelId, BigDecimal amount) {
+        if (confirmedReceiptSink == null) return false;
+        try {
+            return confirmedReceiptSink.hasPendingCapture(parentOutTradeNo, captureOutTradeNo, channelId, amount);
+        } catch (Exception ex) {
+            log.warn("Pending receipt could not be checked: outTradeNo={}, reason={}",
+                    parentOutTradeNo, ex.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    /** Querying a capture child can complete only a previously recorded pending capture. */
+    public synchronized boolean recordPendingCaptureQuery(String captureOutTradeNo, String tradeNo,
+                                                          String channelId, BigDecimal amount) {
+        String parentOutTradeNo = preauthCaptureParentOutTradeNo(captureOutTradeNo);
+        if (!hasText(parentOutTradeNo)) return false;
+        DemoOrder parent = databaseBacked() ? findOrder(parentOutTradeNo) : orders.get(parentOutTradeNo);
+        if (parent == null || (parent.getStatus() != DemoOrderStatus.COMPLETED
+                && parent.getStatus() != DemoOrderStatus.FROZEN)
+                || !captureReceiptIdentityMatches(parent, tradeNo, channelId, amount)
+                || !hasPendingCapture(parentOutTradeNo, captureOutTradeNo, channelId, amount)) return false;
+        DemoOrderStatus previousStatus = parent.getStatus();
+        applyPreauthCaptureResult(parent, tradeNo, channelId, DemoOrderStatus.COMPLETED);
+        persist(parent);
+        receiptResult(parent, previousStatus, true, true, amount);
+        return true;
+    }
+
+    private static boolean captureReceiptIdentityMatches(DemoOrder order, String tradeNo, String channelId,
+                                                         BigDecimal amount) {
+        return hasText(channelId) && channelId.equals(order.getChannelId()) && hasText(tradeNo)
+                && amount != null && amount.signum() > 0 && amount.stripTrailingZeros().scale() <= 2
+                && amount.compareTo(preauthUnfreezeRemainingAmount(order)) <= 0;
+    }
+
+    private static boolean receiptIdentityMatches(DemoOrder order, String tradeNo, String channelId,
+                                                   BigDecimal amount) {
+        return hasText(channelId) && channelId.equals(order.getChannelId()) && hasText(tradeNo)
+                && (!hasText(order.getTradeNo()) || tradeNo.equals(order.getTradeNo()))
+                && order.getAmount() != null && order.getAmount().signum() > 0
+                && (amount == null || order.getAmount().compareTo(amount) == 0);
+    }
+
+    private DemoOrderView receiptResult(DemoOrder order, DemoOrderStatus previousStatus, boolean confirmedReceipt) {
+        return receiptResult(order, previousStatus, confirmedReceipt, false, null);
+    }
+
+    private DemoOrderView receiptResult(DemoOrder order, DemoOrderStatus previousStatus, boolean confirmedReceipt,
+                                       boolean rememberedCapture, BigDecimal capturedAmount) {
+        DemoOrderView view = DemoOrderView.from(order);
+        if (!confirmedReceipt || confirmedReceiptSink == null || order.isPreAuthorization()
+                || order.isSupplemented() || order.getStatus() != DemoOrderStatus.COMPLETED
+                || (previousStatus == DemoOrderStatus.COMPLETED && !rememberedCapture)
+                || previousStatus == DemoOrderStatus.PARTIALLY_REFUNDED
+                || previousStatus == DemoOrderStatus.REFUNDED || !hasText(order.getTradeNo())
+                || !hasText(order.getChannelId()) || order.getAmount() == null || order.getAmount().signum() <= 0) {
+            return view;
+        }
+        try {
+            DemoOrderView receipt = view;
+            if (capturedAmount != null) {
+                // A partial capture is a receipt for the amount actually collected, not the frozen total.
+                DemoOrder collected = new DemoOrder(order.getOutTradeNo(), order.getTradeNo(), order.getChannelId(),
+                        order.getMerchantId(), order.getMerchantName(), order.getProductName(), order.getSubject(),
+                        capturedAmount, order.getStatus(), order.getCreatedAt(), false);
+                receipt = DemoOrderView.from(collected);
+            }
+            confirmedReceiptSink.enqueueConfirmedReceipt(receipt);
+        } catch (Exception ex) {
+            // Receipt delivery must not change a successful payment or its upstream acknowledgement.
+            log.warn("Receipt notification could not be queued: outTradeNo={}, reason={}",
+                    order.getOutTradeNo(), ex.getClass().getSimpleName());
+        }
+        return view;
     }
 
     private boolean databaseBacked() {
@@ -1460,6 +1618,11 @@ public class DemoOrderService {
 
     private static DemoOrderStatus preserveRefundStatus(DemoOrderStatus currentStatus, DemoOrderStatus nextStatus) {
         return isRefundStatus(currentStatus) ? currentStatus : firstStatus(nextStatus);
+    }
+
+    private static DemoOrderStatus preserveCollectedStatus(DemoOrderStatus currentStatus, DemoOrderStatus nextStatus) {
+        return currentStatus == DemoOrderStatus.COMPLETED
+                ? currentStatus : preserveRefundStatus(currentStatus, nextStatus);
     }
 
     private static BigDecimal money(BigDecimal amount) {

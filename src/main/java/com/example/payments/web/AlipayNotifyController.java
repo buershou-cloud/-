@@ -66,7 +66,11 @@ public class AlipayNotifyController {
                 gatewayTradeNo,
                 channelId,
                 amount(params),
-                tradeStatus
+                tradeStatus,
+                hasText(channel.getAlipay().getAppId())
+                        && channel.getAlipay().getAppId().equals(params.get("app_id"))
+                        && !isPreauthNotify(params) && ("TRADE_SUCCESS".equals(params.get("trade_status"))
+                        || "TRADE_FINISHED".equals(params.get("trade_status")))
         );
         merchantNotifyService.notifyPayment(order, tradeStatus);
         return ResponseEntity.ok("success");
