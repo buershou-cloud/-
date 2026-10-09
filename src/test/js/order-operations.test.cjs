@@ -171,8 +171,8 @@ test('batch and query outcomes are preserved independently of refresh failures',
   assert.match(elements.payoutResult.textContent, /已受理 1 笔/);
   assert.match(elements.payoutResult.textContent, /不要重复转账/);
   assert.equal(await ctx.queryPayout('PAYOUT1'), response);
-  assert.match(elements.payoutQueryResult.textContent, /SUCCESS/);
-  assert.match(elements.payoutQueryResult.textContent, /不要重复转账/);
+  assert.equal(ctx.payoutQueryState({ outBizNo: 'PAYOUT1' }).message, '成功（刷新失败）');
+  assert.match(ctx.payoutQueryState({ outBizNo: 'PAYOUT1' }).detail, /以上查询结果仍有效/);
 });
 
 test('type changes and pagination use the independent display records', () => {
