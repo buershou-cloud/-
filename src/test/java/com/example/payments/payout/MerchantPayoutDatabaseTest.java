@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.*;
@@ -117,7 +118,9 @@ public class MerchantPayoutDatabaseTest {
             } finally {
                 lateJdbc.continueUpdate.countDown();
             }
-            assertThat(query.get(5, TimeUnit.SECONDS).status()).isEqualTo("SUCCESS");
+            assertThatThrownBy(() -> query.get(5, TimeUnit.SECONDS))
+                    .isInstanceOf(ExecutionException.class)
+                    .cause().isInstanceOf(GatewayException.class).hasMessageContaining("本次原单查询未能确认结果");
         }
         MerchantPayoutView persisted = service.search(null, null, "RACE-ORDER", null, null).getFirst();
         assertThat(persisted.status()).isEqualTo("SUCCESS");
@@ -135,8 +138,8 @@ public class MerchantPayoutDatabaseTest {
         notifyResult(provider, "REPLAY-ORDER", "SUCCESS", "SUCCESS-PLATFORM");
         Timestamp completed = jdbc.queryForObject("SELECT completed_at FROM merchant_payout WHERE out_biz_no = 'REPLAY-ORDER'", Timestamp.class);
         notifyResult(provider, "REPLAY-ORDER", "SUCCESS", "SUCCESS-PLATFORM");
-        notifyResult(provider, "REPLAY-ORDER", "FAIL", "STALE-PLATFORM");
-        notifyResult(provider, "REPLAY-ORDER", "PENDING", "STALE-PLATFORM");
+        notifyResult(provider, "REPLAY-ORDER", "FAIL", "SUCCESS-PLATFORM");
+        notifyResult(provider, "REPLAY-ORDER", "PENDING", "SUCCESS-PLATFORM");
         MerchantPayoutView row = service.search(null, null, "REPLAY-ORDER", null, null).getFirst();
         assertThat(row.status()).isEqualTo("SUCCESS");
         assertThat(row.platformOrderNo()).isEqualTo("SUCCESS-PLATFORM");
@@ -150,9 +153,9 @@ public class MerchantPayoutDatabaseTest {
     void failureOnlyAdvancesWhenSuccessIsConfirmed(String provider) {
         seed("FAILED-ORDER", provider, "2026-09-28 12:00:00", "PENDING", null, null);
         notifyResult(provider, "FAILED-ORDER", "FAIL", "FAILED-PLATFORM");
-        notifyResult(provider, "FAILED-ORDER", "PENDING", "STALE-PLATFORM");
+        notifyResult(provider, "FAILED-ORDER", "PENDING", "FAILED-PLATFORM");
         assertThat(service.search(null, null, "FAILED-ORDER", null, null).getFirst().status()).isEqualTo("FAILED");
-        notifyResult(provider, "FAILED-ORDER", "SUCCESS", "SUCCESS-PLATFORM");
+        notifyResult(provider, "FAILED-ORDER", "SUCCESS", "FAILED-PLATFORM");
         assertThat(service.search(null, null, "FAILED-ORDER", null, null).getFirst().status()).isEqualTo("SUCCESS");
     }
 
@@ -164,19 +167,241 @@ public class MerchantPayoutDatabaseTest {
         assertThat(service.search(null, null, "OWNED-ORDER", null, null).getFirst().status()).isEqualTo("PENDING");
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"PENDING", "PROCESSING", "UNKNOWN", "SUCCESS", "FAILED"})
+    void alipayQueryBusinessErrorReportsThisAttemptWithoutClaimingTransferFailed(String status) {
+        seed("QUERY-ERROR", "ALIPAY", "2026-10-09 12:00:00", status, "ALI-ORDER", "ALI-FUND");
+        jdbc.update("UPDATE merchant_payout SET message = 'previous result', raw_response = 'previous response' WHERE out_biz_no = 'QUERY-ERROR'");
+        when(alipay.execute(any(), eq("alipay.fund.trans.common.query"), anyMap(), any()))
+                .thenReturn(alipayResponse(true, false, "error_response", Map.of(), "40004", "QUERY_DENIED", "查询权限不足"));
+
+        assertQueryUnconfirmed("QUERY-ERROR", "查询权限不足");
+
+        MerchantPayoutView saved = row("QUERY-ERROR");
+        boolean terminal = List.of("SUCCESS", "FAILED").contains(status);
+        assertThat(saved.status()).isEqualTo(terminal ? status : "UNKNOWN");
+        assertThat(saved.platformOrderNo()).isEqualTo("ALI-ORDER");
+        assertThat(saved.platformFundOrderNo()).isEqualTo("ALI-FUND");
+        assertThat(saved.completedAt()).isNull();
+        if (terminal) {
+            assertThat(saved.message()).isEqualTo("previous result");
+            assertThat(jdbc.queryForObject("SELECT raw_response FROM merchant_payout WHERE out_biz_no = 'QUERY-ERROR'", String.class))
+                    .isEqualTo("previous response");
+        }
+        verify(alipay, times(1)).execute(any(), eq("alipay.fund.trans.common.query"), anyMap(), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ALIPAY,MISSING", "ALIPAY,UNRECOGNIZED", "DOUYIN,MISSING", "DOUYIN,UNRECOGNIZED"})
+    void missingOrUnrecognizedQueryStatusIsUnknownAndVisible(String provider, String scenario) {
+        seed("NO-STATE", provider, "2026-10-09 12:00:00", "PROCESSING", null, null);
+        Map<String, Object> body = scenario.equals("MISSING") ? Map.of()
+                : Map.of(provider.equals("ALIPAY") ? "status" : "state", "UNRECOGNIZED");
+        prepareSuccessfulQuery(provider, body);
+
+        assertQueryUnconfirmed("NO-STATE", "有效转账状态");
+        assertThat(row("NO-STATE").status()).isEqualTo("UNKNOWN");
+        assertThat(row("NO-STATE").completedAt()).isNull();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"DEALING,PROCESSING", "SUCCESS,SUCCESS", "FAIL,FAILED"})
+    void confirmedAlipayQueryMapsStateAndKeepsTheTwoDifferentPlatformIdTypes(String state, String expected) {
+        seed("VALID-QUERY", "ALIPAY", "2026-10-09 12:00:00", "PROCESSING", "ALI-ORDER", "ALI-FUND");
+        prepareSuccessfulQuery("ALIPAY", Map.of("out_biz_no", "VALID-QUERY", "trans_amount", "12.34",
+                "status", state, "order_id", "ALI-ORDER", "pay_fund_order_id", "ALI-FUND"));
+        MerchantPayoutView result = service.query("VALID-QUERY");
+        assertThat(result.status()).isEqualTo(expected);
+        assertThat(result.platformOrderNo()).isEqualTo("ALI-ORDER");
+        assertThat(result.platformFundOrderNo()).isEqualTo("ALI-FUND");
+        verify(alipay).execute(any(), eq("alipay.fund.trans.common.query"),
+                argThat(body -> body.get("out_biz_no").equals("VALID-QUERY")), any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ALIPAY,FAILED,DEALING", "ALIPAY,SUCCESS,FAIL", "DOUYIN,FAILED,PROCESSING", "DOUYIN,SUCCESS,FAIL"})
+    void staleQueryCannotDescribeThePreviouslyConfirmedStateAsThisQueriesResult(String provider, String saved, String incoming) {
+        seed("STATE-CONFLICT", provider, "2026-10-09 12:00:00", saved, "CONFIRMED-PLATFORM", null);
+        prepareSuccessfulQuery(provider, Map.of(provider.equals("ALIPAY") ? "status" : "state", incoming));
+        assertQueryUnconfirmed("STATE-CONFLICT", "本次返回状态");
+        assertThat(row("STATE-CONFLICT").status()).isEqualTo(saved);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ALIPAY", "DOUYIN"})
+    void aQueryWithConfirmedSuccessCanUpgradePreviousFailure(String provider) {
+        seed("CORRECTED-FAIL", provider, "2026-10-09 12:00:00", "FAILED", "CONFIRMED-PLATFORM", null);
+        prepareSuccessfulQuery(provider, Map.of(provider.equals("ALIPAY") ? "status" : "state", "SUCCESS"));
+        assertThat(service.query("CORRECTED-FAIL").status()).isEqualTo("SUCCESS");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"ALIPAY,out_biz_no,FOREIGN", "ALIPAY,trans_amount,1.00", "ALIPAY,amount,1.00",
+            "ALIPAY,order_id,FOREIGN", "ALIPAY,pay_fund_order_id,FOREIGN", "ALIPAY,trans_amount,bad",
+            "DOUYIN,out_bill_no,FOREIGN", "DOUYIN,transfer_amount,1", "DOUYIN,transfer_bill_no,FOREIGN"})
+    void conflictingQueryEvidenceCannotChangeAnAlreadyConfirmedPayout(String provider, String key, String value) {
+        seed("CONFLICT-QUERY", provider, "2026-10-09 12:00:00", "SUCCESS", "ORIGINAL-PLATFORM", "ORIGINAL-FUND");
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        body.put(provider.equals("ALIPAY") ? "status" : "state", "SUCCESS");
+        body.put(key, value);
+        prepareSuccessfulQuery(provider, body);
+        assertQueryUnconfirmed("CONFLICT-QUERY", "代付回包");
+        assertThat(row("CONFLICT-QUERY").status()).isEqualTo("SUCCESS");
+        assertThat(row("CONFLICT-QUERY").platformOrderNo()).isEqualTo("ORIGINAL-PLATFORM");
+        assertThat(row("CONFLICT-QUERY").platformFundOrderNo()).isEqualTo("ORIGINAL-FUND");
+    }
+
+    @Test
+    void wrongAlipayResponseEnvelopeCannotConfirmAnotherMethodsResult() {
+        seed("WRONG-METHOD", "ALIPAY", "2026-10-09 12:00:00", "PROCESSING", null, null);
+        when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(alipayResponse(true, true,
+                "alipay_trade_query_response", Map.of("status", "SUCCESS"), "10000", null, null));
+        assertQueryUnconfirmed("WRONG-METHOD", "对应接口");
+        assertThat(row("WRONG-METHOD").status()).isEqualTo("UNKNOWN");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ALIPAY_PARSE_ERROR", "ALIPAY_HTTP_502", "ALIPAY_REQUEST_ERROR"})
+    void unconfirmedCreateResponseIsUnknownAndCannotBeSubmittedAgain(String code) {
+        registry.find("ALIPAY").orElseThrow().getAlipay().setCredentialMode("CERTIFICATE");
+        when(alipay.execute(any(), eq("alipay.fund.trans.uni.transfer"), anyMap(), any()))
+                .thenThrow(new GatewayException(code, "response unavailable"));
+        MerchantPayoutCreateRequest request = alipayCreate("CREATE-UNKNOWN");
+        assertThat(service.create(request, null).status()).isEqualTo("UNKNOWN");
+        assertThat(row("CREATE-UNKNOWN").completedAt()).isNull();
+        assertThatThrownBy(() -> service.create(request, null)).isInstanceOf(IllegalArgumentException.class);
+        verify(alipay, times(1)).execute(any(), eq("alipay.fund.trans.uni.transfer"), anyMap(), any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"missing-envelope", "missing-state", "system-error"})
+    void damagedOrUnconfirmedAlipayCreateReplyDoesNotClaimFailure(String scenario) {
+        registry.find("ALIPAY").orElseThrow().getAlipay().setCredentialMode("CERTIFICATE");
+        AlipayGatewayResponse response = switch (scenario) {
+            case "missing-envelope" -> alipayResponse(false, false, null, Map.of(), null, null, null);
+            case "missing-state" -> alipayResponse(false, true, "alipay_fund_trans_uni_transfer_response", Map.of(), "10000", null, null);
+            default -> alipayResponse(false, false, "error_response", Map.of(), "20000", "SYSTEM_ERROR", "系统繁忙");
+        };
+        when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(response);
+        assertThat(service.create(alipayCreate("CREATE-INCOMPLETE"), null).status()).isEqualTo("UNKNOWN");
+        assertThat(row("CREATE-INCOMPLETE").completedAt()).isNull();
+    }
+
+    @Test
+    void explicitAlipayCreateRejectionInOfficialErrorEnvelopeRemainsFailure() {
+        registry.find("ALIPAY").orElseThrow().getAlipay().setCredentialMode("CERTIFICATE");
+        when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(alipayResponse(false, false,
+                "error_response", Map.of(), "40004", "BUSINESS_LIMITED", "业务规则拒绝"));
+        assertThat(service.create(alipayCreate("CREATE-REJECTED"), null).status()).isEqualTo("FAILED");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void alipayTransferFailurePreservesBusinessReasonInsteadOfApiSuccessMessage(boolean query) {
+        String order = "ALIPAY-FAILURE";
+        registry.find("ALIPAY").orElseThrow().getAlipay().setCredentialMode("CERTIFICATE");
+        if (query) seed(order, "ALIPAY", "2026-10-09 12:00:00", "PROCESSING", null, null);
+        Map<String, Object> body = Map.of("status", "FAIL", "error_code", "PAYEE_STATUS_ERROR", "fail_reason", "收款账户状态异常");
+        when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(alipayResponse(query, true,
+                query ? "alipay_fund_trans_common_query_response" : "alipay_fund_trans_uni_transfer_response",
+                body, "10000", null, "Success"));
+        MerchantPayoutView result = query ? service.query(order) : service.create(alipayCreate(order), null);
+        assertThat(result.status()).isEqualTo("FAILED");
+        assertThat(result.code()).isEqualTo("10000");
+        assertThat(result.failReason()).contains("PAYEE_STATUS_ERROR", "收款账户状态异常");
+        assertThat(result.message()).contains("PAYEE_STATUS_ERROR", "收款账户状态异常").doesNotContain("Success");
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void emptyOptionalAlipayResponseFieldsDoNotInvalidateConfirmedSuccess(boolean query) {
+        String order = "ALIPAY-OPTIONAL";
+        registry.find("ALIPAY").orElseThrow().getAlipay().setCredentialMode("CERTIFICATE");
+        if (query) seed(order, "ALIPAY", "2026-10-09 12:00:00", "PROCESSING", null, null);
+        Map<String, Object> body = Map.of("status", "SUCCESS", "amount", "", "trans_amount", " ",
+                "out_biz_no", "", "order_id", "", "pay_fund_order_id", " ");
+        when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(alipayResponse(query, true,
+                query ? "alipay_fund_trans_common_query_response" : "alipay_fund_trans_uni_transfer_response",
+                body, "10000", null, "Success"));
+        MerchantPayoutView result = query ? service.query(order) : service.create(alipayCreate(order), null);
+        assertThat(result.status()).isEqualTo("SUCCESS");
+        assertThat(result.platformOrderNo()).isNull();
+        assertThat(result.platformFundOrderNo()).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ALIPAY", "DOUYIN"})
+    void conflictingSuccessfulQueryCannotReplaceAConcurrentCallbackPlatformId(String provider) throws Exception {
+        seed("ID-RACE", provider, "2026-10-09 12:00:00", "PENDING", null, null);
+        BlockingJdbcTemplate lateJdbc = new BlockingJdbcTemplate(dataSource, "SUCCESS");
+        MerchantPayoutService lateService = service(lateJdbc);
+        prepareSuccessfulQuery(provider, Map.of(provider.equals("ALIPAY") ? "status" : "state", "SUCCESS",
+                provider.equals("ALIPAY") ? "order_id" : "transfer_bill_no", "FOREIGN-PLATFORM"));
+        try (var executor = Executors.newSingleThreadExecutor()) {
+            var query = executor.submit(() -> lateService.query("ID-RACE"));
+            try {
+                assertThat(lateJdbc.updateReady.await(5, TimeUnit.SECONDS)).isTrue();
+                notifyResult(provider, "ID-RACE", "SUCCESS", "CONFIRMED-PLATFORM");
+            } finally { lateJdbc.continueUpdate.countDown(); }
+            assertThatThrownBy(() -> query.get(5, TimeUnit.SECONDS)).isInstanceOf(ExecutionException.class)
+                    .cause().isInstanceOf(GatewayException.class).hasMessageContaining("平台单号");
+        }
+        assertThat(row("ID-RACE").status()).isEqualTo("SUCCESS");
+        assertThat(row("ID-RACE").platformOrderNo()).isEqualTo("CONFIRMED-PLATFORM");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"ALIPAY", "DOUYIN"})
+    void conflictingSuccessNotificationCannotChangeStoredPlatformId(String provider) {
+        seed("ID-REPLAY", provider, "2026-10-09 12:00:00", "SUCCESS", "CONFIRMED-PLATFORM", null);
+        assertThatThrownBy(() -> notifyResult(provider, "ID-REPLAY", "SUCCESS", "FOREIGN-PLATFORM"))
+                .isInstanceOf(GatewayException.class).hasMessageContaining("平台单号");
+        assertThat(row("ID-REPLAY").platformOrderNo()).isEqualTo("CONFIRMED-PLATFORM");
+    }
+
+    private MerchantPayoutView row(String order) {
+        return service.search(null, null, order, null, null).getFirst();
+    }
+
+    private void assertQueryUnconfirmed(String order, String message) {
+        assertThatThrownBy(() -> service.query(order)).isInstanceOfSatisfying(GatewayException.class,
+                error -> assertThat(error.code()).isEqualTo("PAYOUT_QUERY_UNCONFIRMED"))
+                .hasMessageContaining(message).hasMessageContaining("请勿重复代付");
+    }
+
+    private void prepareSuccessfulQuery(String provider, Map<String, Object> body) {
+        if (provider.equals("ALIPAY")) {
+            when(alipay.execute(any(), eq("alipay.fund.trans.common.query"), anyMap(), any()))
+                    .thenReturn(alipayResponse(true, true, "alipay_fund_trans_common_query_response", body, "10000", null, null));
+        } else {
+            when(douyin.get(any(), anyString())).thenReturn(new DouyinGatewayResponse(200, body, "{}", Map.of()));
+        }
+    }
+
+    private static AlipayGatewayResponse alipayResponse(boolean query, boolean success, String key,
+                                                        Map<String, Object> body, String code, String subCode, String message) {
+        return new AlipayGatewayResponse(query ? "alipay.fund.trans.common.query" : "alipay.fund.trans.uni.transfer",
+                key, success, code, message, subCode, message, body, Map.of("test-response", body));
+    }
+
+    private static MerchantPayoutCreateRequest alipayCreate(String order) {
+        return new MerchantPayoutCreateRequest("ALIPAY", order, new BigDecimal("12.34"), "ALIPAY_USER_ID",
+                "2088000000000000", null, "代付", "备注", null, null, null, "unused-mock-password");
+    }
+
     private void prepareQueryResponse(String provider, String state) {
         if (provider.equals("ALIPAY")) {
             if (state.equals("UNKNOWN")) {
                 when(alipay.execute(any(), anyString(), anyMap(), any())).thenThrow(new GatewayException("ALIPAY_REQUEST_ERROR", "late timeout"));
             } else {
-                when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(new AlipayGatewayResponse("query", "response", true,
-                        "10000", "late", null, null, Map.of("status", "DEALING", "order_id", "LATE-PLATFORM"), Map.of("late", true)));
+                when(alipay.execute(any(), anyString(), anyMap(), any())).thenReturn(new AlipayGatewayResponse("alipay.fund.trans.common.query", "alipay_fund_trans_common_query_response", true,
+                        "10000", "late", null, null, Map.of("status", "DEALING", "order_id", "SUCCESS-PLATFORM"), Map.of("late", true)));
             }
         } else if (state.equals("UNKNOWN")) {
             when(douyin.get(any(), anyString())).thenThrow(new GatewayException("DOUYIN_REQUEST_ERROR", "late timeout"));
         } else {
             when(douyin.get(any(), anyString())).thenReturn(new DouyinGatewayResponse(200,
-                    Map.of("state", "ACCEPTED", "transfer_bill_no", "LATE-PLATFORM", "message", "late"), "{}", Map.of()));
+                    Map.of("state", "ACCEPTED", "transfer_bill_no", "SUCCESS-PLATFORM", "message", "late"), "{}", Map.of()));
         }
     }
 

@@ -38,7 +38,7 @@ function setup(options = {}) {
     payoutBusinessText: value => String(value || '-'),
     productCell: order => order.profitShared ? '已分账' : '收款产品', refundCell: () => '未退款', statusCell: () => '已完成',
     orderActionCell: order => `<button data-order-action="refund" data-order-no="${order.outTradeNo}">退款</button>`,
-    renderProfitShareOrders() {}, refreshSummaryViews() {},
+    renderProfitShareOrders() {}, refreshSummaryViews() {}, renderPayouts() {},
     setDashboardResult: result => { elements.dashboardResult.textContent = result.message; },
     closeOrderMenus() {},
     request: async (url, config) => {
@@ -55,7 +55,9 @@ function setup(options = {}) {
   });
   const functions = ['loadOrders', 'queryOrders', 'orderQueryString', 'displayOrderRecords', 'renderOrders',
     'renderOrderPagination', 'compactPageItems', 'operationTypeText', 'operationStatusText', 'operationOrderRow',
-    'handleOperationAction', 'refreshAfterPayout', 'submitPayout', 'submitPayoutBatch', 'queryPayout', 'paidOrder'];
+    'handleOperationAction', 'refreshAfterPayout', 'submitPayout', 'submitPayoutBatch', 'queryPayout', 'paidOrder',
+    'payoutQueryKey', 'payoutQueryState', 'payoutQueryFeedback', 'publishPayoutQuery', 'payoutQueryHeading',
+    'handlePayoutQuery', 'normalizeStatusCode'];
   vm.runInContext(functions.map(pageFunction).join('\n'), ctx);
   return { ctx, state, elements, calls };
 }
@@ -169,8 +171,8 @@ test('batch and query outcomes are preserved independently of refresh failures',
   assert.match(elements.payoutResult.textContent, /已受理 1 笔/);
   assert.match(elements.payoutResult.textContent, /不要重复转账/);
   assert.equal(await ctx.queryPayout('PAYOUT1'), response);
-  assert.match(elements.payoutResult.textContent, /SUCCESS/);
-  assert.match(elements.payoutResult.textContent, /不要重复转账/);
+  assert.match(elements.payoutQueryResult.textContent, /SUCCESS/);
+  assert.match(elements.payoutQueryResult.textContent, /不要重复转账/);
 });
 
 test('type changes and pagination use the independent display records', () => {
