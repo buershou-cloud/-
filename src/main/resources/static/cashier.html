@@ -1628,7 +1628,7 @@
         if (form) {
           form.setAttribute("target", "_self");
           alipaySubmitForm = form;
-          if (isMobilePayClient() && isPagePayProduct(currentProduct)) {
+          if (isMobilePayClient() && !isAlipayClient() && isPagePayProduct(currentProduct)) {
             const pagePayUrl = alipayFormActionUrl(form);
             if (pagePayUrl) {
               openAlipayNativePay(pagePayUrl, "正在打开支付宝电脑网站支付...");

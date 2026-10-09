@@ -162,7 +162,7 @@ public class MerchantPayoutService {
         try {
             if (PROVIDER_ALIPAY.equals(provider)) {
                 AlipayGatewayResponse response = createAlipay(channel, request, outBizNo, amount);
-                applyAlipayResponse(outBizNo, response);
+                applyAlipayResponse(outBizNo, response, false);
             } else {
                 DouyinGatewayResponse response = createDouyin(channel, request, outBizNo, amount, douyinNotifyUrl);
                 applyDouyinResponse(outBizNo, response);
@@ -182,6 +182,7 @@ public class MerchantPayoutService {
         MerchantPayoutView current = findRequired(cleanRequired(outBizNo, "outBizNo is required"));
         PaymentGatewayProperties.Channel channel = channel(current.channelId());
         try {
+            String observedStatus;
             if (PROVIDER_ALIPAY.equals(current.provider())) {
                 Map<String, Object> body = new LinkedHashMap<>();
                 body.put("out_biz_no", current.outBizNo());
@@ -193,18 +194,27 @@ public class MerchantPayoutService {
                         body,
                         new AlipayRequestOptions(null, null, null)
                 );
-                applyAlipayResponse(current.outBizNo(), response);
+                observedStatus = applyAlipayResponse(current.outBizNo(), response, true);
             } else if (PROVIDER_DOUYIN.equals(current.provider())) {
                 String path = DOUYIN_TRANSFER_PATH + "/out-bill-no/"
                         + URLEncoder.encode(current.outBizNo(), StandardCharsets.UTF_8);
-                applyDouyinResponse(current.outBizNo(), douyinClient.get(channel, path));
+                observedStatus = applyDouyinResponse(current.outBizNo(), douyinClient.get(channel, path));
             } else {
                 throw new IllegalArgumentException("Unsupported payout provider: " + current.provider());
             }
+            MerchantPayoutView saved = findRequired(current.outBizNo());
+            if (!observedStatus.equals(saved.status())) {
+                throw new GatewayException("PAYOUT_QUERY_STATE_CONFLICT", "本次返回状态 " + observedStatus
+                        + " 与本地已确认状态 " + saved.status() + " 不一致，保留已确认记录并核对原单");
+            }
+            return saved;
         } catch (GatewayException ex) {
             markUnknown(current.outBizNo(), ex.code(), ex.getMessage());
+            MerchantPayoutView saved = findRequired(current.outBizNo());
+            throw new GatewayException("PAYOUT_QUERY_UNCONFIRMED",
+                    "本次原单查询未能确认结果（" + ex.code() + "）：" + ex.getMessage()
+                            + "；本地记录状态为 " + saved.status() + "，请勿重复代付。", ex);
         }
-        return findRequired(current.outBizNo());
     }
 
     public void recordDouyinNotification(
@@ -307,37 +317,77 @@ public class MerchantPayoutService {
         return douyinClient.postSensitive(channel, DOUYIN_TRANSFER_PATH, body);
     }
 
-    private void applyAlipayResponse(String outBizNo, AlipayGatewayResponse response) {
+    private String applyAlipayResponse(String outBizNo, AlipayGatewayResponse response, boolean query) {
+        String expectedKey = query ? "alipay_fund_trans_common_query_response" : "alipay_fund_trans_uni_transfer_response";
+        boolean errorEnvelope = "error_response".equals(response.responseKey()) && !response.success()
+                && hasText(response.code()) && !"10000".equals(response.code());
+        if ((!expectedKey.equals(response.responseKey()) && !errorEnvelope)
+                || response.response() == null || !hasText(response.code())) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "支付宝代付回包缺少对应接口的有效结果，请核对原单");
+        }
+        if (!response.success() && query) {
+            throw new GatewayException(firstText(response.subCode(), response.code(), "ALIPAY_QUERY_ERROR"),
+                    firstText(response.subMessage(), response.message(), "支付宝未返回可确认的原单结果"));
+        }
+        if (!response.success() && "20000".equals(response.code())) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "支付宝返回系统异常，转账结果待核对："
+                    + firstText(response.subMessage(), response.message(), response.code()));
+        }
         Map<String, Object> body = response.response();
-        String status = text(body, "status");
+        MerchantPayoutView current = findRequired(outBizNo);
+        validateResponseIdentity(current, body, "out_biz_no", "trans_amount", false);
+        validateResponseAmount(current, body, "amount", false);
+        String platformOrderNo = responseIdentifier(body, "order_id");
+        String platformFundOrderNo = responseIdentifier(body, "pay_fund_order_id");
+        validatePlatformIdentifiers(current, platformOrderNo, platformFundOrderNo);
+        String status = responseIdentifier(body, "status");
         String mapped = response.success() ? alipayStatus(status) : STATUS_FAILED;
+        if (STATUS_UNKNOWN.equals(mapped)) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "支付宝代付回包缺少有效转账状态，请核对原单");
+        }
+        String failureReason = null;
+        if (STATUS_FAILED.equals(mapped)) {
+            String errorCode = trimToNull(text(body, "error_code"));
+            String reason = firstText(text(body, "fail_reason"), response.subMessage(), response.message());
+            failureReason = errorCode == null ? reason : "[" + errorCode + "] " + firstText(reason, "转账失败");
+        }
         updateResult(
                 outBizNo,
                 mapped,
-                text(body, "order_id"),
-                text(body, "pay_fund_order_id"),
+                platformOrderNo,
+                platformFundOrderNo,
                 response.code(),
-                firstText(response.subMessage(), response.message()),
-                null,
+                firstText(failureReason, response.subMessage(), response.message()),
+                failureReason,
                 response.raw()
         );
+        return mapped;
     }
 
-    private void applyDouyinResponse(String outBizNo, DouyinGatewayResponse response) {
+    private String applyDouyinResponse(String outBizNo, DouyinGatewayResponse response) {
         Map<String, Object> body = response.body();
         Map<String, Object> data = nestedMap(body, "data");
         Map<String, Object> result = data.isEmpty() ? body : data;
-        String state = firstText(text(result, "state"), text(result, "transfer_state"));
+        MerchantPayoutView current = findRequired(outBizNo);
+        validateResponseIdentity(current, result, "out_bill_no", "transfer_amount", true);
+        String platformOrderNo = responseIdentifier(result, "transfer_bill_no");
+        validatePlatformIdentifiers(current, platformOrderNo, null);
+        String state = firstText(responseIdentifier(result, "state"), responseIdentifier(result, "transfer_state"));
+        String mapped = douyinStatus(state);
+        if (STATUS_UNKNOWN.equals(mapped)) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "抖音代付回包缺少有效转账状态，请核对原单");
+        }
         updateResult(
                 outBizNo,
-                douyinStatus(state),
-                text(result, "transfer_bill_no"),
+                mapped,
+                platformOrderNo,
                 null,
                 text(body, "code"),
                 firstText(text(body, "message"), text(body, "msg"), state),
                 text(result, "fail_reason"),
                 body
         );
+        return mapped;
     }
 
     private void insertPending(
@@ -398,6 +448,8 @@ public class MerchantPayoutService {
                   AND (status NOT IN ('SUCCESS', 'FAILED')
                        OR ? = 'SUCCESS'
                        OR (status = 'FAILED' AND ? = 'FAILED'))
+                  AND (platform_order_no IS NULL OR ? IS NULL OR platform_order_no = ?)
+                  AND (platform_fund_order_no IS NULL OR ? IS NULL OR platform_fund_order_no = ?)
                 """,
                 trimToNull(platformOrderNo),
                 trimToNull(platformFundOrderNo),
@@ -409,11 +461,54 @@ public class MerchantPayoutService {
                 incomingStatus,
                 outBizNo,
                 incomingStatus,
-                incomingStatus
+                incomingStatus,
+                trimToNull(platformOrderNo), trimToNull(platformOrderNo),
+                trimToNull(platformFundOrderNo), trimToNull(platformFundOrderNo)
         );
         if (updated == 0) {
             // A rejected stale update is expected; a missing local order is still an error.
-            findRequired(outBizNo);
+            validatePlatformIdentifiers(findRequired(outBizNo), platformOrderNo, platformFundOrderNo);
+        }
+    }
+
+    private static void validateResponseIdentity(MerchantPayoutView current, Map<String, Object> body,
+                                                 String orderKey, String amountKey, boolean fen) {
+        String order = responseIdentifier(body, orderKey);
+        if (order != null && !current.outBizNo().equals(order)) {
+            throw new GatewayException("PAYOUT_RESPONSE_MISMATCH", "代付回包的原单号与本地记录不一致");
+        }
+        validateResponseAmount(current, body, amountKey, fen);
+    }
+
+    private static void validateResponseAmount(MerchantPayoutView current, Map<String, Object> body, String key, boolean fen) {
+        Object value = body.get(key);
+        if (value == null || (value instanceof String text && text.isBlank())) return;
+        try {
+            if (!(value instanceof String) && !(value instanceof Number)) throw new NumberFormatException();
+            BigDecimal amount = new BigDecimal(value.toString());
+            if (fen) amount = amount.setScale(0, RoundingMode.UNNECESSARY).movePointLeft(2);
+            amount = amount.setScale(2, RoundingMode.UNNECESSARY);
+            if (amount.compareTo(current.amount()) != 0) {
+                throw new GatewayException("PAYOUT_RESPONSE_MISMATCH", "代付回包的金额与本地记录不一致");
+            }
+        } catch (ArithmeticException | NumberFormatException ex) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "代付回包金额格式无效", ex);
+        }
+    }
+
+    private static String responseIdentifier(Map<String, Object> body, String key) {
+        Object value = body.get(key);
+        if (value == null) return null;
+        if (!(value instanceof String text)) {
+            throw new GatewayException("PAYOUT_RESPONSE_INVALID", "代付回包字段格式无效：" + key);
+        }
+        return trimToNull(text);
+    }
+
+    private static void validatePlatformIdentifiers(MerchantPayoutView current, String platform, String fund) {
+        if ((hasText(platform) && hasText(current.platformOrderNo()) && !platform.trim().equals(current.platformOrderNo()))
+                || (hasText(fund) && hasText(current.platformFundOrderNo()) && !fund.trim().equals(current.platformFundOrderNo()))) {
+            throw new GatewayException("PAYOUT_RESPONSE_MISMATCH", "代付回包的平台单号与本地记录不一致");
         }
     }
 
@@ -595,7 +690,7 @@ public class MerchantPayoutService {
     }
 
     static String alipayStatus(String value) {
-        String status = firstText(value, STATUS_PENDING).toUpperCase(Locale.ROOT);
+        String status = firstText(value, STATUS_UNKNOWN).toUpperCase(Locale.ROOT);
         return switch (status) {
             case "SUCCESS" -> STATUS_SUCCESS;
             case "FAIL", "FAILED" -> STATUS_FAILED;
@@ -605,7 +700,7 @@ public class MerchantPayoutService {
     }
 
     static String douyinStatus(String value) {
-        String status = firstText(value, STATUS_PENDING).toUpperCase(Locale.ROOT);
+        String status = firstText(value, STATUS_UNKNOWN).toUpperCase(Locale.ROOT);
         return switch (status) {
             case "SUCCESS" -> STATUS_SUCCESS;
             case "FAIL", "FAILED" -> STATUS_FAILED;
@@ -642,6 +737,8 @@ public class MerchantPayoutService {
                 || value.endsWith("REQUEST_INTERRUPTED")
                 || value.endsWith("RESPONSE_INVALID")
                 || value.endsWith("RESPONSE_SIGNATURE_INVALID")
+                || value.equals("ALIPAY_PARSE_ERROR")
+                || value.equals("PAYOUT_RESPONSE_MISMATCH")
                 || value.startsWith("ALIPAY_HTTP_5")
                 || value.startsWith("DOUYIN_HTTP_5");
     }

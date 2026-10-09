@@ -16,6 +16,9 @@ class MerchantPayoutServiceTest {
         assertThat(MerchantPayoutService.alipayStatus("SUCCESS")).isEqualTo("SUCCESS");
         assertThat(MerchantPayoutService.alipayStatus("DEALING")).isEqualTo("PROCESSING");
         assertThat(MerchantPayoutService.alipayStatus("FAIL")).isEqualTo("FAILED");
+        assertThat(MerchantPayoutService.alipayStatus(null)).isEqualTo("UNKNOWN");
+        assertThat(MerchantPayoutService.alipayStatus(" ")).isEqualTo("UNKNOWN");
+        assertThat(MerchantPayoutService.alipayStatus("NEW_STATE")).isEqualTo("UNKNOWN");
     }
 
     @Test
@@ -24,6 +27,9 @@ class MerchantPayoutServiceTest {
         assertThat(MerchantPayoutService.douyinStatus("TRANSFERING")).isEqualTo("PROCESSING");
         assertThat(MerchantPayoutService.douyinStatus("SUCCESS")).isEqualTo("SUCCESS");
         assertThat(MerchantPayoutService.douyinStatus("FAIL")).isEqualTo("FAILED");
+        assertThat(MerchantPayoutService.douyinStatus(null)).isEqualTo("UNKNOWN");
+        assertThat(MerchantPayoutService.douyinStatus(" ")).isEqualTo("UNKNOWN");
+        assertThat(MerchantPayoutService.douyinStatus("NEW_STATE")).isEqualTo("UNKNOWN");
     }
 
     @Test
