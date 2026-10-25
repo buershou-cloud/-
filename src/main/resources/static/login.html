@@ -361,9 +361,14 @@
     .verify-message {
       margin: 0 20px 12px;
     }
+    .verify-track.ready::before { background: rgba(22, 119, 255, 0.12); }
+    .verify-handle:focus-visible { outline: 3px solid rgba(22, 119, 255, .35); outline-offset: -3px; }
+    .verify-handle:disabled { cursor: wait; opacity: .65; }
+    .verify-message { min-height: 24px; }
   </style>
+  <link rel="stylesheet" href="ui-theme.css?v=20261025">
 </head>
-<body>
+<body class="ui-login">
   <main class="login-card">
     <div class="login-head">
       <div class="logo">管</div>
@@ -373,7 +378,7 @@
       </div>
     </div>
     <form id="loginForm">
-      <div id="message" class="message"></div>
+      <div id="message" class="message" role="status" aria-live="polite"></div>
       <label>账号
         <input id="username" name="username" autocomplete="username" value="admin" required>
       </label>
@@ -384,7 +389,7 @@
     </form>
   </main>
 
-  <div id="verifyModal" class="verify-modal" aria-hidden="true">
+  <div id="verifyModal" class="verify-modal" aria-hidden="true" tabindex="-1">
     <section class="verify-dialog" role="dialog" aria-modal="true" aria-labelledby="verifyTitle">
       <div class="verify-dialog-head">
         <div>
@@ -406,12 +411,12 @@
           </div>
         </div>
         <div id="verifyTrack" class="verify-track">
-          <button id="verifyHandle" class="verify-handle" type="button" aria-label="拖动滑块">→</button>
+          <button id="verifyHandle" class="verify-handle" type="button" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="图形验证滑块，可用左右方向键调整，回车验证">→</button>
           <span id="verifyText" class="verify-text">向右拖动滑块填充拼图</span>
-          <input id="verifySlider" type="range" min="16" max="400" value="16" aria-label="图形验证滑块">
+          <input id="verifySlider" type="range" min="16" max="400" value="16" aria-label="图形验证滑块" tabindex="-1">
         </div>
       </div>
-      <div id="verifyMessage" class="message verify-message"></div>
+      <div id="verifyMessage" class="message verify-message" role="status" aria-live="polite"></div>
     </section>
   </div>
 
@@ -474,6 +479,7 @@
       sliderState.value = next;
       slider.value = Math.round(next);
       handle.style.transform = `translateX(${handleX}px)`;
+      handle.setAttribute("aria-valuenow", String(Math.round(ratio * 100)));
       track.style.setProperty("--verify-progress", `${handleX + handle.offsetWidth}px`);
       piece.style.left = `${pieceX}px`;
       piece.style.top = `${pieceY}px`;
@@ -481,10 +487,10 @@
       piece.style.height = `${pieceSize}px`;
 
       if (moved && next > min + 2) {
-        track.classList.add("verified");
-        $("verifyText").textContent = "已完成，正在自动登录";
+        track.classList.add("ready");
+        $("verifyText").textContent = "松开滑块，开始验证";
       } else {
-        track.classList.remove("verified");
+        track.classList.remove("ready");
         $("verifyText").textContent = "向右拖动滑块填充拼图";
       }
     }
@@ -497,6 +503,10 @@
       loginSubmitting = Boolean(isBusy);
       $("refreshVerify").disabled = Boolean(isBusy);
       $("closeVerifyModal").disabled = Boolean(isBusy);
+      $("verifyHandle").disabled = Boolean(isBusy);
+      $("verifySlider").disabled = Boolean(isBusy);
+      $("verifyModal").setAttribute("aria-busy", String(Boolean(isBusy)));
+      if (isBusy) $("verifyText").textContent = "正在验证…";
     }
 
     function sliderValueFromPointer(event) {
@@ -536,6 +546,7 @@
       challengeLoading = true;
       try {
         await loadChallenge();
+        if ($("verifyModal").classList.contains("open")) $("verifyHandle").focus();
       } catch (error) {
         $("verifyMessage").textContent = error.message || "图形验证加载失败，请稍后再试";
       } finally {
@@ -552,6 +563,8 @@
       $("verifyModal").classList.remove("open");
       $("verifyModal").setAttribute("aria-hidden", "true");
       document.body.classList.remove("modal-open");
+      $("loginButton").disabled = false;
+      $("loginButton").focus();
     }
 
     async function submitLoginAfterVerification() {
@@ -577,6 +590,7 @@
             verificationX: Number($("verifySlider").value)
           })
         });
+        $("verifyText").textContent = "验证通过，正在进入后台";
         window.location.replace("/");
       } catch (error) {
         $("verifyMessage").textContent = error.message || "登录失败，请检查账号密码";
@@ -607,6 +621,7 @@
     });
 
     $("verifyHandle").addEventListener("pointerdown", (event) => {
+      if (challengeLoading || loginSubmitting) return;
       dragging = true;
       dragStartClientX = event.clientX;
       dragStartValue = sliderState.value;
@@ -614,6 +629,7 @@
     });
 
     $("verifyTrack").addEventListener("pointerdown", (event) => {
+      if (challengeLoading || loginSubmitting) return;
       if (event.target === $("verifyHandle")) {
         return;
       }
@@ -653,6 +669,20 @@
       }
     });
 
+    $("verifyHandle").addEventListener("keydown", (event) => {
+      if (challengeLoading || loginSubmitting) return;
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const value = event.key === "Home" ? sliderState.minX : event.key === "End" ? sliderState.maxX
+          : sliderState.value + (event.key === "ArrowRight" ? 2 : -2);
+        setSliderValue(value, true);
+        $("verifyText").textContent = "调整到缺口后，按回车验证";
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (sliderReadyForSubmit()) submitLoginAfterVerification();
+      }
+    });
+
     window.addEventListener("resize", () => {
       setSliderValue(sliderState.value, sliderState.value > sliderState.minX + 2);
     });
@@ -664,19 +694,34 @@
       }
     });
     window.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && $("verifyModal").classList.contains("open")) {
+      if (!$("verifyModal").classList.contains("open")) return;
+      if (event.key === "Escape") {
         closeVerifyModal();
+      }
+      if (event.key === "Tab") {
+        const focusable = [...$("verifyModal").querySelectorAll('button:not([disabled]), input:not([disabled]):not([tabindex="-1"])')];
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (!first) { event.preventDefault(); $("verifyModal").focus(); return; }
+        if (event.shiftKey && (document.activeElement === first || !$("verifyModal").contains(document.activeElement))) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && (document.activeElement === last || !$("verifyModal").contains(document.activeElement))) {
+          event.preventDefault(); first.focus();
+        }
       }
     });
 
     $("loginForm").addEventListener("submit", async (event) => {
       event.preventDefault();
+      if (challengeLoading || loginSubmitting || $("verifyModal").classList.contains("open")) return;
       $("message").textContent = "";
       $("loginButton").disabled = true;
+      $("loginButton").textContent = "准备验证…";
       try {
         await openVerifyModal();
       } finally {
         $("loginButton").disabled = false;
+        $("loginButton").textContent = "登录后台";
       }
     });
   </script>

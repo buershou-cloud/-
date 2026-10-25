@@ -32,6 +32,7 @@ function setup(options = {}) {
   const state = { orders: [], orderOperations: [], orderOperationsError: '', orderPage: 1, orderPageSize: 10,
     orderLoadSequence: 0, payouts: [], paymentPasswordConfigured: true };
   const ctx = vm.createContext({ state, URLSearchParams, $: id => elements[id],
+    setText: (id, value) => { elements[id].textContent = value; },
     html: value => String(value ?? '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c])),
     money: value => `¥${Number(value).toFixed(2)}`,
     payoutProviderText: value => value === 'DOUYIN' ? '抖音' : '支付宝',
@@ -57,7 +58,7 @@ function setup(options = {}) {
     'renderOrderPagination', 'compactPageItems', 'operationTypeText', 'operationStatusText', 'operationOrderRow',
     'handleOperationAction', 'refreshAfterPayout', 'submitPayout', 'submitPayoutBatch', 'queryPayout', 'paidOrder',
     'payoutQueryKey', 'payoutQueryState', 'payoutQueryFeedback', 'publishPayoutQuery', 'payoutQueryHeading',
-    'handlePayoutQuery', 'normalizeStatusCode'];
+    'handlePayoutQuery', 'normalizeStatusCode', 'orderMatchesStatus', 'updateOrderDateSummary'];
   vm.runInContext(functions.map(pageFunction).join('\n'), ctx);
   return { ctx, state, elements, calls };
 }

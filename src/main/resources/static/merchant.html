@@ -618,9 +618,46 @@
         margin-right: 0;
       }
     }
+    .portal-nav-label { padding: 14px 14px 4px; color: var(--muted); font-size: 12px; }
+    .order-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+    .order-toolbar .section-title { margin: 0 0 6px; }
+    .order-filters { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(130px, 1fr)) auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+    .order-filters select, .order-pagination select { min-height: 38px; border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; background: #fff; font: inherit; color: var(--text); }
+    .order-summary { margin: 0 0 12px; font-size: 13px; color: var(--muted); }
+    .order-pagination { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 16px; font-size: 13px; color: var(--muted); }
+    .order-pagination-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .order-empty { padding: 48px 20px; text-align: center; white-space: normal; color: var(--muted); }
+    .order-empty strong { display: block; color: var(--text); margin-bottom: 8px; }
+    .order-feedback { margin: 0 0 16px; font-size: 13px; color: #b42318; }
+    .amount-cell { text-align: right; font-variant-numeric: tabular-nums; }
+    .order-number { display: inline-flex; align-items: center; gap: 6px; }
+    .copy-order-btn { border: 0; background: transparent; color: var(--primary); padding: 4px; font: inherit; font-size: 12px; cursor: pointer; }
+    .status.processing { background: #eff6ff; color: #175cd3; }
+    .status.failed { background: #fff1f0; color: #b42318; }
+    .status.refunded { background: #f4f3ff; color: #6941c6; }
+    .status.frozen { background: #fffaeb; color: #b54708; }
+    .credential-field { grid-template-columns: minmax(0, 1fr) auto 42px; }
+    .credential-toggle { border: 1px solid #d5dde5; border-left: 0; background: #f8fafc; color: #334155; padding: 0 12px; font: inherit; font-size: 12px; cursor: pointer; }
+    .btn:disabled, .copy-btn:disabled { cursor: not-allowed; opacity: .55; }
+    @media (max-width: 1150px) { .order-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 800px) {
+      .portal-nav-label { display: none; }
+      .order-toolbar { align-items: flex-start; }
+      .order-filters { grid-template-columns: 1fr 1fr; }
+      .order-filters .order-search { grid-column: 1 / -1; }
+      .merchant-order-table thead { display: none; }
+      .merchant-order-table, .merchant-order-table tbody { display: block; }
+      .merchant-order-table tr:not(.order-empty-row) { display: grid; gap: 8px; padding: 16px; border-bottom: 1px solid var(--line); }
+      .merchant-order-table td[data-label] { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 0; border: 0; white-space: normal; overflow-wrap: anywhere; font-size: 13px; }
+      .merchant-order-table td[data-label]::before { content: attr(data-label); flex-shrink: 0; color: var(--muted); font-weight: 400; }
+      .merchant-order-table .order-number { min-width: 0; justify-content: flex-end; }
+      .merchant-order-table .order-number span { overflow-wrap: anywhere; }
+      .order-empty-row, .order-empty { display: block; }
+    }
   </style>
+  <link rel="stylesheet" href="ui-theme.css?v=20261025">
 </head>
-<body>
+<body class="ui-merchant">
 <main class="shell">
   <section id="loginView" class="login-wrap">
     <div class="panel login-panel">
@@ -630,14 +667,14 @@
       <div class="panel-body">
         <form id="loginForm">
           <div class="form-grid">
-            <label>商户号<input id="loginMerchantId" required placeholder="例如 M10001"></label>
-            <label>MD5 密钥<input id="loginMd5Key" placeholder="商户明细里的 MD5 密钥"></label>
+            <label>商户号<input id="loginMerchantId" autocomplete="username" required placeholder="例如 M10001"></label>
+            <label>登录密钥<input id="loginMd5Key" type="password" autocomplete="current-password" placeholder="请输入商户 MD5 密钥"></label>
           </div>
           <div class="actions">
-            <button class="btn" type="submit">登录</button>
+            <button class="btn" id="merchantLoginButton" type="submit">登录</button>
             <a class="btn secondary" href="./">返回管理端</a>
           </div>
-          <p id="loginMessage" class="muted" style="margin-top:14px"></p>
+          <p id="loginMessage" class="muted" role="status" aria-live="polite" style="margin-top:14px"></p>
           <p class="muted" style="margin-top:10px;line-height:1.7">管理员已登录时可从管理端快捷进入；其他访问者请使用自己的商户号和 MD5 登录凭据。</p>
         </form>
       </div>
@@ -655,15 +692,17 @@
 
     <section class="portal-card">
       <div class="portal-tabs">
-        <button class="portal-tab active" type="button" data-tab="api">网站接入</button>
-        <button class="portal-tab" type="button" data-tab="credentials">密钥管理</button>
+        <div class="portal-nav-label">日常经营</div>
+        <button class="portal-tab active" type="button" data-tab="orders" aria-current="page">订单列表</button>
         <button class="portal-tab" type="button" data-tab="qr">收款二维码</button>
+        <div class="portal-nav-label">开发者中心</div>
+        <button class="portal-tab" type="button" data-tab="api">网站接入</button>
+        <button class="portal-tab" type="button" data-tab="credentials">密钥管理</button>
         <button class="portal-tab" type="button" data-tab="docs">开发文档</button>
-        <button class="portal-tab" type="button" data-tab="orders">订单列表</button>
       </div>
 
       <div class="portal-content">
-        <div id="tab-api" class="tab-pane active">
+        <div id="tab-api" class="tab-pane">
           <header class="integration-head">
             <span class="integration-badge">MERCHANT API · JSON / UTF-8</span>
             <h2>把支付接到自己的网站</h2>
@@ -723,7 +762,7 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
             <h2 class="section-title">MD5 签名</h2>
             <div class="api-row">
               <div class="api-label">商户MD5密钥</div>
-              <div class="copy-field"><input id="md5Key" readonly><button class="copy-btn" type="button" data-copy-source="md5Key">复制</button></div>
+              <div class="copy-field credential-field"><input id="md5Key" readonly aria-label="商户 MD5 密钥"><button class="credential-toggle" type="button" data-secret-toggle="md5Key" aria-pressed="false">查看</button><button class="copy-btn" type="button" data-copy-source="md5Key">复制</button></div>
             </div>
             <div class="api-actions">
               <button class="btn info" id="showV1DocBtn" type="button">MD5 配置说明</button>
@@ -743,7 +782,7 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
             </div>
             <div class="api-row">
               <div class="api-label">商户私钥</div>
-              <div class="copy-field"><textarea id="rsaPrivateKey" readonly></textarea><button class="copy-btn" type="button" data-copy-source="rsaPrivateKey">复制</button></div>
+              <div class="copy-field credential-field"><textarea id="rsaPrivateKey" readonly aria-label="商户私钥"></textarea><button class="credential-toggle" type="button" data-secret-toggle="rsaPrivateKey" aria-pressed="false">查看</button><button class="copy-btn" type="button" data-copy-source="rsaPrivateKey">复制</button></div>
             </div>
             <div class="api-actions">
               <button class="btn info" id="showV2DocBtn" type="button">RSA2 配置说明</button>
@@ -761,7 +800,7 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
                 <option value="RSA2">仅开启RSA2签名</option>
               </select>
             </div>
-            <p id="apiMessage" class="portal-message"></p>
+            <p id="apiMessage" class="portal-message" role="status" aria-live="polite"></p>
             <div class="confirm-row"><button class="btn" id="saveSignModeBtn" type="button">确定修改</button></div>
           </div>
         </div>
@@ -784,18 +823,27 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
           </div>
         </div>
 
-        <div id="tab-orders" class="tab-pane">
+        <div id="tab-orders" class="tab-pane active">
           <div class="order-section">
-            <h2 class="section-title">订单列表</h2>
+            <div class="order-toolbar"><div><h2 class="section-title">订单列表</h2><p class="muted">查看收款记录，核对每笔交易状态。</p></div><button class="btn secondary" id="refreshMerchantOrders" type="button">刷新</button></div>
+            <div class="order-filters">
+              <label class="order-search">订单搜索<input id="merchantOrderSearch" type="search" placeholder="订单号、交易号或通道" autocomplete="off"></label>
+              <label>订单状态<select id="merchantOrderStatus"><option value="">全部状态</option><option value="COMPLETED">已完成</option><option value="UNPAID">未支付</option><option value="PROCESSING">处理中</option><option value="FROZEN">冻结中</option><option value="UNFROZEN">已解冻</option><option value="PARTIALLY_REFUNDED">部分退款</option><option value="REFUNDED">已退款</option><option value="CLOSED">已关闭</option><option value="FAILED">失败</option></select></label>
+              <label>开始日期<input id="merchantOrderStart" type="date"></label>
+              <label>结束日期<input id="merchantOrderEnd" type="date"></label>
+              <button class="btn secondary" id="resetMerchantOrderFilters" type="button">重置</button>
+            </div>
+            <p id="merchantOrderFeedback" class="order-feedback" role="status" aria-live="polite" hidden></p>
+            <p id="merchantOrderSummary" class="order-summary" role="status" aria-live="polite"></p>
             <div class="table-wrap">
-              <table>
+              <table class="merchant-order-table">
                 <thead>
                 <tr>
                   <th>订单号</th>
                   <th>支付平台交易号</th>
                   <th>通道</th>
                   <th>类型</th>
-                  <th>金额</th>
+                  <th class="amount-cell">金额</th>
                   <th>状态</th>
                   <th>时间</th>
                 </tr>
@@ -803,6 +851,7 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
                 <tbody id="portalOrders"></tbody>
               </table>
             </div>
+            <div class="order-pagination"><span id="merchantOrderPageInfo"></span><div class="order-pagination-controls"><label>每页<select id="merchantOrderPageSize"><option value="10">10 条</option><option value="20">20 条</option><option value="50">50 条</option></select></label><button class="btn secondary" id="merchantOrdersPrevious" type="button">上一页</button><button class="btn secondary" id="merchantOrdersNext" type="button">下一页</button></div></div>
           </div>
         </div>
 
@@ -904,6 +953,11 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
   let currentPortal = null;
   let integrationProducts = [];
   let channelLoadSequence = 0;
+  let merchantOrders = [];
+  let merchantOrdersPage = 1;
+  let merchantOrdersRequest = 0;
+  let merchantLoginPending = false;
+  const credentialValues = { md5Key: "", rsaPrivateKey: "" };
 
   function json(value) {
     return JSON.stringify(value, null, 2);
@@ -927,12 +981,37 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
   }
 
   function statusClass(status) {
-    return status === "COMPLETED" || status === "SUCCESS" ? "status" : "status pending";
+    if (["COMPLETED", "SUCCESS"].includes(status)) return "status";
+    if (["PROCESSING", "PENDING", "PAYING", "CREATED"].includes(status)) return "status processing";
+    if (["FAILED", "FAILURE"].includes(status)) return "status failed";
+    if (["REFUNDED", "PARTIALLY_REFUNDED"].includes(status)) return "status refunded";
+    if (status === "FROZEN") return "status frozen";
+    return "status pending";
+  }
+
+  function setCredentialValue(sourceId, value) {
+    credentialValues[sourceId] = String(value || "");
+    $(sourceId).value = value ? "••••••••••••••••" : "";
+    const button = document.querySelector(`[data-secret-toggle="${sourceId}"]`);
+    if (button) {
+      button.setAttribute("aria-pressed", "false");
+      button.textContent = "查看";
+      button.disabled = !value;
+    }
+  }
+
+  function toggleCredential(sourceId) {
+    const button = document.querySelector(`[data-secret-toggle="${sourceId}"]`);
+    if (!button || !credentialValues[sourceId]) return;
+    const reveal = button.getAttribute("aria-pressed") !== "true";
+    $(sourceId).value = reveal ? credentialValues[sourceId] : "••••••••••••••••";
+    button.setAttribute("aria-pressed", String(reveal));
+    button.textContent = reveal ? "隐藏" : "查看";
   }
 
   async function copyValue(sourceId) {
     const element = $(sourceId);
-    const text = element?.value || element?.textContent || "";
+    const text = Object.hasOwn(credentialValues, sourceId) ? credentialValues[sourceId] : element?.value || element?.textContent || "";
     if (!text) return;
     try {
       if (!navigator.clipboard?.writeText) throw new Error();
@@ -940,18 +1019,27 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
       $("apiMessage").textContent = "已复制";
       $("integrationMessage").textContent = "已复制";
     } catch (_) {
-      element?.select?.();
-      $("integrationMessage").textContent = "未能自动复制，请选中文字后复制。";
+      if (Object.hasOwn(credentialValues, sourceId)) {
+        $("apiMessage").textContent = "未能自动复制，请先点击“查看”，再手动复制。";
+      } else {
+        element?.select?.();
+        $("integrationMessage").textContent = "未能自动复制，请选中文字后复制。";
+      }
     }
   }
 
   function switchTab(tab) {
     document.querySelectorAll(".portal-tab").forEach((button) => {
       button.classList.toggle("active", button.dataset.tab === tab);
+      if (button.dataset.tab === tab) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
     });
     document.querySelectorAll(".tab-pane").forEach((pane) => {
       pane.classList.toggle("active", pane.id === `tab-${tab}`);
     });
+    if (tab !== "credentials") {
+      for (const key of Object.keys(credentialValues)) setCredentialValue(key, credentialValues[key]);
+    }
   }
 
   function dynamicApiBase(fallback = "") {
@@ -968,10 +1056,10 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
     $("merchantSub").textContent = `${merchant.merchantId} · 费率 ${merchant.feeRateText}`;
     $("apiBase").value = `${apiRoot}/merchant-api`;
     $("merchantApiId").value = merchant.merchantId;
-    $("md5Key").value = merchant.md5Key || "";
+    setCredentialValue("md5Key", merchant.md5Key);
     $("platformPublicKey").value = merchant.platformPublicKey || "";
     $("rsaPublicKey").value = merchant.rsa2PublicKey || "";
-    $("rsaPrivateKey").value = merchant.rsa2PrivateKey || "";
+    setCredentialValue("rsaPrivateKey", merchant.rsa2PrivateKey);
     $("signMode").value = merchant.signMode || "MD5_RSA2";
     const cashierUrl = merchantCashierUrl(merchant.merchantId);
     $("merchantCashierUrl").value = cashierUrl;
@@ -1041,26 +1129,107 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
     }
   }
 
+  function formatMerchantAmount(value) {
+    const text = String(value ?? "").trim();
+    const match = text.match(/^([¥￥]?\s*)(-?)(\d+)(?:\.(\d{1,2}))?$/);
+    if (!match) return text || "—";
+    return `${match[1].trim() || "¥"}${match[2]}${match[3].replace(/\B(?=(\d{3})+(?!\d))/g, ",")}.${(match[4] || "").padEnd(2, "0")}`;
+  }
+
+  function merchantOrderPage(orders, filters, page, pageSize) {
+    const query = String(filters.query || "").trim().toLowerCase();
+    const filtered = orders.filter(order => {
+      const matchesQuery = !query || [order.outTradeNo, order.tradeNo, order.channelId].some(value => String(value || "").toLowerCase().includes(query));
+      const selectedStatus = filters.status;
+      const matchesStatus = !selectedStatus || order.status === selectedStatus
+        || (selectedStatus === "COMPLETED" && order.status === "SUCCESS")
+        || (selectedStatus === "PROCESSING" && ["PENDING", "PAYING", "CREATED"].includes(order.status));
+      const day = String(order.createdAt || "").slice(0, 10);
+      if ((filters.start || filters.end) && !/^\d{4}-\d{2}-\d{2}$/.test(day)) return false;
+      return matchesQuery && matchesStatus && (!filters.start || day >= filters.start) && (!filters.end || day <= filters.end);
+    });
+    const size = [10, 20, 50].includes(Number(pageSize)) ? Number(pageSize) : 10;
+    const pages = Math.max(1, Math.ceil(filtered.length / size));
+    const current = Math.max(1, Math.min(Number(page) || 1, pages));
+    return { rows: filtered.slice((current - 1) * size, current * size), total: filtered.length, pages, page: current, pageSize: size };
+  }
+
   function renderOrders(orders) {
-    $("portalOrders").innerHTML = orders.map((order) => `
+    merchantOrders = Array.isArray(orders) ? orders : [];
+    renderMerchantOrders();
+    if (!Array.isArray(orders)) showMerchantOrderError("订单数据暂时无法读取，请点击刷新重试。");
+  }
+
+  function renderMerchantOrders() {
+    const filters = { query: $("merchantOrderSearch").value, status: $("merchantOrderStatus").value, start: $("merchantOrderStart").value, end: $("merchantOrderEnd").value };
+    const invalidRange = filters.start && filters.end && filters.start > filters.end;
+    const result = merchantOrderPage(merchantOrders, filters, merchantOrdersPage, $("merchantOrderPageSize").value);
+    merchantOrdersPage = result.page;
+    $("merchantOrderFeedback").hidden = !invalidRange;
+    $("merchantOrderFeedback").textContent = invalidRange ? "开始日期不能晚于结束日期，请调整日期范围。" : "";
+    const rows = result.rows;
+    $("portalOrders").innerHTML = rows.length ? rows.map((order) => `
       <tr>
-        <td>${escapeHtml(order.outTradeNo)}</td>
-        <td>${escapeHtml(order.tradeNo || "-")}</td>
-        <td>${escapeHtml(order.channelId || "-")}</td>
-        <td>${escapeHtml(order.productName)}</td>
-        <td>${escapeHtml(order.amountText)}</td>
-        <td><span class="${statusClass(order.status)}">${escapeHtml(order.statusText)}</span></td>
-        <td>${escapeHtml(order.createdAt)}</td>
+        <td data-label="订单号"><span class="order-number"><span>${escapeHtml(order.outTradeNo)}</span><button class="copy-order-btn" type="button" data-copy-order="${escapeHtml(order.outTradeNo)}" aria-label="复制订单号">复制</button></span></td>
+        <td data-label="交易号">${escapeHtml(order.tradeNo || "-")}</td>
+        <td data-label="通道">${escapeHtml(order.channelId || "-")}</td>
+        <td data-label="类型">${escapeHtml(order.productName)}</td>
+        <td data-label="金额" class="amount-cell">${escapeHtml(formatMerchantAmount(order.amountText))}</td>
+        <td data-label="状态"><span class="${statusClass(order.status)}">${escapeHtml(order.statusText || order.status || "待确认")}</span></td>
+        <td data-label="时间">${escapeHtml(order.createdAt)}</td>
       </tr>
-    `).join("");
+    `).join("") : `<tr class="order-empty-row"><td class="order-empty" colspan="7"><strong>${merchantOrders.length ? "没有符合条件的订单" : "暂无订单"}</strong>${merchantOrders.length ? "调整筛选条件或点击重置查看全部记录。" : "收到第一笔订单后，交易记录会显示在这里。"}</td></tr>`;
+    $("merchantOrderSummary").textContent = `共 ${result.total} 笔订单${result.total !== merchantOrders.length ? ` · 已从 ${merchantOrders.length} 笔记录中筛选` : ""}`;
+    $("merchantOrderPageInfo").textContent = result.total ? `第 ${result.page} / ${result.pages} 页` : "暂无记录";
+    $("merchantOrdersPrevious").disabled = result.page <= 1;
+    $("merchantOrdersNext").disabled = result.page >= result.pages;
+  }
+
+  function showMerchantOrderError(message) {
+    $("merchantOrderFeedback").textContent = message;
+    $("merchantOrderFeedback").hidden = false;
+    if (!merchantOrders.length) $("portalOrders").innerHTML = '<tr class="order-empty-row"><td class="order-empty" colspan="7"><strong>暂时无法加载订单</strong>请点击右上角“刷新”重试。</td></tr>';
+  }
+
+  async function refreshMerchantOrders() {
+    const portal = currentPortal;
+    if (!portal) return;
+    const sequence = ++merchantOrdersRequest;
+    const button = $("refreshMerchantOrders");
+    button.disabled = true;
+    button.textContent = "刷新中…";
+    $("portalOrders").setAttribute("aria-busy", "true");
+    try {
+      const data = await request("/api/v1/merchant-portal/login", { method: "POST", body: JSON.stringify({ merchantId: portal.merchant.merchantId, md5Key: portal.merchant.md5Key || "", demoLogin: false }) });
+      if (sequence !== merchantOrdersRequest || currentPortal !== portal) return;
+      if (!Array.isArray(data.orders)) throw new Error("订单数据不完整");
+      currentPortal.orders = data.orders;
+      renderOrders(data.orders);
+    } catch (_) {
+      if (sequence !== merchantOrdersRequest || currentPortal !== portal) return;
+      showMerchantOrderError(merchantOrders.length ? "暂时无法更新订单，当前显示上次加载的记录。请稍后重试。" : "订单加载失败，请稍后重试。");
+    } finally {
+      if (sequence === merchantOrdersRequest) {
+        button.disabled = false;
+        button.textContent = "刷新";
+        $("portalOrders").setAttribute("aria-busy", "false");
+      }
+    }
   }
 
   function renderPortal(data) {
     currentPortal = data;
+    merchantOrdersRequest++;
     integrationProducts = [];
     const merchant = data.merchant;
     $("loginView").classList.add("hidden");
     $("portalView").classList.remove("hidden");
+    merchantOrdersPage = 1;
+    for (const id of ["merchantOrderSearch", "merchantOrderStatus", "merchantOrderStart", "merchantOrderEnd"]) $(id).value = "";
+    $("refreshMerchantOrders").disabled = false;
+    $("refreshMerchantOrders").textContent = "刷新";
+    $("portalOrders").setAttribute("aria-busy", "false");
+    switchTab("orders");
     updateMerchantFields(merchant, data.apiBase);
     renderOrders(data.orders);
     loadIntegrationProducts();
@@ -1078,7 +1247,29 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
     $("apiMessage").textContent = "修改成功";
   }
 
+  async function submitMerchantSetting(buttonId, path, body = {}) {
+    const button = $(buttonId);
+    if (button.disabled) return;
+    const label = button.textContent;
+    button.disabled = true;
+    button.textContent = "保存中…";
+    $("apiMessage").textContent = "";
+    try {
+      await mutateMerchant(path, body);
+    } catch (error) {
+      $("apiMessage").textContent = error?.message || "暂时无法保存，请稍后重试。";
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  }
+
   async function login(demoLogin = false) {
+    if (merchantLoginPending) return;
+    merchantLoginPending = true;
+    $("merchantLoginButton").disabled = true;
+    $("merchantLoginButton").textContent = "登录中…";
+    $("loginMessage").textContent = "";
     const payload = {
       merchantId: $("loginMerchantId").value,
       md5Key: $("loginMd5Key").value,
@@ -1092,6 +1283,10 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
       renderPortal(data);
     } catch (error) {
       $("loginMessage").textContent = error.message || "登录失败";
+    } finally {
+      merchantLoginPending = false;
+      $("merchantLoginButton").disabled = false;
+      $("merchantLoginButton").textContent = "登录";
     }
   }
 
@@ -1111,6 +1306,13 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
     currentPortal = null;
     integrationProducts = [];
     channelLoadSequence++;
+    merchantOrdersRequest++;
+    merchantOrders = [];
+    for (const key of Object.keys(credentialValues)) setCredentialValue(key, "");
+    $("refreshMerchantOrders").disabled = false;
+    $("refreshMerchantOrders").textContent = "刷新";
+    $("portalOrders").setAttribute("aria-busy", "false");
+    $("loginMerchantId").focus();
   });
 
   document.querySelectorAll(".portal-tab").forEach((button) => {
@@ -1119,6 +1321,32 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
 
   document.querySelectorAll("[data-copy-source]").forEach((button) => {
     button.addEventListener("click", () => copyValue(button.dataset.copySource));
+  });
+
+  document.querySelectorAll("[data-secret-toggle]").forEach(button => {
+    button.addEventListener("click", () => toggleCredential(button.dataset.secretToggle));
+  });
+
+  for (const id of ["merchantOrderSearch", "merchantOrderStatus", "merchantOrderStart", "merchantOrderEnd", "merchantOrderPageSize"]) {
+    $(id).addEventListener(id === "merchantOrderSearch" ? "input" : "change", () => { merchantOrdersPage = 1; renderMerchantOrders(); });
+  }
+  $("resetMerchantOrderFilters").addEventListener("click", () => {
+    for (const id of ["merchantOrderSearch", "merchantOrderStatus", "merchantOrderStart", "merchantOrderEnd"]) $(id).value = "";
+    merchantOrdersPage = 1;
+    renderMerchantOrders();
+  });
+  $("merchantOrdersPrevious").addEventListener("click", () => { merchantOrdersPage--; renderMerchantOrders(); });
+  $("merchantOrdersNext").addEventListener("click", () => { merchantOrdersPage++; renderMerchantOrders(); });
+  $("refreshMerchantOrders").addEventListener("click", refreshMerchantOrders);
+  $("portalOrders").addEventListener("click", async event => {
+    const button = event.target.closest("[data-copy-order]");
+    if (!button) return;
+    try {
+      await navigator.clipboard.writeText(button.dataset.copyOrder);
+      $("merchantOrderSummary").textContent = "订单号已复制";
+    } catch (_) {
+      showMerchantOrderError("未能自动复制，请手动选择订单号复制。");
+    }
   });
 
   $("showV1DocBtn").addEventListener("click", () => {
@@ -1147,16 +1375,16 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
 
   $("resetMd5Btn").addEventListener("click", async () => {
     if (!window.confirm("确定重置商户 MD5 密钥吗？旧密钥会立即失效。")) return;
-    await mutateMerchant("/reset-md5");
+    await submitMerchantSetting("resetMd5Btn", "/reset-md5");
   });
 
   $("generateRsaBtn").addEventListener("click", async () => {
     if (!window.confirm("确定生成新的商户 RSA 密钥对吗？旧密钥会立即失效。")) return;
-    await mutateMerchant("/generate-rsa2");
+    await submitMerchantSetting("generateRsaBtn", "/generate-rsa2");
   });
 
   $("saveSignModeBtn").addEventListener("click", async () => {
-    await mutateMerchant("/sign-mode", { signMode: $("signMode").value });
+    await submitMerchantSetting("saveSignModeBtn", "/sign-mode", { signMode: $("signMode").value });
   });
 
   $("openMerchantCashierBtn").addEventListener("click", () => {

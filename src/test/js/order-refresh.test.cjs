@@ -20,6 +20,7 @@ function setup(request) {
   const elements = Object.fromEntries(fields.map(id => [id, { value: '' }]));
   elements.queryOrdersBtn = { disabled: false, textContent: '查询订单' };
   elements.resetOrderFilterBtn = { disabled: false };
+  elements.orderDateSummary = { textContent: '' };
   elements.orderFilterForm = { reset: () => fields.forEach(id => { elements[id].value = ''; }) };
   const context = vm.createContext({
     URLSearchParams, request: url => url.includes('/operations') ? Promise.resolve({ records: [], warnings: [] }) : request(url),
@@ -32,6 +33,9 @@ function setup(request) {
     function refreshSummaryViews() {}
     async function loadFinancialSummary() {}
     function setDashboardResult(result) { messages.push(result.message); }
+    ${pageFunction('setText')}
+    ${pageFunction('updateOrderDateSummary')}
+    ${pageFunction('orderMatchesStatus')}
     ${pageFunction('loadOrders')}
     ${pageFunction('queryOrders')}
     ${pageFunction('orderQueryString')}

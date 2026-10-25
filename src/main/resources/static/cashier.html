@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>通道收银台</title>
+  <title>收银台</title>
   <style>
     :root {
       --primary: #1677ff;
@@ -372,21 +372,32 @@
     .bad {
       color: var(--red);
     }
+    .payment-status-card { margin-top: 16px; padding: 24px 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; text-align: center; }
+    .payment-status-card[hidden] { display: none; }
+    .payment-status-icon { display: grid; place-items: center; width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%; background: #eff6ff; color: #175cd3; font-size: 22px; font-weight: 600; }
+    .payment-status-card.is-success .payment-status-icon { background: #ecfdf3; color: #027a48; }
+    .payment-status-card.is-error .payment-status-icon { background: #fef3f2; color: #b42318; }
+    .payment-status-card.is-warning .payment-status-icon { background: #fffbeb; color: #92400e; }
+    .payment-status-title { margin: 0; font-size: 19px; }
+    .payment-status-detail { margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+    .payment-status-amount { margin-top: 16px; font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .payment-status-meta { margin: 12px 0 0; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
   </style>
+  <link rel="stylesheet" href="ui-theme.css?v=20261025">
 </head>
-<body>
+<body class="ui-cashier">
 <main class="shell">
-  <div class="brand"><div class="logo">¥</div><div>通道收银台</div></div>
+  <div class="brand"><div class="logo">¥</div><div>收银台</div></div>
   <section class="card">
     <div class="head">
       <h1 id="cashierTitle">收银台</h1>
-      <p id="cashierHint">输入金额后发起支付，订单将固定走当前二维码对应的支付通道。</p>
+      <p id="cashierHint">请核对付款金额，确认后继续支付。</p>
     </div>
     <form id="cashierForm">
       <label>支付金额
-        <input id="amount" class="amount" type="number" min="0.01" step="0.01" placeholder="0.00" required>
+        <input id="amount" class="amount" type="number" inputmode="decimal" min="0.01" step="0.01" placeholder="0.00" required>
       </label>
-      <label>订单标题
+      <label>付款说明
         <input id="subject" value="扫码收银台支付" required>
       </label>
       <div id="profitSharingPanel" hidden>
@@ -400,7 +411,7 @@
         <div class="payment-code-actions">
           <input id="paymentCodeFile" type="file" accept="image/*" hidden>
           <button id="paymentCodeUploadButton" class="payment-code-upload" type="button">上传照片识别付款码</button>
-          <div id="paymentCodeUploadStatus" class="payment-code-status">只在付款码产品中使用，其他支付产品不会显示。</div>
+          <div id="paymentCodeUploadStatus" class="payment-code-status">上传付款码照片后，请核对识别结果。</div>
         </div>
       </div>
       <button id="payButton" class="btn" type="submit" disabled>确认支付</button>
@@ -410,7 +421,14 @@
       <div class="mini"><span>通道类型</span><strong id="providerText">-</strong></div>
     </div>
   </section>
-  <div id="message" class="message">请输入金额后确认支付。</div>
+  <div id="message" class="message" role="status" aria-live="polite">请输入金额后确认支付。</div>
+  <section id="paymentStatusCard" class="payment-status-card" role="status" aria-live="polite" hidden>
+    <div id="paymentStatusIcon" class="payment-status-icon" aria-hidden="true"></div>
+    <h2 id="paymentStatusTitle" class="payment-status-title"></h2>
+    <p id="paymentStatusDetail" class="payment-status-detail"></p>
+    <div id="paymentStatusAmount" class="payment-status-amount" hidden></div>
+    <p id="paymentStatusOrder" class="payment-status-meta" hidden></p>
+  </section>
   <section id="continuePanel" class="continue-panel" aria-live="polite">
     <p>如果没有自动打开支付宝，请点击按钮继续付款。</p>
     <button id="continuePayButton" class="continue-button" type="button">打开支付宝付款</button>
@@ -488,6 +506,7 @@
   let alipaySubmitForm;
   let paymentPollTimer;
   let paymentPollAttempts = 0;
+  let latestPaymentSummary = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -584,17 +603,53 @@
   function setMessage(value, tone = "") {
     const message = $("message");
     message.hidden = false;
-    message.textContent = messageText(value);
+    message.textContent = cashierMessageText(value);
     message.className = `message${tone ? ` ${tone}` : ""}`;
   }
 
   function writeResult(value, tone = "") {
     $("result").textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
-    if (tone === "ok") {
-      $("message").hidden = true;
-      return;
-    }
     setMessage(value, tone);
+    renderPaymentStatus({
+      state: tone === "bad" ? "error" : tone === "loading" ? "processing" : "info",
+      title: tone === "bad" ? "暂未完成" : tone === "loading" ? "处理中" : tone === "ok" ? "请求已提交" : "付款提示",
+      detail: cashierMessageText(value),
+      ...latestPaymentSummary
+    });
+  }
+
+  function cashierMessageText(value) {
+    if (typeof value === "string") return value;
+    const text = value?.message || value?.subMessage || value?.error;
+    return typeof text === "string" && text.trim() ? text : "暂时无法完成操作，请稍后重试。";
+  }
+
+  function renderPaymentStatus({ state, title, detail, totalAmount, outTradeNo }) {
+    $("message").hidden = true;
+    const card = $("paymentStatusCard");
+    card.hidden = false;
+    card.className = `payment-status-card is-${state}`;
+    $("paymentStatusIcon").textContent = state === "success" ? "✓" : state === "error" ? "!" : "…";
+    $("paymentStatusTitle").textContent = title;
+    $("paymentStatusDetail").textContent = detail || "";
+    const amount = Number(totalAmount);
+    $("paymentStatusAmount").hidden = totalAmount == null || !Number.isFinite(amount);
+    $("paymentStatusAmount").textContent = totalAmount != null && Number.isFinite(amount)
+      ? `¥${amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "";
+    $("paymentStatusOrder").hidden = !outTradeNo;
+    $("paymentStatusOrder").textContent = outTradeNo ? `订单号：${outTradeNo}` : "";
+  }
+
+  function showPaymentSuccess(data, payload) {
+    $("result").textContent = "支付成功，订单状态已同步。";
+    renderPaymentStatus({ state: "success", title: "支付成功", detail: "本笔付款已确认，请勿重复支付。", totalAmount: payload.totalAmount, outTradeNo: payload.outTradeNo || data.outTradeNo });
+  }
+
+  function showPaymentUnconfirmed(payload) {
+    const message = "付款结果待确认，请勿重复支付。";
+    $("result").textContent = message;
+    setMessage(message, "loading");
+    renderPaymentStatus({ state: "warning", title: "付款结果待确认", detail: "请勿重复支付，稍后查询订单结果。", totalAmount: payload.totalAmount, outTradeNo: payload.outTradeNo });
   }
 
   function setPaymentCodeUploadStatus(text, tone = "") {
@@ -606,7 +661,7 @@
   function clearPaymentCodeUi() {
     $("paymentCode").value = "";
     $("paymentCodeFile").value = "";
-    setPaymentCodeUploadStatus("只在付款码产品中使用，其他支付产品不会显示。");
+    setPaymentCodeUploadStatus("上传付款码照片后，请核对识别结果。");
   }
 
   function normalizePaymentCode(value) {
@@ -833,7 +888,7 @@
         if (isPaymentComplete(data)) {
           clearPaymentPolling();
           hidePaymentQr();
-          writeResult("支付成功，订单状态已同步。", "ok");
+          showPaymentSuccess(data, payload);
           return;
         }
         if (isPaymentClosed(data)) {
@@ -846,14 +901,15 @@
           const cancelResult = await cancelPayment(payload.outTradeNo, channelId);
           clearPaymentPolling();
           hidePaymentQr();
-          writeResult(cancelResult.status === "CLOSED" ? "订单码超时未支付，已撤销订单。" : cancelResult, cancelResult.status === "CLOSED" ? "bad" : "loading");
+          if (cancelResult.status === "CLOSED") writeResult("订单码超时未支付，已撤销订单。", "bad");
+          else showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 5000);
       } catch (error) {
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult(error, "bad");
+          showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 5000);
@@ -875,7 +931,7 @@
         const data = await queryPaymentStatus(payload.outTradeNo, channelId);
         if (isPaymentComplete(data)) {
           clearPaymentPolling();
-          writeResult("支付成功，订单状态已同步。", "ok");
+          showPaymentSuccess(data, payload);
           return;
         }
         if (isPaymentClosed(data)) {
@@ -885,14 +941,14 @@
         }
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult("支付结果确认中，请稍后在后台订单列表查看。", "loading");
+          showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 2000);
       } catch (error) {
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult(error, "bad");
+          showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 2000);
@@ -915,7 +971,7 @@
         if (isPaymentComplete(data)) {
           clearPaymentPolling();
           hidePaymentQr();
-          writeResult("支付成功，订单状态已同步。", "ok");
+          showPaymentSuccess(data, payload);
           return;
         }
         if (isPaymentClosed(data)) {
@@ -926,14 +982,14 @@
         }
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult(`${paymentName}结果确认中，请稍后在后台订单列表查看。`, "loading");
+          showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 2000);
       } catch (error) {
         if (paymentPollAttempts >= maxAttempts) {
           clearPaymentPolling();
-          writeResult(error, "bad");
+          showPaymentUnconfirmed(payload);
           return;
         }
         paymentPollTimer = setTimeout(poll, 2000);
@@ -1034,7 +1090,7 @@
       return;
     }
     setPaymentCodeUploadStatus("可手动输入付款码，也可以上传付款码照片自动识别。");
-    $("cashierHint").textContent = "输入金额和顾客支付宝付款码后发起收款，本产品调用支付宝当面付付款码能力。";
+    $("cashierHint").textContent = "输入收款金额和顾客的支付宝付款码，核对后确认收款。";
   }
 
   function isJsapiProduct(product) {
@@ -1271,7 +1327,7 @@
         throw { code: "BAD_REQUEST", message: "支付通道不存在" };
       }
       currentAvailableChannels = [currentChannel];
-      $("cashierTitle").textContent = `${currentChannel.id} 收银台`;
+      $("cashierTitle").textContent = "付款收银台";
       $("channelText").textContent = currentChannel.id;
       $("providerText").textContent = currentChannel.provider === "DOUYIN"
         ? "抖音支付"
@@ -1287,7 +1343,7 @@
       const availableChannels = merchantChannels(currentMerchant, channels);
       currentAvailableChannels = availableChannels;
       $("cashierTitle").textContent = `${currentMerchant.name} 收银台`;
-      $("cashierHint").textContent = "输入金额后发起支付，订单将按商户可用支付通道自动路由。";
+      $("cashierHint").textContent = "请核对收款方和金额，确认后继续支付。";
       $("subject").value = `${currentMerchant.name} 扫码收款`;
       $("channelText").textContent = availableChannels.map((channel) => channel.id).join("、") || "-";
       $("providerText").textContent = "商户收款码";
@@ -1393,6 +1449,8 @@
 
   $("cashierForm").addEventListener("submit", async (event) => {
     event.preventDefault();
+    latestPaymentSummary = null;
+    $("paymentStatusCard").hidden = true;
     hidePaymentQr();
     hideContinuePanel();
     clearPaymentPolling();
@@ -1477,6 +1535,7 @@
       }
     }
     payButton.disabled = true;
+    latestPaymentSummary = { totalAmount: payload.totalAmount, outTradeNo: payload.outTradeNo };
     writeResult("正在发起支付，请稍候...", "loading");
     try {
       const data = await request("/api/v1/payments/pay", {
@@ -1509,7 +1568,7 @@
         const tradePayResult = await alipayJsapiTradePay(tradeNo);
         const resultCode = tradePayResultCode(tradePayResult);
         if (resultCode === "9000") {
-          writeResult("支付成功，正在同步订单状态...", "loading");
+          writeResult("正在确认付款结果，请稍候...", "loading");
           startJsapiPaymentPolling(data, payload);
           return;
         }
@@ -1527,7 +1586,7 @@
       }
       if (isPaymentCodeProduct(currentProduct)) {
         if (data.status === "SUCCESS") {
-          writeResult({ message: "付款码收款成功", response: data }, "ok");
+          showPaymentSuccess(data, payload);
           return;
         }
         if (data.status === "PENDING" || data.status === "PAYING") {
