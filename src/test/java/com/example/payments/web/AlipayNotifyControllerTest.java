@@ -30,6 +30,7 @@ class AlipayNotifyControllerTest {
         MerchantNotifyService merchantNotifyService = mock(MerchantNotifyService.class);
         PaymentGatewayProperties.Channel channel = new PaymentGatewayProperties.Channel();
         channel.setId("ali-main");
+        channel.getAlipay().setAppId("APP");
         when(channelRegistry.find("ali-main")).thenReturn(Optional.of(channel));
         when(openApiClient.verifyNotify(eq(channel), anyMap())).thenReturn(true);
         DemoOrderView order = orderView("PREAUTH-H5-001", "AUTH-001");
@@ -49,6 +50,7 @@ class AlipayNotifyControllerTest {
         );
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+        form.add("app_id", "APP");
         form.add("out_order_no", "PREAUTH-H5-001");
         form.add("auth_no", "AUTH-001");
         form.add("trade_no", "TRADE-IGNORED");
@@ -132,6 +134,7 @@ class AlipayNotifyControllerTest {
                 "¥0.00",
                 new BigDecimal("1.00"),
                 "¥1.00",
+                BigDecimal.ZERO, "0.00",
                 DemoOrderStatus.FROZEN,
                 "冻结中",
                 "2026-06-15 20:30:00",

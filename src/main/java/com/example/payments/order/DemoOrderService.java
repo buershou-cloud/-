@@ -5,6 +5,7 @@ import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.PreauthUnfreezeRequest;
 import com.example.payments.domain.RefundCreateRequest;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.domain.PaymentProduct;
 import com.example.payments.merchant.api.MerchantApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -45,6 +46,8 @@ public class DemoOrderService {
     private final Map<String, DemoOrder> orders = new LinkedHashMap<>();
     private final Map<String, MerchantNotifyTarget> merchantNotifyTargets = new LinkedHashMap<>();
     private final Map<String, MemoryRefund> memoryRefunds = new LinkedHashMap<>();
+    private final Map<String, CaptureReservation> memoryCaptures = new LinkedHashMap<>();
+    private final Map<String, UnfreezeReservation> memoryUnfreezes = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
     private final ConfirmedReceiptSink confirmedReceiptSink;
 
@@ -71,6 +74,7 @@ public class DemoOrderService {
         this.confirmedReceiptSink = confirmedReceiptSink;
         if (jdbcTemplate != null) {
             ensurePreauthUnfreezeTable();
+            ensurePreauthCaptureTable();
         }
     }
 
@@ -84,7 +88,7 @@ public class DemoOrderService {
             return jdbcTemplate.query("""
                             SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                                    COALESCE(m.name, o.merchant_id) AS merchant_name,
-                                   o.product, o.subject, o.amount, o.status, o.created_at,
+                                   o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                                    o.pre_authorization, o.supplemented, o.profit_shared,
                                    COALESCE((
                                        SELECT SUM(r.refund_amount)
@@ -155,7 +159,7 @@ public class DemoOrderService {
             StringBuilder sql = new StringBuilder("""
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
-                           o.product, o.subject, o.amount, o.status, o.created_at,
+                           o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
                             COALESCE((
                                 SELECT SUM(r.refund_amount)
@@ -216,7 +220,7 @@ public class DemoOrderService {
             return jdbcTemplate.query("""
                             SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                                    COALESCE(m.name, o.merchant_id) AS merchant_name,
-                                   o.product, o.subject, o.amount, o.status, o.created_at,
+                                   o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                                    o.pre_authorization, o.supplemented, o.profit_shared,
                                     COALESCE((
                                         SELECT SUM(r.refund_amount)
@@ -255,7 +259,7 @@ public class DemoOrderService {
             String sql = """
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
-                           o.product, o.subject, o.amount, o.status, o.created_at,
+                           o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
                             COALESCE((
                                 SELECT SUM(r.refund_amount)
@@ -304,6 +308,7 @@ public class DemoOrderService {
 
     public synchronized DemoOrderView complete(String outTradeNo) {
         DemoOrder order = order(outTradeNo);
+        DemoOrderStatus previous = order.getStatus();
         if (order.isPreAuthorization()) {
             order.setStatus(DemoOrderStatus.FROZEN);
             ensureTradeNo(order, "AUTH");
@@ -311,6 +316,7 @@ public class DemoOrderService {
             order.setStatus(DemoOrderStatus.COMPLETED);
             ensureTradeNo(order, "MANUAL");
         }
+        markPaidTransition(order, previous);
         persist(order);
         return DemoOrderView.from(order);
     }
@@ -333,6 +339,7 @@ public class DemoOrderService {
         order.setStatus(order.isPreAuthorization() ? DemoOrderStatus.FROZEN : DemoOrderStatus.COMPLETED);
         order.setSupplemented(true);
         ensureTradeNo(order, order.isPreAuthorization() ? "AUTH_SUPP" : "SUPP");
+        markPaidTransition(order, DemoOrderStatus.UNPAID);
         persist(order);
         return DemoOrderView.from(order);
     }
@@ -373,6 +380,8 @@ public class DemoOrderService {
             order.setRefundedAmount(successfulRefundAmount(order.getOutTradeNo()));
         } else {
             order.setRefundedAmount(money(order.getRefundedAmount().add(remaining)));
+            memoryRefunds.put("LOCAL_RF_" + java.util.UUID.randomUUID(),
+                    new MemoryRefund(order.getOutTradeNo(), remaining, PaymentStatus.SUCCESS, LocalDateTime.now()));
         }
         applyRefundStatus(order);
         persist(order);
@@ -424,7 +433,9 @@ public class DemoOrderService {
             } else if (next == PaymentStatus.SUCCESS) {
                 order.setRefundedAmount(money(order.getRefundedAmount().add(refundAmount)));
             }
-            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.getOutTradeNo(), refundAmount, next));
+            LocalDateTime completedAt = previous == null ? null : previous.completedAt();
+            if (next == PaymentStatus.SUCCESS && completedAt == null) completedAt = LocalDateTime.now();
+            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.getOutTradeNo(), refundAmount, next, completedAt));
         }
         if (hasText(response.tradeNo())) {
             order.setTradeNo(response.tradeNo().trim());
@@ -503,52 +514,198 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
-    public synchronized DemoOrderView convertPreauthToPay(String outTradeNo) {
-        return convertPreauthToPay(outTradeNo, null);
+    /** Reserve the real capture identity and its collection order before contacting the provider. */
+    public synchronized GatewayResponse reservePreauthCapture(PreauthCaptureRequest request, String channelId) {
+        if (!hasText(request.preauthOutTradeNo()) || !hasText(request.outTradeNo())
+                || request.preauthOutTradeNo().equals(request.outTradeNo())) {
+            throw new IllegalArgumentException("Capture requires distinct parent and collection order numbers");
+        }
+        if (databaseBacked()) {
+            return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .execute(status -> {
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                                String.class, request.preauthOutTradeNo());
+                        return reserveCaptureInternal(request, channelId);
+                    });
+        }
+        return reserveCaptureInternal(request, channelId);
     }
 
-    public synchronized DemoOrderView convertPreauthToPay(String outTradeNo, String captureTradeNo) {
-        return convertPreauthToPay(outTradeNo, captureTradeNo, null, null, false);
-    }
-
-    public synchronized DemoOrderView convertPreauthToPay(String outTradeNo, String captureTradeNo,
-                                                         String channelId, BigDecimal confirmedAmount,
-                                                         boolean confirmedReceipt) {
-        DemoOrder order = order(outTradeNo);
-        if (!order.isPreAuthorization()) {
-            throw new IllegalStateException("鍙湁棰勬巿鏉冭鍗曞彲浠ヨ浆鏀粯");
+    private GatewayResponse reserveCaptureInternal(PreauthCaptureRequest request, String channelId) {
+        BigDecimal amount = exactPositiveMoney(request.totalAmount());
+        String mode = firstText(request.authConfirmMode(), "COMPLETE");
+        if (!List.of("COMPLETE", "NOT_COMPLETE").contains(mode)) {
+            throw new IllegalArgumentException("Unsupported authConfirmMode");
         }
-        if (order.getStatus() != DemoOrderStatus.FROZEN) {
-            throw new IllegalStateException("鍙湁鍐荤粨涓殑棰勬巿鏉冭鍗曞彲浠ヨ浆鏀粯");
+        CaptureReservation existing = capture(request.outTradeNo());
+        if (existing != null) {
+            if (!existing.parent().equals(request.preauthOutTradeNo()) || !existing.channel().equals(channelId)
+                    || !existing.authNo().equals(request.authNo()) || !existing.mode().equals(mode)
+                    || existing.amount().compareTo(amount) != 0) {
+                throw new IllegalArgumentException("Capture order number already belongs to a different request");
+            }
+            DemoOrder child = order(existing.child());
+            return new GatewayResponse(existing.channel(), existing.status(), "CAPTURE_ALREADY_RESERVED",
+                    "Capture already submitted; query its collection order instead of submitting again",
+                    existing.child(), child.getTradeNo(), null, null, Map.of(), List.of());
         }
-        DemoOrderStatus previousStatus = order.getStatus();
-        boolean matchesReceipt = captureReceiptIdentityMatches(order, captureTradeNo, channelId, confirmedAmount);
-        order.setStatus(DemoOrderStatus.COMPLETED);
-        order.setPreAuthorization(false);
-        order.setProductName("棰勬巿鏉冭浆鏀粯");
-        if (hasText(captureTradeNo)) {
-            order.setTradeNo(captureTradeNo.trim());
+        DemoOrder parent = order(request.preauthOutTradeNo());
+        if (!parent.isPreAuthorization() || parent.getStatus() != DemoOrderStatus.FROZEN
+                || !Objects.equals(parent.getChannelId(), channelId)
+                || !hasText(parent.getTradeNo()) || !parent.getTradeNo().equals(request.authNo())) {
+            throw new IllegalArgumentException("Capture must match the frozen order, original channel and authorization number");
+        }
+        if (hasPendingCapture(parent.getOutTradeNo()) || hasPendingUnfreeze(parent.getOutTradeNo())) {
+            throw new IllegalStateException("A capture is awaiting confirmation; reconcile it before another capture or unfreeze");
+        }
+        if (amount.compareTo(preauthUnfreezeRemainingAmount(parent)) > 0) {
+            throw new IllegalArgumentException("Capture amount exceeds the remaining frozen balance");
+        }
+        ensureNewPaymentOrder(request.outTradeNo());
+        DemoOrder child = new DemoOrder(request.outTradeNo(), null, channelId, parent.getMerchantId(),
+                parent.getMerchantName(), "预授权实扣", request.subject(), amount, DemoOrderStatus.UNPAID,
+                LocalDateTime.now().format(DISPLAY_TIME), false);
+        CaptureReservation reservation = new CaptureReservation(request.outTradeNo(), parent.getOutTradeNo(), channelId,
+                request.authNo(), amount, mode, PaymentStatus.PENDING, null);
+        if (databaseBacked()) {
+            insertOrder(child);
+            jdbcTemplate.update("""
+                    INSERT INTO preauth_capture_order
+                    (capture_out_trade_no, parent_out_trade_no, channel_id, auth_no, amount, confirm_mode, status)
+                    VALUES (?, ?, ?, ?, ?, ?, 'PENDING')
+                    """, reservation.child(), reservation.parent(), reservation.channel(), reservation.authNo(), amount, mode);
         } else {
-            ensureTradeNo(order, "CAPTURE");
+            orders.put(child.getOutTradeNo(), child);
+            memoryCaptures.put(reservation.child(), reservation);
         }
-        persist(order);
-        return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt, false, confirmedAmount);
+        Optional<MerchantNotifyTarget> notifyTarget = merchantNotifyTarget(parent.getOutTradeNo());
+        if (notifyTarget.isPresent()) {
+            if (databaseBacked()) {
+                jdbcTemplate.update("UPDATE pay_order SET notify_url = ? WHERE out_trade_no = ?",
+                        notifyTarget.get().notifyUrl(), child.getOutTradeNo());
+            } else {
+                merchantNotifyTargets.put(child.getOutTradeNo(), notifyTarget.get());
+            }
+        }
+        return null;
     }
 
-    /** A narrow notification marker, captured before the legacy pending-capture status conversion. */
-    public synchronized void rememberPendingCapture(String parentOutTradeNo, String captureOutTradeNo,
-                                                     String channelId, BigDecimal amount) {
-        if (confirmedReceiptSink == null) return;
-        try {
-            DemoOrder parent = order(parentOutTradeNo);
-            if (!parent.isPreAuthorization() || parent.getStatus() != DemoOrderStatus.FROZEN
-                    || !Objects.equals(parentOutTradeNo, preauthCaptureParentOutTradeNo(captureOutTradeNo))
-                    || !captureReceiptIdentityMatches(parent, captureOutTradeNo, channelId, amount)) return;
-            confirmedReceiptSink.rememberPendingCapture(DemoOrderView.from(parent), captureOutTradeNo, amount);
-        } catch (Exception ex) {
-            log.warn("Pending receipt could not be remembered: outTradeNo={}, reason={}",
-                    parentOutTradeNo, ex.getClass().getSimpleName());
+    public synchronized String captureParentOutTradeNo(String captureOutTradeNo) {
+        CaptureReservation reservation = capture(captureOutTradeNo);
+        return reservation == null ? null : reservation.parent();
+    }
+
+    public synchronized DemoOrderView captureOrderView(String parentOutTradeNo, String captureOutTradeNo) {
+        CaptureReservation reservation = capture(captureOutTradeNo);
+        return reservation != null && reservation.parent().equals(parentOutTradeNo)
+                ? DemoOrderView.from(order(captureOutTradeNo)) : null;
+    }
+
+    public synchronized DemoOrderView recordCaptureResult(String captureOutTradeNo, String tradeNo, String channelId,
+                                                          PaymentStatus status, BigDecimal amount, boolean confirmed) {
+        CaptureReservation reservation = capture(captureOutTradeNo);
+        if (reservation == null) throw new IllegalArgumentException("Capture was not reserved");
+        if (databaseBacked()) {
+            return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .execute(transaction -> {
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                                String.class, reservation.parent());
+                        return recordCaptureInternal(capture(captureOutTradeNo), tradeNo, channelId, status, amount, confirmed);
+                    });
         }
+        return recordCaptureInternal(reservation, tradeNo, channelId, status, amount, confirmed);
+    }
+
+    private DemoOrderView recordCaptureInternal(CaptureReservation reservation, String tradeNo, String channelId,
+                                               PaymentStatus status, BigDecimal amount, boolean confirmed) {
+        DemoOrder child = order(reservation.child());
+        requirePaymentIdentity(child, tradeNo, channelId, amount, status == PaymentStatus.SUCCESS);
+        if (status == PaymentStatus.SUCCESS && !confirmed) {
+            throw new IllegalArgumentException("Capture success requires verified receipt evidence");
+        }
+        // A response arriving after the asynchronous success must never downgrade the reservation.
+        if (reservation.status() == PaymentStatus.SUCCESS) return DemoOrderView.from(child);
+        PaymentStatus next = status == PaymentStatus.SUCCESS ? PaymentStatus.SUCCESS
+                : status == PaymentStatus.FAILED || status == PaymentStatus.CLOSED ? PaymentStatus.FAILED : PaymentStatus.PENDING;
+        DemoOrderStatus previous = child.getStatus();
+        if (hasText(tradeNo)) child.setTradeNo(tradeNo);
+        child.setStatus(next == PaymentStatus.SUCCESS ? DemoOrderStatus.COMPLETED
+                : next == PaymentStatus.FAILED ? DemoOrderStatus.CLOSED : DemoOrderStatus.UNPAID);
+        CaptureReservation updated = new CaptureReservation(reservation.child(), reservation.parent(), reservation.channel(),
+                reservation.authNo(), reservation.amount(), reservation.mode(), next, child.getTradeNo());
+        if (databaseBacked()) {
+            jdbcTemplate.update("""
+                    UPDATE preauth_capture_order SET status = ?, trade_no = ?,
+                        completed_at = CASE WHEN ? IN ('SUCCESS','FAILED') THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE completed_at END
+                    WHERE capture_out_trade_no = ?
+                    """, next.name(), nullIfBlank(child.getTradeNo()), next.name(), reservation.child());
+        } else {
+            memoryCaptures.put(updated.child(), updated);
+        }
+        markPaidTransition(child, previous);
+        persist(child);
+        if (next == PaymentStatus.SUCCESS) {
+            DemoOrder parent = order(reservation.parent());
+            parent.setPreauthCapturedAmount(capturedAmount(parent.getOutTradeNo()));
+            if ("COMPLETE".equals(reservation.mode()) || preauthUnfreezeRemainingAmount(parent).signum() == 0) {
+                parent.setStatus(DemoOrderStatus.UNFROZEN);
+            }
+            // Keep the original authorization number, frozen principal, and pre-authorization flag.
+            persist(parent);
+        }
+        return receiptResult(child, previous, next == PaymentStatus.SUCCESS);
+    }
+
+    private record CaptureReservation(String child, String parent, String channel, String authNo,
+                                      BigDecimal amount, String mode, PaymentStatus status, String tradeNo) { }
+
+    private CaptureReservation capture(String child) {
+        if (!hasText(child)) return null;
+        if (!databaseBacked()) return memoryCaptures.get(child);
+        List<CaptureReservation> rows = jdbcTemplate.query("SELECT * FROM preauth_capture_order WHERE capture_out_trade_no = ?",
+                (rs, row) -> new CaptureReservation(rs.getString("capture_out_trade_no"), rs.getString("parent_out_trade_no"),
+                        rs.getString("channel_id"), rs.getString("auth_no"), rs.getBigDecimal("amount"),
+                        rs.getString("confirm_mode"), PaymentStatus.valueOf(rs.getString("status")), rs.getString("trade_no")), child);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private boolean hasPendingCapture(String parent) {
+        if (!databaseBacked()) return memoryCaptures.values().stream()
+                .anyMatch(value -> value.parent().equals(parent) && value.status() == PaymentStatus.PENDING);
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM preauth_capture_order WHERE parent_out_trade_no = ? AND status = 'PENDING'",
+                Integer.class, parent) > 0;
+    }
+
+    private BigDecimal capturedAmount(String parent) {
+        if (!databaseBacked()) return memoryCaptures.values().stream()
+                .filter(value -> value.parent().equals(parent) && value.status() == PaymentStatus.SUCCESS)
+                .map(CaptureReservation::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return money(jdbcTemplate.queryForObject("SELECT COALESCE(SUM(amount), 0) FROM preauth_capture_order WHERE parent_out_trade_no = ? AND status = 'SUCCESS'",
+                BigDecimal.class, parent));
+    }
+
+    private void ensurePreauthCaptureTable() {
+        jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS preauth_capture_order (
+                  capture_out_trade_no VARCHAR(96) PRIMARY KEY,
+                  parent_out_trade_no VARCHAR(96) NOT NULL,
+                  channel_id VARCHAR(64) NOT NULL,
+                  auth_no VARCHAR(128) NOT NULL,
+                  amount DECIMAL(18,2) NOT NULL,
+                  confirm_mode VARCHAR(32) NOT NULL,
+                  status VARCHAR(32) NOT NULL,
+                  trade_no VARCHAR(128),
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  completed_at TIMESTAMP NULL
+                )
+                """);
+    }
+
+    private static BigDecimal exactPositiveMoney(BigDecimal value) {
+        if (value == null || value.signum() <= 0 || value.stripTrailingZeros().scale() > 2) {
+            throw new IllegalArgumentException("Amount must be positive with at most two decimal places");
+        }
+        return value.setScale(2, RoundingMode.UNNECESSARY);
     }
 
     public synchronized void ensurePreauthUnfreezable(String outTradeNo, String authNo, BigDecimal amount) {
@@ -556,13 +713,16 @@ public class DemoOrderService {
             throw new IllegalArgumentException("订单号不能为空");
         }
         DemoOrder order = order(outTradeNo);
+        if (hasPendingCapture(outTradeNo) || hasPendingUnfreeze(outTradeNo)) {
+            throw new IllegalStateException("A capture is awaiting confirmation; reconcile it before unfreezing");
+        }
         if (!order.isPreAuthorization()) {
             throw new IllegalStateException("只有预授权订单可以解冻");
         }
         if (order.getStatus() != DemoOrderStatus.FROZEN) {
             throw new IllegalStateException("只有冻结中的预授权订单可以解冻");
         }
-        if (!hasText(authNo)) {
+        if (!hasText(authNo) || !authNo.equals(order.getTradeNo())) {
             throw new IllegalArgumentException("订单缺少预授权号，无法解冻");
         }
         BigDecimal unfreezeAmount = money(amount);
@@ -579,17 +739,40 @@ public class DemoOrderService {
     }
 
     public synchronized DemoOrderView recordPreauthUnfreeze(PreauthUnfreezeRequest request, GatewayResponse response) {
+        if (databaseBacked()) {
+            return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .execute(status -> {
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                                String.class, request.preauthOutTradeNo());
+                        return recordPreauthUnfreezeInternal(request, response);
+                    });
+        }
+        return recordPreauthUnfreezeInternal(request, response);
+    }
+
+    private DemoOrderView recordPreauthUnfreezeInternal(PreauthUnfreezeRequest request, GatewayResponse response) {
         DemoOrder order = order(request.preauthOutTradeNo());
-        BigDecimal unfreezeAmount = money(request.amount());
+        BigDecimal unfreezeAmount = exactPositiveMoney(request.amount());
+        UnfreezeReservation existing = unfreeze(request.outRequestNo());
+        requireUnfreezeIdentity(existing, request, order.getChannelId());
+        if (existing != null && existing.status() == PaymentStatus.SUCCESS) return DemoOrderView.from(order);
+        if (hasPendingCapture(order.getOutTradeNo()) || !Objects.equals(response.channelId(), order.getChannelId())
+                || response.status() != PaymentStatus.SUCCESS || !Objects.equals(request.authNo(), order.getTradeNo())
+                || (hasText(response.tradeNo()) && !request.authNo().equals(response.tradeNo()))
+                || unfreezeAmount.compareTo(preauthUnfreezeRemainingAmount(order)) > 0) {
+            throw new IllegalArgumentException("Unfreeze result does not match the frozen order and balance");
+        }
         if (databaseBacked()) {
             recordPreauthUnfreezeOrder(order, request, response, unfreezeAmount);
             order.setPreauthUnfrozenAmount(successfulPreauthUnfrozenAmount(order.getOutTradeNo()));
         } else {
             order.setPreauthUnfrozenAmount(money(order.getPreauthUnfrozenAmount().add(unfreezeAmount)));
+            memoryUnfreezes.put(request.outRequestNo(), new UnfreezeReservation(order.getOutTradeNo(),
+                    request.authNo(), order.getChannelId(), unfreezeAmount, PaymentStatus.SUCCESS));
         }
         if (preauthUnfreezeRemainingAmount(order).compareTo(BigDecimal.ZERO) <= 0) {
             order.setStatus(DemoOrderStatus.UNFROZEN);
-            order.setPreAuthorization(false);
+            order.setPreAuthorization(true);
             order.setProductName("预授权已解冻");
         } else {
             order.setStatus(DemoOrderStatus.FROZEN);
@@ -604,7 +787,99 @@ public class DemoOrderService {
         return DemoOrderView.from(order);
     }
 
+    public synchronized GatewayResponse reservePreauthUnfreeze(PreauthUnfreezeRequest request) {
+        if (databaseBacked()) {
+            return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .execute(status -> {
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                                String.class, request.preauthOutTradeNo());
+                        return reserveUnfreezeInternal(request);
+                    });
+        }
+        return reserveUnfreezeInternal(request);
+    }
+
+    private GatewayResponse reserveUnfreezeInternal(PreauthUnfreezeRequest request) {
+        DemoOrder parent = order(request.preauthOutTradeNo());
+        UnfreezeReservation existing = unfreeze(request.outRequestNo());
+        requireUnfreezeIdentity(existing, request, parent.getChannelId());
+        if (existing != null) {
+            return new GatewayResponse(parent.getChannelId(), existing.status(), "UNFREEZE_ALREADY_RESERVED",
+                    "Unfreeze already submitted; reconcile the original operation", parent.getOutTradeNo(), parent.getTradeNo(),
+                    null, null, Map.of(), List.of());
+        }
+        ensurePreauthUnfreezable(parent.getOutTradeNo(), request.authNo(), request.amount());
+        BigDecimal amount = exactPositiveMoney(request.amount());
+        if (databaseBacked()) {
+            jdbcTemplate.update("""
+                    INSERT INTO preauth_unfreeze_order (out_request_no, out_trade_no, auth_no, channel_id, amount, status)
+                    VALUES (?, ?, ?, ?, ?, 'PENDING')
+                    """, request.outRequestNo(), parent.getOutTradeNo(), request.authNo(), parent.getChannelId(), amount);
+        } else {
+            memoryUnfreezes.put(request.outRequestNo(), new UnfreezeReservation(parent.getOutTradeNo(), request.authNo(),
+                    parent.getChannelId(), amount, PaymentStatus.PENDING));
+        }
+        return null;
+    }
+
+    private record UnfreezeReservation(String parent, String authNo, String channel, BigDecimal amount, PaymentStatus status) { }
+
+    public synchronized void rejectPreauthUnfreeze(PreauthUnfreezeRequest request) {
+        if (databaseBacked()) {
+            jdbcTemplate.update("UPDATE preauth_unfreeze_order SET status = 'FAILED' WHERE out_request_no = ? AND status = 'PENDING'",
+                    request.outRequestNo());
+        } else {
+            UnfreezeReservation existing = unfreeze(request.outRequestNo());
+            if (existing != null && existing.status() == PaymentStatus.PENDING) {
+                memoryUnfreezes.put(request.outRequestNo(), new UnfreezeReservation(existing.parent(), existing.authNo(),
+                        existing.channel(), existing.amount(), PaymentStatus.FAILED));
+            }
+        }
+    }
+
+    private UnfreezeReservation unfreeze(String requestNo) {
+        if (!databaseBacked()) return memoryUnfreezes.get(requestNo);
+        List<UnfreezeReservation> rows = jdbcTemplate.query(
+                "SELECT out_trade_no, auth_no, channel_id, amount, status FROM preauth_unfreeze_order WHERE out_request_no = ?",
+                (rs, row) -> new UnfreezeReservation(rs.getString("out_trade_no"), rs.getString("auth_no"),
+                        rs.getString("channel_id"), rs.getBigDecimal("amount"), PaymentStatus.valueOf(rs.getString("status"))), requestNo);
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private boolean hasPendingUnfreeze(String parent) {
+        if (!databaseBacked()) return memoryUnfreezes.values().stream()
+                .anyMatch(value -> value.parent().equals(parent) && value.status() == PaymentStatus.PENDING);
+        return jdbcTemplate.queryForObject("SELECT COUNT(*) FROM preauth_unfreeze_order WHERE out_trade_no = ? AND status = 'PENDING'",
+                Integer.class, parent) > 0;
+    }
+
+    private static void requireUnfreezeIdentity(UnfreezeReservation existing, PreauthUnfreezeRequest request, String channel) {
+        if (existing != null && (!existing.parent().equals(request.preauthOutTradeNo())
+                || !existing.authNo().equals(request.authNo()) || !existing.channel().equals(channel)
+                || existing.amount().compareTo(request.amount()) != 0)) {
+            throw new IllegalArgumentException("Unfreeze request number belongs to a different operation");
+        }
+    }
+
     public synchronized DemoOrderView delete(String outTradeNo) {
+        if (databaseBacked()) {
+            return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                    .execute(status -> {
+                        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE", String.class, outTradeNo);
+                        return deleteInternal(outTradeNo);
+                    });
+        }
+        return deleteInternal(outTradeNo);
+    }
+
+    private DemoOrderView deleteInternal(String outTradeNo) {
+        boolean linked = databaseBacked()
+                ? jdbcTemplate.queryForObject("SELECT COUNT(*) FROM preauth_capture_order WHERE parent_out_trade_no = ? OR capture_out_trade_no = ?",
+                        Integer.class, outTradeNo, outTradeNo) > 0
+                : memoryCaptures.values().stream().anyMatch(value -> value.parent().equals(outTradeNo) || value.child().equals(outTradeNo));
+        if (linked || hasPendingUnfreeze(outTradeNo)) {
+            throw new IllegalStateException("Orders with authorization operations must be retained for reconciliation");
+        }
         DemoOrder removed = order(outTradeNo);
         if (databaseBacked()) {
             jdbcTemplate.update("DELETE FROM pay_order WHERE out_trade_no = ?", outTradeNo);
@@ -690,6 +965,7 @@ public class DemoOrderService {
             order.setStatus(preserveCollectedStatus(order.getStatus(),
                     statusFromGateway(paymentStatus, preAuthorization, order.getStatus())));
         }
+        markPaidTransition(order, previousStatus);
         persist(order);
         return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
                 && paymentStatus == PaymentStatus.SUCCESS && !preAuthorization);
@@ -746,9 +1022,22 @@ public class DemoOrderService {
     public synchronized DemoOrderView recordPaymentResult(String outTradeNo, String tradeNo, String channelId,
                                                           PaymentStatus paymentStatus, boolean confirmedReceipt,
                                                           BigDecimal confirmedAmount) {
+        if (capture(outTradeNo) != null) {
+            return recordCaptureResult(outTradeNo, tradeNo, channelId, paymentStatus, confirmedAmount, confirmedReceipt);
+        }
+        return withPaymentOrderLock(outTradeNo, () -> recordPaymentResultInternal(outTradeNo, tradeNo, channelId,
+                paymentStatus, confirmedReceipt, confirmedAmount));
+    }
+
+    private DemoOrderView recordPaymentResultInternal(String outTradeNo, String tradeNo, String channelId,
+                                                      PaymentStatus paymentStatus, boolean confirmedReceipt, BigDecimal confirmedAmount) {
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
         if (order == null) {
             throw new IllegalArgumentException("Order does not exist: " + outTradeNo);
+        }
+        requirePaymentIdentity(order, tradeNo, channelId, confirmedAmount, paymentStatus == PaymentStatus.SUCCESS);
+        if (paymentStatus == PaymentStatus.SUCCESS && !confirmedReceipt) {
+            throw new IllegalArgumentException("Payment success requires verified receipt evidence");
         }
         DemoOrderStatus previousStatus = order.getStatus();
         boolean matchesReceipt = receiptIdentityMatches(order, tradeNo, channelId, confirmedAmount);
@@ -759,6 +1048,7 @@ public class DemoOrderService {
                 order.getStatus(),
                 statusFromGateway(paymentStatus, order.isPreAuthorization(), order.getStatus())
         ));
+        markPaidTransition(order, previousStatus);
         persist(order);
         return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
                 && paymentStatus == PaymentStatus.SUCCESS);
@@ -923,7 +1213,7 @@ public class DemoOrderService {
                 throw refundConflict();
             }
         } else {
-            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.outTradeNo(), request.refundAmount(), PaymentStatus.PENDING));
+            memoryRefunds.put(request.outRequestNo(), new MemoryRefund(order.outTradeNo(), request.refundAmount(), PaymentStatus.PENDING, null));
         }
     }
 
@@ -931,7 +1221,25 @@ public class DemoOrderService {
         return new MerchantApiException("REFUND_CONFLICT", "outRequestNo already exists or is processing; reconcile the original refund instead of submitting it again");
     }
 
-    private record MemoryRefund(String outTradeNo, BigDecimal amount, PaymentStatus status) { }
+    private record MemoryRefund(String outTradeNo, BigDecimal amount, PaymentStatus status, LocalDateTime completedAt) { }
+
+    public record RefundReceipt(String outRequestNo, String outTradeNo, BigDecimal amount, LocalDateTime completedAt) { }
+
+    /** Immutable event snapshots for in-memory reporting; a replay retains the first completion time. */
+    public synchronized List<RefundReceipt> successfulRefundReceipts() {
+        return memoryRefunds.entrySet().stream().filter(entry -> entry.getValue().status() == PaymentStatus.SUCCESS)
+                .map(entry -> new RefundReceipt(entry.getKey(), entry.getValue().outTradeNo(),
+                        entry.getValue().amount(), entry.getValue().completedAt())).toList();
+    }
+
+    public record PaymentReceipt(String outTradeNo, String merchantId, BigDecimal amount, LocalDateTime paidAt) { }
+
+    public synchronized List<PaymentReceipt> successfulPaymentReceipts() {
+        return orders.values().stream().filter(order -> !order.isPreAuthorization()
+                        && (order.getStatus() == DemoOrderStatus.COMPLETED || isRefundStatus(order.getStatus())))
+                .map(order -> new PaymentReceipt(order.getOutTradeNo(), order.getMerchantId(), order.getAmount(), order.getPaidAt()))
+                .toList();
+    }
 
     public synchronized DemoOrderView recordAlipayNotify(
             String outTradeNo,
@@ -951,9 +1259,16 @@ public class DemoOrderService {
         if (capturedPreauth != null) {
             return capturedPreauth;
         }
+        return withPaymentOrderLock(outTradeNo, () -> recordAlipayNotifyInternal(outTradeNo, tradeNo, channelId,
+                amount, tradeStatus, confirmedReceipt));
+    }
+
+    private DemoOrderView recordAlipayNotifyInternal(String outTradeNo, String tradeNo, String channelId,
+                                                    BigDecimal amount, String tradeStatus, boolean confirmedReceipt) {
         DemoOrder order = databaseBacked() ? findOrder(outTradeNo) : orders.get(outTradeNo);
+        if (order == null) throw new IllegalArgumentException("Notification order does not exist: " + outTradeNo);
+        requirePaymentIdentity(order, tradeNo, channelId, amount, true);
         DemoOrderStatus previousStatus = order == null ? null : order.getStatus();
-        // Unknown callbacks do not have a local merchant/channel/amount to confirm against.
         boolean matchesReceipt = order != null && receiptIdentityMatches(order, tradeNo, channelId, amount);
         if (order == null) {
             order = new DemoOrder(
@@ -978,73 +1293,44 @@ public class DemoOrderService {
             // Stale waiting/closed callbacks must not turn a historical receipt into a new success transition.
             order.setStatus(preserveCollectedStatus(order.getStatus(), next));
         }
+        markPaidTransition(order, previousStatus);
         persist(order);
         return receiptResult(order, previousStatus, confirmedReceipt && matchesReceipt
                 && ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)));
     }
 
-    private DemoOrderView recordPreauthCaptureNotify(
-            String outTradeNo,
-            String tradeNo,
-            String channelId,
-            BigDecimal amount,
-            String tradeStatus,
-            boolean confirmedReceipt
-    ) {
-        String preauthOutTradeNo = preauthCaptureParentOutTradeNo(outTradeNo);
-        if (!hasText(preauthOutTradeNo)) {
-            return null;
-        }
-        DemoOrder parent = databaseBacked() ? findOrder(preauthOutTradeNo) : orders.get(preauthOutTradeNo);
-        if (parent == null) {
-            return null;
-        }
-        DemoOrderStatus previousStatus = parent.getStatus();
-        boolean matchesReceipt = captureReceiptIdentityMatches(parent, tradeNo, channelId, amount);
-        boolean rememberedCapture = confirmedReceipt && matchesReceipt
-                && hasPendingCapture(parent.getOutTradeNo(), outTradeNo, channelId, amount);
-        boolean frozenCapture = parent.isPreAuthorization() && previousStatus == DemoOrderStatus.FROZEN;
-        applyPreauthCaptureResult(parent, tradeNo, channelId, statusFromAlipay(tradeStatus, false));
-        persist(parent);
-        return receiptResult(parent, previousStatus, confirmedReceipt && matchesReceipt && (frozenCapture || rememberedCapture)
-                && ("TRADE_SUCCESS".equals(tradeStatus) || "TRADE_FINISHED".equals(tradeStatus)),
-                rememberedCapture, amount);
+    private <T> T withPaymentOrderLock(String outTradeNo, java.util.function.Supplier<T> action) {
+        if (!databaseBacked()) return action.get();
+        return new TransactionTemplate(new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())))
+                .execute(status -> {
+                    List<String> rows = jdbcTemplate.queryForList(
+                            "SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE", String.class, outTradeNo);
+                    if (rows.isEmpty()) throw new IllegalArgumentException("Order does not exist: " + outTradeNo);
+                    return action.get();
+                });
     }
 
-    private boolean hasPendingCapture(String parentOutTradeNo, String captureOutTradeNo,
-                                      String channelId, BigDecimal amount) {
-        if (confirmedReceiptSink == null) return false;
-        try {
-            return confirmedReceiptSink.hasPendingCapture(parentOutTradeNo, captureOutTradeNo, channelId, amount);
-        } catch (Exception ex) {
-            log.warn("Pending receipt could not be checked: outTradeNo={}, reason={}",
-                    parentOutTradeNo, ex.getClass().getSimpleName());
-            return false;
+    private DemoOrderView recordPreauthCaptureNotify(String outTradeNo, String tradeNo, String channelId,
+                                                     BigDecimal amount, String tradeStatus, boolean confirmedReceipt) {
+        CaptureReservation reservation = capture(outTradeNo);
+        if (reservation == null) return null;
+        PaymentStatus status = switch (tradeStatus == null ? "" : tradeStatus) {
+            case "TRADE_SUCCESS", "TRADE_FINISHED" -> PaymentStatus.SUCCESS;
+            case "TRADE_CLOSED" -> PaymentStatus.CLOSED;
+            default -> PaymentStatus.PENDING;
+        };
+        return recordCaptureResult(outTradeNo, tradeNo, channelId, status, amount, confirmedReceipt);
+    }
+
+    private static void requirePaymentIdentity(DemoOrder order, String tradeNo, String channelId,
+                                               BigDecimal amount, boolean requireAmount) {
+        if (!hasText(channelId) || !channelId.equals(order.getChannelId())
+                || (hasText(tradeNo) && hasText(order.getTradeNo()) && !tradeNo.equals(order.getTradeNo()))
+                || (requireAmount && (!hasText(tradeNo) || amount == null))
+                || (amount != null && (amount.signum() <= 0 || amount.stripTrailingZeros().scale() > 2
+                    || order.getAmount().compareTo(amount) != 0))) {
+            throw new IllegalArgumentException("Payment notification/query identity or amount does not match the original order");
         }
-    }
-
-    /** Querying a capture child can complete only a previously recorded pending capture. */
-    public synchronized boolean recordPendingCaptureQuery(String captureOutTradeNo, String tradeNo,
-                                                          String channelId, BigDecimal amount) {
-        String parentOutTradeNo = preauthCaptureParentOutTradeNo(captureOutTradeNo);
-        if (!hasText(parentOutTradeNo)) return false;
-        DemoOrder parent = databaseBacked() ? findOrder(parentOutTradeNo) : orders.get(parentOutTradeNo);
-        if (parent == null || (parent.getStatus() != DemoOrderStatus.COMPLETED
-                && parent.getStatus() != DemoOrderStatus.FROZEN)
-                || !captureReceiptIdentityMatches(parent, tradeNo, channelId, amount)
-                || !hasPendingCapture(parentOutTradeNo, captureOutTradeNo, channelId, amount)) return false;
-        DemoOrderStatus previousStatus = parent.getStatus();
-        applyPreauthCaptureResult(parent, tradeNo, channelId, DemoOrderStatus.COMPLETED);
-        persist(parent);
-        receiptResult(parent, previousStatus, true, true, amount);
-        return true;
-    }
-
-    private static boolean captureReceiptIdentityMatches(DemoOrder order, String tradeNo, String channelId,
-                                                         BigDecimal amount) {
-        return hasText(channelId) && channelId.equals(order.getChannelId()) && hasText(tradeNo)
-                && amount != null && amount.signum() > 0 && amount.stripTrailingZeros().scale() <= 2
-                && amount.compareTo(preauthUnfreezeRemainingAmount(order)) <= 0;
     }
 
     private static boolean receiptIdentityMatches(DemoOrder order, String tradeNo, String channelId,
@@ -1110,6 +1396,9 @@ public class DemoOrderService {
         order.setProfitShared(rs.getBoolean("profit_shared"));
         order.setRefundedAmount(rs.getBigDecimal("refunded_amount"));
         order.setPreauthUnfrozenAmount(rs.getBigDecimal("preauth_unfrozen_amount"));
+        Timestamp paidAt = rs.getTimestamp("paid_at");
+        order.setPaidAt(paidAt == null ? null : paidAt.toLocalDateTime());
+        if (order.isPreAuthorization()) order.setPreauthCapturedAmount(capturedAmount(order.getOutTradeNo()));
         return order;
     }
 
@@ -1153,7 +1442,7 @@ public class DemoOrderService {
             return jdbcTemplate.queryForObject("""
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
-                           o.product, o.subject, o.amount, o.status, o.created_at,
+                           o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
                            COALESCE((
                                SELECT SUM(r.refund_amount)
@@ -1187,7 +1476,7 @@ public class DemoOrderService {
             return jdbcTemplate.queryForObject("""
                     SELECT o.out_trade_no, o.trade_no, o.channel_id, o.merchant_id,
                            COALESCE(m.name, o.merchant_id) AS merchant_name,
-                           o.product, o.subject, o.amount, o.status, o.created_at,
+                           o.product, o.subject, o.amount, o.status, o.created_at, o.paid_at,
                            o.pre_authorization, o.supplemented, o.profit_shared,
                            COALESCE((
                                SELECT SUM(r.refund_amount)
@@ -1251,44 +1540,11 @@ public class DemoOrderService {
         }
     }
 
-    private static void applyPreauthCaptureResult(
-            DemoOrder parent,
-            String captureTradeNo,
-            String channelId,
-            DemoOrderStatus captureStatus
-    ) {
-        if (hasText(captureTradeNo)) {
-            parent.setTradeNo(captureTradeNo.trim());
+    private static void markPaidTransition(DemoOrder order, DemoOrderStatus previous) {
+        if (!order.isPreAuthorization() && order.getStatus() == DemoOrderStatus.COMPLETED && order.getPaidAt() == null
+                && previous != DemoOrderStatus.COMPLETED && !isRefundStatus(previous)) {
+            order.setPaidAt(LocalDateTime.now());
         }
-        if (hasText(channelId)) {
-            parent.setChannelId(channelId.trim());
-        }
-        if (captureStatus == DemoOrderStatus.COMPLETED
-                || captureStatus == DemoOrderStatus.PARTIALLY_REFUNDED
-                || captureStatus == DemoOrderStatus.REFUNDED) {
-            parent.setStatus(DemoOrderStatus.COMPLETED);
-            parent.setPreAuthorization(false);
-        } else if (captureStatus == DemoOrderStatus.CLOSED && parent.isPreAuthorization()) {
-            parent.setStatus(DemoOrderStatus.CLOSED);
-        }
-    }
-
-    private static String preauthCaptureParentOutTradeNo(String outTradeNo) {
-        if (!hasText(outTradeNo)) {
-            return null;
-        }
-        String value = outTradeNo.trim();
-        int marker = value.lastIndexOf("_PAY_");
-        if (marker <= 0 || marker + 5 >= value.length()) {
-            return null;
-        }
-        String suffix = value.substring(marker + 5);
-        for (int i = 0; i < suffix.length(); i++) {
-            if (!Character.isDigit(suffix.charAt(i))) {
-                return null;
-            }
-        }
-        return value.substring(0, marker);
     }
 
     private boolean exists(String outTradeNo) {
@@ -1305,8 +1561,8 @@ public class DemoOrderService {
         jdbcTemplate.update("""
                 INSERT INTO pay_order (
                     out_trade_no, trade_no, merchant_id, channel_id, product, subject, amount,
-                    status, pre_authorization, supplemented, profit_shared, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    status, pre_authorization, supplemented, profit_shared, created_at, paid_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 order.getOutTradeNo(),
                 nullIfBlank(order.getTradeNo()),
@@ -1319,7 +1575,8 @@ public class DemoOrderService {
                 order.isPreAuthorization() ? 1 : 0,
                 order.isSupplemented() ? 1 : 0,
                 order.isProfitShared() ? 1 : 0,
-                timestamp(order.getCreatedAt())
+                timestamp(order.getCreatedAt()),
+                order.getPaidAt() == null ? null : Timestamp.valueOf(order.getPaidAt())
         );
     }
 
@@ -1329,7 +1586,7 @@ public class DemoOrderService {
                 UPDATE pay_order
                 SET trade_no = ?, merchant_id = ?, channel_id = ?, product = ?, subject = ?,
                     amount = ?, status = ?, pre_authorization = ?, supplemented = ?, profit_shared = ?,
-                    paid_at = CASE WHEN ? IN ('COMPLETED', 'PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(paid_at, CURRENT_TIMESTAMP) ELSE paid_at END,
+                    paid_at = COALESCE(paid_at, ?),
                     frozen_at = CASE WHEN ? = 'FROZEN' THEN COALESCE(frozen_at, CURRENT_TIMESTAMP) ELSE frozen_at END,
                     refunded_at = CASE WHEN ? IN ('PARTIALLY_REFUNDED', 'REFUNDED') THEN COALESCE(refunded_at, CURRENT_TIMESTAMP) ELSE refunded_at END,
                     closed_at = CASE WHEN ? IN ('CLOSED', 'UNFROZEN') THEN COALESCE(closed_at, CURRENT_TIMESTAMP) ELSE closed_at END
@@ -1345,7 +1602,7 @@ public class DemoOrderService {
                 order.isPreAuthorization() ? 1 : 0,
                 order.isSupplemented() ? 1 : 0,
                 order.isProfitShared() ? 1 : 0,
-                order.getStatus().name(),
+                order.getPaidAt() == null ? null : Timestamp.valueOf(order.getPaidAt()),
                 order.getStatus().name(),
                 order.getStatus().name(),
                 order.getStatus().name(),
@@ -1595,7 +1852,9 @@ public class DemoOrderService {
     }
 
     private static BigDecimal preauthUnfreezeRemainingAmount(DemoOrder order) {
-        return money(money(order.getAmount()).subtract(money(order.getPreauthUnfrozenAmount())).max(BigDecimal.ZERO));
+        return order.getStatus() == DemoOrderStatus.UNFROZEN ? BigDecimal.ZERO.setScale(2)
+                : money(money(order.getAmount()).subtract(money(order.getPreauthUnfrozenAmount()))
+                .subtract(money(order.getPreauthCapturedAmount())).max(BigDecimal.ZERO));
     }
 
     private static void applyRefundStatus(DemoOrder order) {
@@ -1621,7 +1880,7 @@ public class DemoOrderService {
     }
 
     private static DemoOrderStatus preserveCollectedStatus(DemoOrderStatus currentStatus, DemoOrderStatus nextStatus) {
-        return currentStatus == DemoOrderStatus.COMPLETED
+        return currentStatus == DemoOrderStatus.COMPLETED || currentStatus == DemoOrderStatus.UNFROZEN
                 ? currentStatus : preserveRefundStatus(currentStatus, nextStatus);
     }
 

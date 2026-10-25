@@ -37,6 +37,24 @@ mysql -u payment_gateway -p payment_gateway < database/mysql/20260719_add_mercha
 
 ## Spring Boot Startup
 
+### 2026-10-25 预授权扣款升级
+
+升级已有实例时，先备份数据库并导入明确扣款关联表：
+
+```bash
+mysql -u payment_gateway -p payment_gateway < database/mysql/20261025_add_preauth_capture_order.sql
+```
+
+新版本在请求支付平台前，在同一事务中锁定原冻结订单、写入 `preauth_capture_order` 和独立的 `pay_order` 实扣子单。子单金额是实际请求扣款金额；支付处理中仍为未付款，只有身份与金额匹配的成功回调或原交易查询才能完成。退款、收款统计和商户到账通知使用子单。父单保留冻结本金及授权号，`NOT_COMPLETE` 扣除已成功实扣后保留冻结余额，`COMPLETE` 成功后表示剩余冻结资金已释放，剩余额为零。
+
+网络超时、平台系统异常等结果未知时保留 `PENDING`，不得更换订单号重复扣款。应查询原实扣子单或等待原回调确认；已明确拒绝的操作可以使用新请求号重新申请。解冻与扣款在同一父订单锁下预留，存在待确认操作时拒绝并发支出。重复提交相同解冻请求会查询原解冻操作，不会再次解冻。
+
+**不会依据 `_PAY_数字` 后缀自动迁移历史关联。** 升级前产生的历史扣款必须先核对支付平台真实交易号、授权号、所属商户、通道、金额及状态，再由维护人员登记明确关联和独立收款记录；不得把冻结本金直接当作实收金额。有关联的父、子订单不能通过订单删除接口删除，以免重用同名订单造成串单。
+
+新建数据库的完整脚本已包含此表。应用也会尝试创建缺失的关联表；生产数据库账号没有建表权限时，请在启动前由迁移账号执行上述 SQL。
+
+历史 `paid_at` 为空的已完成订单保持未知时间，不会因退款、分账或回调重放而填入当前日期。新订单记录首次确认收款时间；退款保留首次成功退款时间。
+
 After importing the SQL, start the app with database persistence enabled:
 
 ```bash
@@ -59,6 +77,8 @@ Do not commit the real database password into GitHub.
 - `pay_order`: payment orders
 - `payment_attempt`: channel routing attempts
 - `refund_order`: refund records
+- `preauth_capture_order`: durable capture reservations and explicit parent/collection-order associations
+- `preauth_unfreeze_order`: unfreeze reservations and confirmed released amounts
 - `profit_sharing_order`: profit sharing records
 - `settlement_record`: settlement batches
 - `onboarding_record`: Alipay direct onboarding records

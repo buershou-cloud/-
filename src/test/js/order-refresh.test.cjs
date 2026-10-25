@@ -30,6 +30,7 @@ function setup(request) {
     function renderOrders() { renders++; }
     function renderProfitShareOrders() {}
     function refreshSummaryViews() {}
+    async function loadFinancialSummary() {}
     function setDashboardResult(result) { messages.push(result.message); }
     ${pageFunction('loadOrders')}
     ${pageFunction('queryOrders')}

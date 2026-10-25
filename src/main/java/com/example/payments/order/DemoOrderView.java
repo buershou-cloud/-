@@ -19,6 +19,8 @@ public record DemoOrderView(
         String refundableAmountText,
         BigDecimal preauthUnfrozenAmount,
         String preauthUnfrozenAmountText,
+        BigDecimal preauthCapturedAmount,
+        String preauthCapturedAmountText,
         BigDecimal preauthUnfreezeRemainingAmount,
         String preauthUnfreezeRemainingAmountText,
         DemoOrderStatus status,
@@ -33,7 +35,10 @@ public record DemoOrderView(
         BigDecimal refundedAmount = money(order.getRefundedAmount());
         BigDecimal refundableAmount = money(amount.subtract(refundedAmount).max(BigDecimal.ZERO));
         BigDecimal preauthUnfrozenAmount = money(order.getPreauthUnfrozenAmount());
-        BigDecimal preauthUnfreezeRemainingAmount = money(amount.subtract(preauthUnfrozenAmount).max(BigDecimal.ZERO));
+        BigDecimal preauthCapturedAmount = money(order.getPreauthCapturedAmount());
+        BigDecimal preauthUnfreezeRemainingAmount = order.getStatus() == DemoOrderStatus.UNFROZEN
+                ? BigDecimal.ZERO.setScale(2)
+                : money(amount.subtract(preauthUnfrozenAmount).subtract(preauthCapturedAmount).max(BigDecimal.ZERO));
         return new DemoOrderView(
                 order.getOutTradeNo(),
                 order.getTradeNo(),
@@ -50,6 +55,8 @@ public record DemoOrderView(
                 amountText(refundableAmount),
                 preauthUnfrozenAmount,
                 amountText(preauthUnfrozenAmount),
+                preauthCapturedAmount,
+                amountText(preauthCapturedAmount),
                 preauthUnfreezeRemainingAmount,
                 amountText(preauthUnfreezeRemainingAmount),
                 order.getStatus(),

@@ -80,7 +80,8 @@ public class OrderController {
             @Valid @RequestBody PreauthCaptureRequest request
     ) {
         GatewayResponse gateway = paymentGatewayService.preauthCapture(request.withPreauthOutTradeNo(outTradeNo));
-        return new PreauthConversionResponse(gateway, orderService.view(outTradeNo));
+        return new PreauthConversionResponse(gateway, orderService.view(outTradeNo),
+                orderService.captureOrderView(outTradeNo, request.outTradeNo()));
     }
 
     @PostMapping("/{outTradeNo}/unfreeze")
@@ -96,6 +97,6 @@ public class OrderController {
         return orderService.delete(outTradeNo);
     }
 
-    public record PreauthConversionResponse(GatewayResponse gateway, DemoOrderView order) {
+    public record PreauthConversionResponse(GatewayResponse gateway, DemoOrderView order, DemoOrderView captureOrder) {
     }
 }

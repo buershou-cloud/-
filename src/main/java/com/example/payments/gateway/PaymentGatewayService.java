@@ -202,55 +202,104 @@ public class PaymentGatewayService {
     }
 
     public GatewayResponse preauthCapture(PreauthCaptureRequest request) {
+        DemoOrderView parent = orderService.view(request.preauthOutTradeNo());
+        String channelId = parent.channelId();
+        if (!hasText(channelId) || (request.channelIds() != null && !request.channelIds().isEmpty()
+                && !request.channelIds().contains(channelId))) {
+            throw new IllegalArgumentException("Capture must use the original authorization channel");
+        }
         String preauthProductCode = preauthProductCode(request.preauthOutTradeNo(), request.extra());
         PreauthCaptureRequest prepared = request.withAuthNo(resolvePreauthAuthNo(
                 request.authNo(),
                 request.preauthOutTradeNo(),
-                request.channelIds(),
+                List.of(channelId),
                 request.appAuthToken(),
                 request.extra()
         )).withExtra(withPreauthProductCode(request.extra(), preauthProductCode));
+        GatewayResponse saved = orderService.reservePreauthCapture(prepared, channelId);
+        if (saved != null) return saved;
         GatewayResponse response = execute(
                 null,
-                prepared.channelIds(),
-                prepared.totalAmount(),
+                List.of(channelId),
                 null,
-                channel -> provider(channel).preauthCapture(channel, prepared)
+                null,
+                channel -> provider(channel).preauthCapture(channel, prepared), false
         );
-        if (response.status() != PaymentStatus.FAILED && hasText(prepared.preauthOutTradeNo())) {
+        // Transport errors are ambiguous: retain the reservation until the original capture is reconciled.
+        boolean definitiveFailure = response.status() == PaymentStatus.FAILED && ("NO_MATCHING_CHANNEL".equals(response.code())
+                || (response.raw() != null && response.raw().get("alipay_trade_pay_response") instanceof Map<?, ?> body
+                && definitiveCaptureRejection(body)));
+        if (response.status() != PaymentStatus.FAILED || definitiveFailure) {
             ReceiptEvidence receipt = receiptEvidence(response, false);
-            if (response.status() != PaymentStatus.SUCCESS && response.status() != PaymentStatus.CLOSED
-                    && Objects.equals(prepared.outTradeNo(), response.outTradeNo())
-                    && response.raw() != null
-                    && "alipay.trade.pay".equals(textValue(response.raw().get("request_method")))) {
-                orderService.rememberPendingCapture(prepared.preauthOutTradeNo(), prepared.outTradeNo(),
-                        response.channelId(), prepared.totalAmount());
+            if (response.status() == PaymentStatus.SUCCESS && (!receipt.matchesAmount(prepared.totalAmount())
+                    || !Objects.equals(prepared.outTradeNo(), response.outTradeNo()))) {
+                throw new IllegalArgumentException("Capture response identity or amount does not match the reservation");
             }
-            orderService.convertPreauthToPay(prepared.preauthOutTradeNo(), firstText(response.tradeNo(), prepared.outTradeNo()),
-                    response.channelId(), prepared.totalAmount(), receipt.matchesAmount(prepared.totalAmount())
-                            && Objects.equals(prepared.outTradeNo(), response.outTradeNo()));
+            orderService.recordCaptureResult(prepared.outTradeNo(), response.tradeNo(), firstText(response.channelId(), channelId),
+                    response.status(), receipt.amount(), receipt.confirmed());
         }
         return response;
     }
 
+    private static boolean definitiveCaptureRejection(Map<?, ?> body) {
+        String code = textValue(body.get("code"));
+        String subCode = textValue(body.get("sub_code"));
+        if (List.of("40001", "40002", "40006").contains(code)) return true;
+        return "40004".equals(code) && subCode != null && List.of(
+                "ACQ.INVALID_PARAMETER", "ACQ.ACCESS_FORBIDDEN", "ACQ.AUTH_NO_NOT_EXIST",
+                "ACQ.PAYMENT_AUTH_CODE_INVALID", "ACQ.PAYMENT_AUTH_CODE_EXPIRED").contains(subCode);
+    }
+
     public GatewayResponse preauthUnfreeze(PreauthUnfreezeRequest request) {
+        DemoOrderView parent = orderService.view(request.preauthOutTradeNo());
+        if (!hasText(parent.channelId()) || (request.channelIds() != null && !request.channelIds().isEmpty()
+                && !request.channelIds().contains(parent.channelId()))) {
+            throw new IllegalArgumentException("Unfreeze must use the original authorization channel");
+        }
         PreauthUnfreezeRequest prepared = request.withAuthNo(resolvePreauthAuthNo(
                 request.authNo(),
                 request.preauthOutTradeNo(),
-                request.channelIds(),
+                List.of(parent.channelId()),
                 request.appAuthToken(),
                 request.extra()
         ));
-        orderService.ensurePreauthUnfreezable(prepared.preauthOutTradeNo(), prepared.authNo(), prepared.amount());
+        GatewayResponse saved = orderService.reservePreauthUnfreeze(prepared);
+        if (saved != null) {
+            if (saved.status() != PaymentStatus.PENDING) return saved;
+            // A retry of an uncertain unfreeze only queries its original operation; it never sends it again.
+            GatewayResponse queried = execute(null, List.of(parent.channelId()), null, null,
+                    channel -> provider(channel).preauthQuery(channel, new PaymentQueryRequest(parent.outTradeNo(),
+                            prepared.authNo(), prepared.appAuthToken(), List.of(parent.channelId()),
+                            Map.of("operation_type", "UNFREEZE", "out_request_no", prepared.outRequestNo()))), false);
+            if (queried.status() == PaymentStatus.SUCCESS) {
+                Object bodyValue = queried.raw() == null ? null : queried.raw().get("alipay_fund_auth_operation_detail_query_response");
+                if (!(bodyValue instanceof Map<?, ?> body)
+                        || !prepared.authNo().equals(textValue(body.get("auth_no")))
+                        || !prepared.outRequestNo().equals(textValue(body.get("out_request_no")))
+                        || !"UNFREEZE".equals(textValue(body.get("operation_type")))
+                        || !"SUCCESS".equals(textValue(body.get("status")))
+                        || body.get("amount") == null
+                        || new BigDecimal(body.get("amount").toString()).compareTo(prepared.amount()) != 0) {
+                    throw new IllegalArgumentException("Unfreeze query does not match the reserved operation");
+                }
+                orderService.recordPreauthUnfreeze(prepared, queried);
+            }
+            return queried;
+        }
         GatewayResponse response = execute(
                 null,
-                prepared.channelIds(),
-                prepared.amount(),
+                List.of(parent.channelId()),
                 null,
-                channel -> provider(channel).preauthUnfreeze(channel, prepared)
+                null,
+                channel -> provider(channel).preauthUnfreeze(channel, prepared), false
         );
         if (response.status() == PaymentStatus.SUCCESS && hasText(prepared.preauthOutTradeNo())) {
             orderService.recordPreauthUnfreeze(prepared, response);
+        }
+        if (response.status() == PaymentStatus.FAILED && ("NO_MATCHING_CHANNEL".equals(response.code())
+                || (response.raw() != null && response.raw().get("alipay_fund_auth_order_unfreeze_response") instanceof Map<?, ?> body
+                && definitiveCaptureRejection(body)))) {
+            orderService.rejectPreauthUnfreeze(prepared);
         }
         return response;
     }
@@ -992,9 +1041,6 @@ public class PaymentGatewayService {
             return;
         }
         try {
-            if (receipt.confirmed() && localOutTradeNo.equals(response.outTradeNo())
-                    && orderService.recordPendingCaptureQuery(localOutTradeNo, response.tradeNo(),
-                    response.channelId(), receipt.amount())) return;
             orderService.recordPaymentResult(localOutTradeNo, response.tradeNo(), response.channelId(), response.status(),
                     receipt.confirmed() && localOutTradeNo.equals(response.outTradeNo()), receipt.amount());
         } catch (RuntimeException ex) {
@@ -1035,7 +1081,7 @@ public class PaymentGatewayService {
                 || !receiptResponseIdentityMatches(body, response, "transaction_id")) {
             return ReceiptEvidence.NONE;
         }
-        if (!body.containsKey("amount")) return new ReceiptEvidence(true, null);
+        if (!body.containsKey("amount")) return ReceiptEvidence.NONE;
         if (!(body.get("amount") instanceof Map<?, ?> amount) || !amount.containsKey("total")) return ReceiptEvidence.NONE;
         return receiptAmount(amount, "total", true);
     }
@@ -1046,7 +1092,7 @@ public class PaymentGatewayService {
     }
 
     private static ReceiptEvidence receiptAmount(Map<?, ?> body, String key, boolean fen) {
-        if (!body.containsKey(key)) return new ReceiptEvidence(true, null);
+        if (!body.containsKey(key)) return ReceiptEvidence.NONE;
         try {
             BigDecimal amount = new BigDecimal(String.valueOf(body.get(key)));
             if (fen) amount = amount.setScale(0, RoundingMode.UNNECESSARY).movePointLeft(2);

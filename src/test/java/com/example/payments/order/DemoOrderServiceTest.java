@@ -3,6 +3,7 @@ package com.example.payments.order;
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.domain.RefundCreateRequest;
+import com.example.payments.domain.PreauthCaptureRequest;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -33,7 +34,7 @@ class DemoOrderServiceTest {
                 "DOUYIN-ORDER-001",
                 "DOUYIN-TRANSACTION-001",
                 "douyin-main",
-                PaymentStatus.SUCCESS
+                PaymentStatus.SUCCESS, true, new BigDecimal("3.00")
         );
 
         assertThat(completed.status()).isEqualTo(DemoOrderStatus.COMPLETED);
@@ -167,7 +168,7 @@ class DemoOrderServiceTest {
                 "DOUYIN-REFUNDED-001",
                 "DOUYIN-TRADE-001",
                 "douyin-main",
-                PaymentStatus.SUCCESS
+                PaymentStatus.SUCCESS, true, new BigDecimal("3.00")
         );
 
         assertThat(queried.status()).isEqualTo(DemoOrderStatus.REFUNDED);
@@ -175,7 +176,7 @@ class DemoOrderServiceTest {
     }
 
     @Test
-    void preauthCaptureNotifyUpdatesOriginalOrderInsteadOfCreatingCaptureOrder() {
+    void preauthCaptureNotifyUpdatesReservedCollectionOrderAndPreservesFrozenPrincipal() {
         DemoOrderService service = new DemoOrderService();
         service.recordPaymentCreated(
                 "PREAUTH-001",
@@ -189,21 +190,25 @@ class DemoOrderServiceTest {
                 PaymentStatus.SUCCESS
         );
 
+        service.reservePreauthCapture(new PreauthCaptureRequest("PREAUTH-001", "PREAUTH-001_PAY_1781530011597",
+                "AUTH-001", "Capture", new BigDecimal("1.00"), null, null, "COMPLETE", null, List.of("ali-main"), Map.of()), "ali-main");
         DemoOrderView captured = service.recordAlipayNotify(
                 "PREAUTH-001_PAY_1781530011597",
                 "TRADE-CAPTURE-001",
                 "ali-main",
                 new BigDecimal("1.00"),
-                "TRADE_SUCCESS"
+                "TRADE_SUCCESS", true
         );
 
-        assertThat(captured.outTradeNo()).isEqualTo("PREAUTH-001");
+        assertThat(captured.outTradeNo()).isEqualTo("PREAUTH-001_PAY_1781530011597");
         assertThat(captured.tradeNo()).isEqualTo("TRADE-CAPTURE-001");
         assertThat(captured.status()).isEqualTo(DemoOrderStatus.COMPLETED);
         assertThat(captured.preAuthorization()).isFalse();
         assertThat(service.recent())
                 .extracting(DemoOrderView::outTradeNo)
-                .containsExactly("PREAUTH-001");
+                .containsExactlyInAnyOrder("PREAUTH-001", "PREAUTH-001_PAY_1781530011597");
+        assertThat(service.view("PREAUTH-001").preAuthorization()).isTrue();
+        assertThat(service.view("PREAUTH-001").status()).isEqualTo(DemoOrderStatus.UNFROZEN);
     }
 
     @Test

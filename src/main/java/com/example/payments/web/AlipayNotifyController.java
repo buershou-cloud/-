@@ -52,6 +52,11 @@ public class AlipayNotifyController {
         if (!alipayOpenApiClient.verifyNotify(channel, params)) {
             return ResponseEntity.badRequest().body("failure");
         }
+        if (!("ALIPAY".equals(channel.getProvider()) || "ALIPAY_DIRECT".equals(channel.getProvider()))
+                || !hasText(channel.getAlipay().getAppId())
+                || !channel.getAlipay().getAppId().equals(params.get("app_id"))) {
+            return ResponseEntity.badRequest().body("failure");
+        }
 
         String outTradeNo = firstText(params.get("out_trade_no"), params.get("out_order_no"));
         if (outTradeNo == null || outTradeNo.isBlank()) {
@@ -61,7 +66,9 @@ public class AlipayNotifyController {
         String gatewayTradeNo = isPreauthNotify(params)
                 ? firstText(params.get("auth_no"), params.get("trade_no"))
                 : firstText(params.get("trade_no"), params.get("auth_no"));
-        DemoOrderView order = orderService.recordAlipayNotify(
+        DemoOrderView order;
+        try {
+            order = orderService.recordAlipayNotify(
                 outTradeNo,
                 gatewayTradeNo,
                 channelId,
@@ -71,7 +78,10 @@ public class AlipayNotifyController {
                         && channel.getAlipay().getAppId().equals(params.get("app_id"))
                         && !isPreauthNotify(params) && ("TRADE_SUCCESS".equals(params.get("trade_status"))
                         || "TRADE_FINISHED".equals(params.get("trade_status")))
-        );
+            );
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body("failure");
+        }
         merchantNotifyService.notifyPayment(order, tradeStatus);
         return ResponseEntity.ok("success");
     }

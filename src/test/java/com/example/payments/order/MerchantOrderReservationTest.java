@@ -101,7 +101,7 @@ class MerchantOrderReservationTest {
     @Test
     void callbackSuccessIsNotDowngradedByDelayedCreateResponse() {
         orders.reserveMerchantPayment("M1", "Merchant", "original", payment("ONE", "10", null));
-        orders.recordPaymentResult("ONE", "T1", "original", PaymentStatus.SUCCESS);
+        orders.recordPaymentResult("ONE", "T1", "original", PaymentStatus.SUCCESS, true, new BigDecimal("10"));
         orders.recordPaymentCreated("ONE", "T1", "original", "M1", "Merchant", "ALIPAY_WAP", new BigDecimal("10"), false, PaymentStatus.CREATED);
         assertThat(orders.view("ONE").status()).isEqualTo(DemoOrderStatus.COMPLETED);
     }

@@ -3,6 +3,7 @@ package com.example.payments.web;
 import com.example.payments.channel.ChannelRegistry;
 import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.domain.PaymentStatus;
+import com.example.payments.domain.PreauthCaptureRequest;
 import com.example.payments.gateway.alipay.AlipayOpenApiClient;
 import com.example.payments.gateway.douyin.DouyinPayClient;
 import com.example.payments.merchant.api.MerchantNotifyService;
@@ -58,9 +59,10 @@ class ConfirmedReceiptNotifyTest {
             Fixture f = new Fixture("ALIPAY");
             f.create("PAY", false);
             assertThat(f.alipay.notify("ali-main", aliForm("PAY", "TRADE", "TRADE_SUCCESS", "10.00", app))
-                    .getBody()).isEqualTo("success");
+                    .getBody()).isEqualTo("failure");
             assertThat(f.sink.receipts).isEmpty();
-            assertThat(f.orders.view("PAY").status()).isEqualTo(DemoOrderStatus.COMPLETED);
+            assertThat(f.orders.view("PAY").status()).isEqualTo(DemoOrderStatus.UNPAID);
+            org.mockito.Mockito.verifyNoInteractions(f.merchantNotify);
         }
     }
 
@@ -77,9 +79,12 @@ class ConfirmedReceiptNotifyTest {
         f.alipay.notify("ali-main", freeze);
         assertThat(f.orders.view("AUTH").status()).isEqualTo(DemoOrderStatus.FROZEN);
         assertThat(f.sink.receipts).isEmpty();
+        f.orders.reservePreauthCapture(new PreauthCaptureRequest("AUTH", "AUTH_PAY_1", "AUTH-NO", "Capture",
+                money("3.00"), null, null, "NOT_COMPLETE", null, List.of("ali-main"), Map.of()), "ali-main");
         f.alipay.notify("ali-main", aliForm("AUTH_PAY_1", "CAPTURE", "TRADE_SUCCESS", "3.00", "APP"));
-        assertThat(f.sink.receipts.keySet()).containsExactly("AUTH");
-        assertThat(f.sink.receipts.get("AUTH").amount()).isEqualByComparingTo("3.00");
+        assertThat(f.sink.receipts.keySet()).containsExactly("AUTH_PAY_1");
+        assertThat(f.sink.receipts.get("AUTH_PAY_1").amount()).isEqualByComparingTo("3.00");
+        assertThat(f.orders.view("AUTH").amount()).isEqualByComparingTo("10.00");
     }
 
     @Test
@@ -109,23 +114,27 @@ class ConfirmedReceiptNotifyTest {
         Fixture f = new Fixture("DOUYIN");
         f.create("PAY", false);
         assertThat(f.douyin.notify("dy-main", new HttpHeaders(), encrypted(dyPayload("REFUND")))
-                .getStatusCode().value()).isEqualTo(200);
-        assertThat(f.orders.view("PAY").status()).isEqualTo(DemoOrderStatus.COMPLETED);
+                .getStatusCode().value()).isEqualTo(400);
+        assertThat(f.orders.view("PAY").status()).isEqualTo(DemoOrderStatus.UNPAID);
         assertThat(f.sink.receipts).isEmpty();
+        org.mockito.Mockito.verifyNoInteractions(f.merchantNotify);
     }
 
     @Test
     void douyinMalformedAmountWrongLocalChannelOrMissingMerchantMetadataCannotNotify() throws Exception {
-        for (String mismatch : List.of("amount", "missing-total", "channel", "appid", "mchid")) {
+        for (String mismatch : List.of("amount", "missing-total", "missing-amount", "channel", "appid", "mchid")) {
             Fixture f = new Fixture("DOUYIN");
             f.orders.recordPaymentCreated("PAY", null, "channel".equals(mismatch) ? "OTHER" : "dy-main",
                     "M1", "Merchant", "Payment", money("10.00"), false, PaymentStatus.CREATED);
             Map<String, Object> payload = dyPayload("SUCCESS");
             if ("amount".equals(mismatch)) payload.put("amount", Map.of("total", 900));
             if ("missing-total".equals(mismatch)) payload.put("amount", Map.of());
+            if ("missing-amount".equals(mismatch)) payload.remove("amount");
             if ("appid".equals(mismatch) || "mchid".equals(mismatch)) payload.remove(mismatch);
-            assertThat(f.douyin.notify("dy-main", new HttpHeaders(), encrypted(payload)).getStatusCode().value()).isEqualTo(200);
+            assertThat(f.douyin.notify("dy-main", new HttpHeaders(), encrypted(payload)).getStatusCode().value()).isEqualTo(400);
             assertThat(f.sink.receipts).isEmpty();
+            assertThat(f.orders.view("PAY").status()).isEqualTo(DemoOrderStatus.UNPAID);
+            org.mockito.Mockito.verifyNoInteractions(f.merchantNotify);
         }
     }
 
@@ -162,6 +171,7 @@ class ConfirmedReceiptNotifyTest {
         final DouyinPayClient douyinClient = mock(DouyinPayClient.class);
         final AlipayNotifyController alipay;
         final DouyinNotifyController douyin;
+        final MerchantNotifyService merchantNotify = mock(MerchantNotifyService.class);
 
         Fixture(String provider) { this(provider, null); }
 
@@ -177,7 +187,6 @@ class ConfirmedReceiptNotifyTest {
             when(registry.find(channel.getId())).thenReturn(Optional.of(channel));
             when(alipayClient.verifyNotify(eq(channel), anyMap())).thenReturn(true);
             when(douyinClient.verifyNotification(eq(channel), any(), any(), any(), any(), anyString())).thenReturn(true);
-            MerchantNotifyService merchantNotify = mock(MerchantNotifyService.class);
             alipay = new AlipayNotifyController(registry, alipayClient, orders, merchantNotify);
             douyin = new DouyinNotifyController(registry, douyinClient, orders, merchantNotify, JSON, new ProfitSharingRecordService(orders));
         }
