@@ -76,27 +76,45 @@ test('examples use current timestamps, merchant sign mode, string amounts and me
 function setupPage() {
   const ids = [...page.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]);
   assert.equal(new Set(ids).size, ids.length, 'Duplicate page element IDs');
-  const elements = Object.fromEntries(ids.map(id => [id, { value: '', textContent: '', innerHTML: '',
+  const makeElement = () => ({ value: '', textContent: '', innerHTML: '', attributes: {},
     listeners: {}, classList: { add() {}, remove() {}, toggle() {} },
-    addEventListener(name, listener) { this.listeners[name] = listener; }, setAttribute() {} }]));
+    addEventListener(name, listener) { this.listeners[name] = listener; },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    getAttribute(name) { return this.attributes[name]; },
+    removeAttribute(name) { delete this.attributes[name]; }, focus() {} });
+  const elements = Object.fromEntries(ids.map(id => [id, makeElement()]));
+  const secretToggles = Object.fromEntries(['md5Key', 'rsaPrivateKey'].map(id => [id, { ...makeElement(), dataset: { secretToggle: id } }]));
   const fetches = [];
+  const copies = [];
   const ctx = vm.createContext({ MerchantIntegration: integration, URLSearchParams, URL, Date,
-    document: { getElementById: id => elements[id], querySelectorAll: () => [] },
+    document: { getElementById: id => elements[id],
+      querySelector: selector => secretToggles[selector.match(/^\[data-secret-toggle="([^"]+)"\]$/)?.[1]] || null,
+      querySelectorAll: selector => selector === '[data-secret-toggle]' ? Object.values(secretToggles) : [] },
     location: { search: '' }, window: { location: { href: 'https://pay.example/tenant/merchant.html' } },
-    navigator: { clipboard: { writeText: async () => {} } },
+    navigator: { clipboard: { writeText: async value => copies.push(value) } },
     fetch: async url => { fetches.push(url); return { ok: true, text: async () => '[]' }; }
   });
   vm.runInContext(script, ctx);
-  return { ctx, elements, fetches };
+  return { ctx, elements, fetches, copies };
 }
 
-test('portal renders endpoints and samples without copying real keys into integration content', () => {
-  const { ctx, elements } = setupPage();
+test('portal renders endpoints and samples without copying real keys into integration content', async () => {
+  const { ctx, elements, copies } = setupPage();
   elements.integrationProduct.value = 'DOUYIN_H5';
   ctx.updateMerchantFields(merchant, 'https://pay.example/tenant/api/v1');
   assert.equal(elements.apiBase.value, 'https://pay.example/tenant/api/v1/merchant-api');
+  assert.equal(elements.md5Key.value, '••••••••••••••••');
+  assert.equal(elements.rsaPrivateKey.value, '••••••••••••••••');
+  assert.doesNotMatch(Object.values(elements).map(element => element.innerHTML + element.textContent + element.value).join('\n'), /SECRET_/);
+  ctx.toggleCredential('md5Key');
   assert.equal(elements.md5Key.value, merchant.md5Key);
+  ctx.toggleCredential('md5Key');
+  ctx.toggleCredential('rsaPrivateKey');
   assert.equal(elements.rsaPrivateKey.value, merchant.rsa2PrivateKey);
+  ctx.toggleCredential('rsaPrivateKey');
+  await ctx.copyValue('md5Key');
+  await ctx.copyValue('rsaPrivateKey');
+  assert.deepEqual(copies, [merchant.md5Key, merchant.rsa2PrivateKey]);
   assert.equal(elements.sdkClientDownload.href, 'https://pay.example/tenant/sdk/merchant-client.mjs');
   for (const [id, element] of Object.entries(elements)) {
     if (/^(integration|doc)/.test(id)) assert.doesNotMatch(element.innerHTML + element.textContent + element.value, /SECRET_/);

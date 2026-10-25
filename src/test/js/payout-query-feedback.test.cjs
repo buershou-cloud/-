@@ -43,6 +43,7 @@ function setup(options = {}) {
     loadPayouts: options.loadPayouts || (async () => {}),
     loadOrders: options.loadOrders || (async () => {}),
     setDashboardResult: result => { elements.dashboardResult.textContent = result.message; },
+    openOrderDetail: record => { elements.orderDetailBody.textContent = `本地代付记录：${record.orderNo}`; },
     renderOrders: () => { elements.recentOrders.innerHTML = state.orderOperations.map(ctx.operationOrderRow).join(''); }
   });
   const functions = ['normalizeStatusCode', 'payoutProviderText', 'payoutStatusText', 'payoutStatusBadge',
@@ -89,19 +90,21 @@ test('order query stays inline and never overwrites manually opened local detail
   const pending = deferred();
   const { ctx, elements } = setup({ request: () => pending.promise });
   await ctx.handleOperationAction(button(douyin, 'detail'));
-  assert.match(elements.dashboardResult.textContent, /^本地代付记录：DY\+1001/);
-  const localDetail = elements.dashboardResult.textContent;
+  assert.match(elements.orderDetailBody.textContent, /^本地代付记录：DY\+1001/);
+  const localDetail = elements.orderDetailBody.textContent;
   const trigger = button(douyin);
   const query = ctx.handleOperationAction(trigger);
   assert.equal(trigger.textContent, '查询中…');
-  assert.equal(elements.dashboardResult.textContent, localDetail);
+  assert.equal(elements.orderDetailBody.textContent, localDetail);
+  assert.equal(elements.dashboardResult.textContent, '');
   assert.equal(ctx.payoutQueryState(douyin).message, '查询中');
   assert.match(elements.recentOrders.innerHTML, /disabled>查询中…/);
   assert.equal((elements.recentOrders.innerHTML.match(/<tr>/g) || []).length, 2);
   pending.resolve({ ...douyin, status: 'SUCCESS' });
   await query;
   assert.equal(ctx.payoutQueryState(douyin).message, '成功');
-  assert.equal(elements.dashboardResult.textContent, localDetail);
+  assert.equal(elements.orderDetailBody.textContent, localDetail);
+  assert.equal(elements.dashboardResult.textContent, '');
   assert.equal(trigger.disabled, false);
 });
 
@@ -147,7 +150,8 @@ test('viewing another local record during a slow query is not overwritten by the
   await ctx.handleOperationAction(button(alipay, 'detail'));
   pending.resolve({ ...douyin, status: 'SUCCESS' });
   await query;
-  assert.match(elements.dashboardResult.textContent, /^本地代付记录：ALI1002/);
+  assert.match(elements.orderDetailBody.textContent, /^本地代付记录：ALI1002/);
+  assert.equal(elements.dashboardResult.textContent, '');
   assert.equal(ctx.payoutQueryState(douyin).message, '成功');
 });
 

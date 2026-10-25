@@ -2337,8 +2337,9 @@
       }
     }
   </style>
+  <link rel="stylesheet" href="ui-theme.css?ui=20261025">
 </head>
-<body>
+<body class="ui-admin">
 <svg aria-hidden="true" style="display:none">
   <symbol id="icon-brand" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></symbol>
   <symbol id="icon-orders" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></symbol>
@@ -2363,8 +2364,10 @@
       <span>支付平台管理</span>
     </div>
     <nav class="nav" aria-label="主导航">
-      <div class="nav-title">概览</div>
+      <div class="nav-title">交易</div>
       <button class="nav-btn active" data-page="dashboard"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-orders"></use></svg></span><span>订单管理</span></button>
+      <button class="nav-btn" data-page="complaints"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-complaint"></use></svg></span><span>投诉查询</span></button>
+      <div class="nav-title">资金</div>
       <button class="nav-btn" data-page="payouts"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-banknote"></use></svg></span><span>商家代付</span></button>
       <div class="nav-group" data-nav-group="sharing">
         <button class="nav-group-toggle" type="button" data-nav-toggle="sharing" aria-expanded="false">
@@ -2375,13 +2378,12 @@
           <button class="nav-btn nav-child" data-page="sharing-relations"><span>分账关系</span></button>
         </div>
       </div>
-      <button class="nav-btn" data-page="complaints"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-complaint"></use></svg></span><span>投诉查询</span></button>
-      <div class="nav-title">直付通</div>
+      <button class="nav-btn" data-page="reports"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-report"></use></svg></span><span>对账报表</span></button>
+      <div class="nav-title">商户</div>
+      <button class="nav-btn" data-page="merchants"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-merchants"></use></svg></span><span>商户管理</span></button>
       <button class="nav-btn" data-page="onboard"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-onboard"></use></svg></span><span>子商户进件</span></button>
       <div class="nav-title">系统</div>
       <button class="nav-btn" data-page="channels"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-channel"></use></svg></span><span>支付通道</span></button>
-      <button class="nav-btn" data-page="merchants"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-merchants"></use></svg></span><span>商户管理</span></button>
-      <button class="nav-btn" data-page="reports"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-report"></use></svg></span><span>对账报表</span></button>
       <button class="nav-btn" data-page="accounts"><span class="nav-icon"><svg aria-hidden="true"><use href="#icon-account"></use></svg></span><span>账户管理</span></button>
     </nav>
   </aside>
@@ -2442,7 +2444,8 @@
           </div>
           <div class="panel-body">
             <form id="orderFilterForm">
-              <div class="form-grid order-filter-grid">
+              <div class="form-grid order-filter-primary">
+                <label class="order-search-field">订单号<input id="orderOutTradeNo" placeholder="收款订单号 / 分账请求号 / 代付单号"></label>
                 <label>记录类型
                   <select id="orderRecordType">
                     <option value="ALL">全部</option>
@@ -2451,22 +2454,45 @@
                     <option value="PAYOUT">代付</option>
                   </select>
                 </label>
-                <label>开始时间<input id="orderBeginTime" type="datetime-local"></label>
-                <label>结束时间<input id="orderEndTime" type="datetime-local"></label>
-                <label>订单号<input id="orderOutTradeNo" placeholder="收款订单号 / 分账请求号 / 代付单号"></label>
-                <label>平台交易号<input id="orderTradeNo" placeholder="支付宝或抖音平台交易号"></label>
-                <label>支付通道
-                  <select id="orderChannelFilter">
-                    <option value="">全部通道</option>
+                <label>状态
+                  <select id="orderStatusFilter">
+                    <option value="ALL">全部状态</option>
+                    <option value="CONFIRMED">已完成 / 成功</option>
+                    <option value="UNPAID">未支付</option>
+                    <option value="PROCESSING">处理中</option>
+                    <option value="FAILED">失败 / 已关闭</option>
+                    <option value="REFUND">含退款</option>
+                    <option value="FROZEN">预授权冻结 / 已解冻</option>
+                    <option value="UNKNOWN">结果待核对</option>
                   </select>
                 </label>
+                <div class="form-actions filter-submit-actions">
+                  <button class="btn" id="queryOrdersBtn" type="submit">查询订单</button>
+                  <button class="btn secondary" id="resetOrderFilterBtn" type="button">重置</button>
+                </div>
               </div>
-              <div class="form-actions">
-                <button class="btn" id="queryOrdersBtn" type="submit">查询订单</button>
-                <button class="btn secondary" id="resetOrderFilterBtn" type="button">重置</button>
+              <div class="order-quick-filters">
+                <span class="muted">快捷时间</span>
+                <button class="btn secondary small" type="button" data-order-range="today">今日</button>
+                <button class="btn secondary small" type="button" data-order-range="week">近 7 天</button>
+                <button class="btn secondary small" type="button" data-order-range="all">不限时间</button>
+                <span id="orderDateSummary" class="muted">不限时间</span>
               </div>
+              <details class="order-filter-more" id="orderAdvancedFilters">
+                <summary>更多筛选<span class="muted"> · 自定义时间、平台单号、支付通道</span></summary>
+                <div class="form-grid order-filter-grid">
+                  <label>开始时间<input id="orderBeginTime" type="datetime-local" step="1"></label>
+                  <label>结束时间<input id="orderEndTime" type="datetime-local" step="1"></label>
+                  <label>平台交易号<input id="orderTradeNo" placeholder="支付宝或抖音平台交易号"></label>
+                  <label>支付通道<select id="orderChannelFilter"><option value="">全部通道</option></select></label>
+                </div>
+              </details>
             </form>
-            <p class="muted" style="margin:12px 0">收款计入收入；分账、代付单独列为支出。历史收款单仅有“已分账”标记时，无法还原当时的分账请求号和金额。</p>
+            <details class="order-filter-explanation">
+              <summary>筛选与统计说明</summary>
+              <p class="order-filter-note muted" id="orderFilterNote">状态仅筛选已加载记录；快捷日期使用北京时间。上方统计为全平台汇总，不随列表筛选变化。</p>
+              <p class="muted">收款计入收入；分账、代付单独列为支出。历史收款单仅有“已分账”标记时，无法还原当时的分账请求号和金额。</p>
+            </details>
             <p id="orderOperationsError" class="operation-result refund-error hidden" role="alert"></p>
             <div class="table-wrap">
               <table>
@@ -2488,7 +2514,7 @@
               </table>
             </div>
             <div id="orderPagination" class="pagination"></div>
-            <pre id="dashboardResult" class="operation-result">等待订单操作</pre>
+            <pre id="dashboardResult" class="operation-result hidden" role="status" aria-live="polite"></pre>
           </div>
         </section>
       </section>
@@ -2984,7 +3010,7 @@
               <div class="form-actions" style="margin:0">
                 <button class="btn" id="toggleAddChannelBtn">新增通道</button>
                 <button class="btn secondary" id="refreshChannelsBtn">刷新</button>
-                <button class="btn" id="enableAllBtn">启用全部</button>
+                <button class="btn secondary" id="enableAllBtn">启用全部</button>
               </div>
             </div>
             <div class="panel-body">
@@ -2993,15 +3019,11 @@
                 <table class="channel-table">
                   <thead>
                     <tr>
-                      <th>开关</th>
                       <th>通道</th>
-                      <th>AppID</th>
-                      <th>SMID</th>
-                      <th>密钥</th>
-                      <th>今日</th>
+                      <th>平台</th>
+                      <th>状态</th>
                       <th>支持产品</th>
-                      <th>最小金额</th>
-                      <th>最大金额</th>
+                      <th>单笔限额</th>
                       <th>操作</th>
                     </tr>
                   </thead>
@@ -3238,6 +3260,17 @@
   </section>
 </div>
 
+<div id="orderDetailOverlay" class="order-detail-overlay hidden" aria-hidden="true">
+  <section class="order-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="orderDetailTitle" tabindex="-1">
+    <div class="order-detail-head">
+      <div><span class="muted">交易记录</span><h2 id="orderDetailTitle">订单详情</h2></div>
+      <button class="btn secondary small" id="closeOrderDetailBtn" type="button">关闭</button>
+    </div>
+    <div id="orderDetailBody" class="order-detail-body"></div>
+    <div class="order-detail-footer"><span id="orderDetailFeedback" role="status" aria-live="polite"></span><button class="btn secondary" id="copyOrderDetailBtn" type="button">复制订单号</button></div>
+  </section>
+</div>
+
 <div id="addChannelPanel" class="channel-modal hidden" aria-hidden="true">
   <section class="channel-dialog" role="dialog" aria-modal="true" aria-labelledby="channelModalTitle">
     <div class="channel-modal-head">
@@ -3247,6 +3280,12 @@
     <div class="channel-modal-body">
       <form id="addChannelForm" class="add-channel-form">
         <input id="channelFormMode" type="hidden" value="create">
+        <section id="channelEditorOptions" class="channel-editor-options hidden" aria-labelledby="channelEditorOptionsTitle">
+          <h4 id="channelEditorOptionsTitle">启用支付产品</h4>
+          <div id="channelEditorProducts" class="product-checks"></div>
+          <p class="muted">支付产品随本次修改一起保存。切换收款码使用的产品，请返回列表点击“收款码”。</p>
+        </section>
+        <h4 class="channel-form-section-title">通道资料与凭证</h4>
         <div class="channel-form-grid">
           <label>通道编号<input id="newChannelId" required placeholder="例如 ali-store-01"></label>
           <label>通道类型
@@ -3422,6 +3461,8 @@
       <button class="btn secondary small" id="closeQrBtn" type="button">关闭</button>
     </div>
     <div class="qr-body">
+      <div id="qrProductPicker"></div>
+      <p class="muted">仅切换当前浏览器的收款码产品，不修改通道配置。</p>
       <img id="qrImage" class="qr-image" alt="收银台二维码">
       <div id="qrLink" class="qr-link"></div>
     </div>
@@ -3493,6 +3534,8 @@
     financialSummaryLoadSequence: 0,
     orderPage: 1,
     orderPageSize: 10,
+    orderDetailRecord: null,
+    orderDetailTrigger: null,
     merchants: [],
     onboardingRecords: [],
     complaintAuto: null,
@@ -3699,6 +3742,7 @@
   function setDashboardResult(value) {
     const element = $("dashboardResult");
     if (!element) return;
+    element.classList.remove("hidden");
     if (value && typeof value === "object" && value.message) {
       element.textContent = value.message + (value.response ? `\n${json(value.response)}` : "");
       return;
@@ -4190,7 +4234,8 @@
   }
 
   function money(value) {
-    return `¥${Number(value || 0).toFixed(2)}`;
+    const amount = Number(value || 0);
+    return Number.isFinite(amount) ? `¥${amount.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "金额未记录";
   }
 
   function orderAmountValue(order) {
@@ -4375,14 +4420,18 @@
       : status === "PARTIALLY_REFUNDED" ? "partial-refunded"
       : status === "REFUNDED" ? "refunded"
       : status === "FROZEN" ? "frozen"
-      : status === "UNFROZEN" ? "refunded"
+      : status === "UNFROZEN" || status === "CLOSED" ? "refunded"
       : "pending";
     const label = status === "COMPLETED" ? "已完成"
       : status === "PARTIALLY_REFUNDED" ? "部分退款"
       : status === "REFUNDED" ? "已退款"
       : status === "FROZEN" ? "冻结中"
       : status === "UNFROZEN" ? "已解冻"
-      : "未支付";
+      : status === "UNPAID" ? "未支付"
+      : status === "CLOSED" ? "已关闭"
+      : status === "FAILED" ? "失败"
+      : ["CREATED", "PAYING", "PENDING", "PROCESSING"].includes(status) ? "处理中"
+      : "结果待核对";
     return `<span class="status ${className}">${label}</span>`;
   }
 
@@ -4484,6 +4533,7 @@
     setDashboardResult({ message: "正在查询最新订单…" });
     try {
       if (resetFilters) $("orderFilterForm").reset();
+      updateOrderDateSummary();
       // Refresh the local list immediately, as on page load. Payment-provider
       // reconciliation is independent and must not block a list query.
       if (await loadOrders(true)) {
@@ -4771,7 +4821,7 @@
         <td>${html(order.outTradeNo)}</td>
         <td>${html(order.channelId || "-")}</td>
         <td>${productCell(order)}</td>
-        <td class="amount-green">${html(order.amountText)}</td>
+        <td class="${["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.status) ? "amount-green" : "amount-neutral"}">${html(order.amount == null ? (order.amountText || "金额未记录") : money(order.amount))}</td>
         <td>${refundCell(order)}</td>
         <td>${statusCell(order.status)}</td>
         <td class="muted">${html(order.createdAt)}</td>
@@ -5196,12 +5246,12 @@
       const order = record.payment;
       return `
       <tr>
-        <td>${html(order.outTradeNo)}</td>
+        <td><button class="order-number-link" type="button" data-order-detail="${html(order.outTradeNo)}">${html(order.outTradeNo)}</button></td>
         <td class="muted">${html(order.tradeNo || "-")}</td>
         <td>${html(order.channelId || "-")}</td>
         <td>${html(order.merchantName)}</td>
         <td><span class="tag">收款</span>${productCell(order)}</td>
-        <td class="amount-green">${html(order.amountText)}</td>
+        <td class="${["COMPLETED", "PARTIALLY_REFUNDED", "REFUNDED"].includes(order.status) ? "amount-green" : "amount-neutral"}">${html(order.amount == null ? (order.amountText || "金额未记录") : money(order.amount))}</td>
         <td>${refundCell(order)}</td>
         <td>${statusCell(order.status)}</td>
         <td class="muted">${html(order.createdAt)}</td>
@@ -5214,15 +5264,47 @@
 
   function displayOrderRecords() {
     const filter = $("orderRecordType")?.value || "ALL";
+    const statusFilter = $("orderStatusFilter")?.value || "ALL";
     const records = [
       ...state.orders.map(payment => ({ recordType: "PAYMENT", orderNo: payment.outTradeNo,
         createdAt: payment.createdAt, payment })),
       ...(state.orderOperations || [])
     ];
-    return records.filter(record => filter === "ALL" || record.recordType === filter)
+    return records.filter(record => (filter === "ALL" || record.recordType === filter) && orderMatchesStatus(record, statusFilter))
       .sort((left, right) => String(right.createdAt || "").localeCompare(String(left.createdAt || ""))
         || String(right.orderNo).localeCompare(String(left.orderNo))
         || left.recordType.localeCompare(right.recordType));
+  }
+
+  function orderMatchesStatus(record, filter) {
+    if (filter === "ALL") return true;
+    const status = String(record.recordType === "PAYMENT" ? record.payment?.status : record.status).toUpperCase();
+    const groups = {
+      CONFIRMED: ["COMPLETED", "SUCCESS"], UNPAID: ["UNPAID"],
+      PROCESSING: ["CREATED", "PAYING", "PENDING", "PROCESSING"],
+      FAILED: ["FAILED", "CLOSED"], REFUND: ["PARTIALLY_REFUNDED", "REFUNDED"],
+      FROZEN: ["FROZEN", "UNFROZEN"]
+    };
+    if (filter === "UNKNOWN") return !Object.values(groups).flat().includes(status);
+    return (groups[filter] || []).includes(status);
+  }
+
+  function updateOrderDateSummary() {
+    const begin = $("orderBeginTime")?.value || "";
+    const end = $("orderEndTime")?.value || "";
+    setText("orderDateSummary", begin || end ? `${begin.replace("T", " ") || "不限起始"} 至 ${end.replace("T", " ") || "不限结束"}` : "不限时间");
+  }
+
+  function setOrderDateRange(range, now = new Date()) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en", {
+      timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit"
+    }).formatToParts(now).map(part => [part.type, part.value]));
+    const today = `${parts.year}-${parts.month}-${parts.day}`;
+    const start = new Date(`${today}T00:00:00Z`);
+    if (range === "week") start.setUTCDate(start.getUTCDate() - 6);
+    $("orderBeginTime").value = range === "all" ? "" : `${start.toISOString().slice(0, 10)}T00:00`;
+    $("orderEndTime").value = range === "all" ? "" : `${today}T23:59:59`;
+    updateOrderDateSummary();
   }
 
   function operationTypeText(record) {
@@ -5239,7 +5321,7 @@
     const amount = record.amount == null ? "金额未记录" : `−${money(record.amount)}`;
     const querying = record.recordType === "PAYOUT" && payoutQueryState(record)?.busy;
     return `<tr>
-      <td>${html(record.orderNo)}${record.relatedOutTradeNo ? `<div class="muted">原收款单 ${html(record.relatedOutTradeNo)}</div>` : ""}</td>
+      <td><button class="order-number-link" type="button" data-operation-action="detail" ${attributes}>${html(record.orderNo)}</button>${record.relatedOutTradeNo ? `<div class="muted">原收款单 ${html(record.relatedOutTradeNo)}</div>` : ""}</td>
       <td class="muted">${html(record.tradeNo || "-")}</td>
       <td>${html(record.channelId || "-")}<div class="muted">${html(payoutProviderText(record.provider))}</div></td>
       <td>${html(record.merchantName || "-")}${record.recipient ? `<div class="muted">收款人 ${html(record.recipient)}</div>` : ""}</td>
@@ -5260,14 +5342,65 @@
       await handlePayoutQuery(button, record);
       return;
     }
-    const lines = [`本地${operationTypeText(record)}记录：${record.orderNo}`, `状态：${operationStatusText(record)}`,
-      `金额：${record.amount == null ? "未记录" : money(record.amount)}（支出）`,
-      `支付通道：${record.channelId || "-"}`, `平台单号：${record.tradeNo || "-"}`];
-    if (record.relatedOutTradeNo) lines.push(`原收款单：${record.relatedOutTradeNo}`);
-    if (record.recipient) lines.push(`收款人：${record.recipient}`);
-    if (record.message) lines.push(`结果：${payoutBusinessText(record.message)}`);
-    setDashboardResult({ message: lines.join("\n") });
-    $("dashboardResult")?.scrollIntoView?.({ block: "nearest" });
+    openOrderDetail(record, button);
+  }
+
+  function openOrderDetail(record, trigger = document.activeElement) {
+    if (!record) return;
+    const payment = record.recordType === "PAYMENT" ? record.payment : null;
+    const type = payment ? "收款" : operationTypeText(record);
+    const data = payment || record;
+    const orderNo = payment ? payment.outTradeNo : record.orderNo;
+    const amount = data.amount == null ? "金额未记录" : money(data.amount);
+    const fields = [
+      ["订单号", orderNo], ["平台单号", data.tradeNo || "-"],
+      ["支付通道", data.channelId || "-"], ["商户", data.merchantName || data.merchantId || "-"],
+      ["创建时间", data.createdAt || "未记录"],
+      ["交易类型", payment ? (productLabels[data.product] || data.productName || "收款") : `${type}支出`]
+    ];
+    if (data.subject) fields.push(["订单说明", data.subject]);
+    if (record.relatedOutTradeNo) fields.push(["原收款单", record.relatedOutTradeNo]);
+    if (record.recipient) fields.push(["收款人", record.recipient]);
+    if (payment) {
+      fields.push(["已退金额", money(refundedAmountValue(payment))]);
+      fields.push(["分账标记", payment.profitShared ? "已分账（具体金额以分账流水为准）" : "未标记已分账"]);
+    }
+    const result = payment ? "此处展示已保存的收款记录。退款、分账等操作请返回列表，在操作菜单中办理。"
+      : payoutBusinessText(record.message || "暂无补充结果；如需核对，请使用原单查询。") ;
+    $("orderDetailTitle").textContent = `${type}详情`;
+    $("orderDetailBody").innerHTML = `<section class="detail-section detail-overview">
+      <span class="muted">${payment ? "订单金额" : "支出金额"}</span><strong class="detail-amount">${html(amount)}</strong>
+      ${payment ? statusCell(payment.status) : `<span class="status ${record.status === "SUCCESS" ? "success" : "pending"}">${html(operationStatusText(record))}</span>`}
+      <p class="muted">本地已保存记录，不代表刚完成一次平台查单。</p></section>
+      <section class="detail-section"><h3>订单信息</h3><dl class="detail-grid">${fields.map(([label, value]) => `<div><dt>${html(label)}</dt><dd class="detail-value">${html(value)}</dd></div>`).join("")}</dl></section>
+      <section class="detail-section"><h3>结果说明</h3><p class="detail-result">${html(result)}</p></section>`;
+    state.orderDetailRecord = { orderNo };
+    state.orderDetailTrigger = trigger;
+    $("orderDetailFeedback").textContent = "";
+    $("orderDetailOverlay").classList.remove("hidden");
+    $("orderDetailOverlay").setAttribute("aria-hidden", "false");
+    document.body.classList.add("order-detail-open");
+    $("closeOrderDetailBtn").focus();
+  }
+
+  function closeOrderDetail() {
+    $("orderDetailOverlay").classList.add("hidden");
+    $("orderDetailOverlay").setAttribute("aria-hidden", "true");
+    document.body.classList.remove("order-detail-open");
+    state.orderDetailRecord = null;
+    state.orderDetailTrigger?.focus?.();
+    state.orderDetailTrigger = null;
+  }
+
+  async function copyOrderDetailNumber() {
+    if (!state.orderDetailRecord?.orderNo) return;
+    const orderNo = state.orderDetailRecord.orderNo;
+    try {
+      await navigator.clipboard.writeText(orderNo);
+      if (state.orderDetailRecord?.orderNo === orderNo) $("orderDetailFeedback").textContent = "订单号已复制";
+    } catch (error) {
+      if (state.orderDetailRecord?.orderNo === orderNo) $("orderDetailFeedback").textContent = "未能复制，请选中详情中的订单号复制。";
+    }
   }
 
   function compactPageItems(currentPage, totalPages) {
@@ -7018,42 +7151,30 @@
     tableBody.innerHTML = state.channels.map((channel) => `
       <tr data-channel-row="${html(channel.id)}">
         <td>
-          <button class="switch" type="button" role="switch" aria-label="${html(channel.id)} 通道开关" aria-checked="${channel.enabled}" data-channel-toggle="${html(channel.id)}"><span></span></button>
-        </td>
-        <td>
           <strong>${html(channel.id)}</strong>
-          <div class="muted">${html(channel.provider === "DOUYIN" ? "抖音支付" : channel.provider)}</div>
+          <div class="muted">AppID ${html((channel.provider === "DOUYIN" ? channel.douyinAppId : channel.appId) || "未配置")}</div>
+          ${channel.provider === "ALIPAY_DIRECT" ? `<div class="muted">SMID ${html(channel.subMerchantId || "未配置")}</div>` : ""}
         </td>
-        <td>${html((channel.provider === "DOUYIN" ? channel.douyinAppId : channel.appId) || "-")}</td>
-        <td>
-          ${channel.provider === "ALIPAY_DIRECT"
-            ? `<input data-channel-input="${html(channel.id)}" data-field="subMerchantId" placeholder="二级商户 SMID" value="${html(channel.subMerchantId || "")}">`
-            : '<span class="muted">-</span>'}
+        <td>${html(({ DOUYIN: "抖音支付", ALIPAY: "支付宝", ALIPAY_DIRECT: "支付宝直付通" })[channel.provider] || channel.provider)}
+          <div class="product-tags">${channelSecretTags(channel)}</div>
         </td>
-        <td>
-          <div class="product-tags">
-            ${channelSecretTags(channel)}
-          </div>
-        </td>
-        <td>${channel.dailyEnabled ? '<span class="status success">可用</span>' : '<span class="status pending">熔断</span>'}</td>
+        <td>${!channel.enabled ? '<span class="status refunded">已停用</span>' : channel.dailyEnabled ? '<span class="status success">可用</span>' : '<span class="status pending">已熔断</span>'}</td>
         <td class="product-cell">
           ${productSummaryHtml(channel)}
         </td>
-        <td><input data-channel-input="${html(channel.id)}" data-field="payMin" type="number" min="0" step="0.01" value="${html(channel.payMin ?? "")}"></td>
-        <td><input data-channel-input="${html(channel.id)}" data-field="payMax" type="number" min="0" step="0.01" value="${html(channel.payMax ?? "")}"></td>
+        <td class="channel-limit">${channel.payMin == null ? "不限最低" : html(money(channel.payMin))}<span class="muted"> 至 </span>${channel.payMax == null ? "不限最高" : html(money(channel.payMax))}</td>
         <td>
-          <div class="channel-actions">
-            ${cashierProductPickerHtml(channel)}
-            <div class="channel-action-grid">
-              <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
-              <button class="btn secondary small" type="button" data-channel-save="${html(channel.id)}">保存</button>
-              <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">二维码</button>
-              <button class="btn danger small" type="button" data-channel-delete="${html(channel.id)}">删除</button>
-            </div>
+          <div class="channel-row-actions">
+            <button class="btn secondary small" type="button" data-channel-edit="${html(channel.id)}">编辑</button>
+            <button class="btn secondary small" type="button" data-channel-qr="${html(channel.id)}">收款码</button>
+            <details class="channel-more"><summary class="btn secondary small">更多</summary><div class="channel-more-menu">
+              <button class="btn secondary small" type="button" data-channel-toggle="${html(channel.id)}">${channel.enabled ? "停用通道" : "启用通道"}</button>
+              <button class="btn danger small" type="button" data-channel-delete="${html(channel.id)}">删除通道</button>
+            </div></details>
           </div>
         </td>
       </tr>
-    `).join("");
+    `).join("") || '<tr><td colspan="6" class="muted">暂无支付通道，请点击“新增通道”配置。</td></tr>';
   }
 
   async function setChannel(channelId, enabled) {
@@ -7097,7 +7218,7 @@
           <strong>${names.length ? `已选 ${names.length} 个` : "未选择产品"}</strong>
           <span>${html(summary)}</span>
         </div>
-        <button class="btn secondary small product-edit-button" type="button" data-channel-products="${html(channel.id)}">选择产品</button>
+        <span class="muted">收款码：${html(productLabels[selectedProductForChannel(channel.id)] || "未选择")}</span>
       </div>
     `;
   }
@@ -7126,6 +7247,8 @@
     payload.products = Array.isArray(productsOverride)
       ? productsOverride
       : enabledChannelProducts(state.channels.find((item) => item.id === channelId));
+    const channel = state.channels.find((item) => item.id === channelId);
+    if (channel?.provider === "ALIPAY_DIRECT" && payload.subMerchantId === undefined) payload.subMerchantId = channel.subMerchantId;
     return payload;
   }
 
@@ -7255,7 +7378,11 @@
     } else {
       cashierProductByChannel.delete(channelId);
     }
-    localStorage.setItem(cashierProductStorageKey, JSON.stringify([...cashierProductByChannel.entries()]));
+    try {
+      localStorage.setItem(cashierProductStorageKey, JSON.stringify([...cashierProductByChannel.entries()]));
+    } catch (error) {
+      // A blocked browser store must not turn a saved channel configuration into an error.
+    }
   }
 
   function selectedProductForChannel(channelId) {
@@ -7295,6 +7422,37 @@
     `;
   }
 
+  function syncChannelEditorOptions() {
+    const channel = state.channels.find(item => item.id === state.editingChannelId);
+    $("channelEditorOptions").classList.toggle("hidden", !channel);
+    if (!channel) {
+      $("channelEditorProducts").innerHTML = "";
+      return;
+    }
+    const selected = new Set(enabledChannelProducts(channel));
+    $("channelEditorProducts").innerHTML = channelProductIds(channel).map(product =>
+      `<label><input type="checkbox" data-channel-form-product value="${html(product)}" ${selected.has(product) ? "checked" : ""}>${html(productLabels[product] || product)}</label>`).join("");
+  }
+
+  function selectCashierQrProduct(channelId, product) {
+    const channel = state.channels.find(item => item.id === channelId);
+    if (!cashierEligibleProducts(channel).includes(product)) return false;
+    rememberCashierProduct(channelId, product);
+    showCashierQr(channelId);
+    renderChannels();
+    $("qrProductPicker").querySelector?.("select")?.focus();
+    return true;
+  }
+
+  function migrateCashierProductPreference(previousId, channel) {
+    if (!previousId || !channel?.id || channel.id === previousId) return;
+    const preferred = cashierProductByChannel.get(previousId);
+    if (!preferred) return;
+    cashierProductByChannel.delete(previousId);
+    const products = cashierEligibleProducts(channel);
+    rememberCashierProduct(channel.id, products.includes(preferred) ? preferred : (products[0] || ""));
+  }
+
   function cashierUrl(channelId, product = selectedProductForChannel(channelId)) {
     const params = new URLSearchParams({ channelId });
     if (product) params.set("product", product);
@@ -7306,23 +7464,27 @@
   }
 
   function showCashierQr(channelId) {
-    const product = selectedProductFromRow(channelId);
+    const product = selectedProductForChannel(channelId);
     if (!product) {
       alert("请先在支持产品中勾选一个收银台支付产品");
       return;
     }
     const channel = state.channels.find((item) => item.id === channelId);
+    $("qrProductPicker").innerHTML = cashierProductPickerHtml(channel);
+    const productName = product ? (productLabels[product] || product) : "";
+    $("qrTitle").textContent = `${channelId}${productName ? ` ${productName}` : ""} 收银台二维码`;
+    $("qrModal").classList.remove("hidden");
     if (isJsapiCashierProduct(product) && !channel?.appId) {
-      alert("JSAPI 收银台二维码需要先配置支付宝 appId");
+      $("qrImage").removeAttribute("src");
+      $("qrImage").classList.add("hidden");
+      $("qrLink").textContent = "JSAPI 收银台二维码需要先配置支付宝 appId，请选择其他已启用产品或返回编辑通道。";
       return;
     }
     rememberCashierProduct(channelId, product);
     const url = cashierUrl(channelId, product);
-    const productName = product ? (productLabels[product] || product) : "";
-    $("qrTitle").textContent = `${channelId}${productName ? ` ${productName}` : ""} 收银台二维码`;
     $("qrLink").textContent = url;
+    $("qrImage").classList.remove("hidden");
     $("qrImage").src = `/api/v1/qrcode?text=${encodeURIComponent(url)}&t=${Date.now()}`;
-    $("qrModal").classList.remove("hidden");
   }
 
   function hideCashierQr() {
@@ -7469,6 +7631,7 @@
     $("newDouyinPlatformCertificateFile").value = "";
     $("newDouyinEncryptKey").value = "";
     syncProviderFields();
+    syncChannelEditorOptions();
   }
 
   function openCreateChannelModal() {
@@ -7528,6 +7691,7 @@
       : "必须正好 32 字节";
     $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
     syncProviderFields();
+    syncChannelEditorOptions();
     showChannelModal();
     $("newChannelAppId").focus();
   }
@@ -7541,6 +7705,11 @@
       payMin: amountField("newChannelPayMin"),
       payMax: amountField("newChannelPayMax")
     });
+
+    if (editing) {
+      payload.products = Array.from(document.querySelectorAll("[data-channel-form-product]:checked")).map(input => input.value);
+      if (!payload.products.length) throw new Error("请至少选择一个支付产品");
+    }
 
     if (!editing) {
       payload.provider = provider;
@@ -7622,6 +7791,7 @@
 
   async function submitChannelForm() {
     const editing = Boolean(state.editingChannelId);
+    const editingChannelId = state.editingChannelId;
     const button = $("channelSubmitBtn");
     const buttonText = editing ? "保存修改" : "添加通道";
     setChannelFormResult(null);
@@ -7629,11 +7799,12 @@
     button.textContent = editing ? "正在保存..." : "正在添加...";
     try {
       const payload = await channelFormPayload();
-      const path = editing ? `/api/v1/channels/${encodeURIComponent(state.editingChannelId)}` : "/api/v1/channels";
+      const path = editing ? `/api/v1/channels/${encodeURIComponent(editingChannelId)}` : "/api/v1/channels";
       const data = await request(path, {
         method: editing ? "PATCH" : "POST",
         body: JSON.stringify(payload)
       });
+      if (editing) migrateCashierProductPreference(editingChannelId, data);
       setConsole(data);
       closeChannelModal();
       await loadChannels();
@@ -8171,6 +8342,12 @@
   });
 
   $("recentOrders").addEventListener("click", async (event) => {
+    const detailButton = event.target.closest("button[data-order-detail]");
+    if (detailButton) {
+      const payment = orderFromState(detailButton.dataset.orderDetail);
+      if (payment) openOrderDetail({ recordType: "PAYMENT", payment }, detailButton);
+      return;
+    }
     const operationButton = event.target.closest("button[data-operation-action]");
     if (operationButton) {
       event.preventDefault();
@@ -8233,6 +8410,39 @@
     state.orderPage = 1;
     closeOrderMenus("");
     renderOrders();
+  });
+
+  $("orderStatusFilter").addEventListener("change", () => {
+    state.orderPage = 1;
+    closeOrderMenus("");
+    renderOrders();
+  });
+
+  $("orderFilterForm").addEventListener("click", async (event) => {
+    const button = event.target.closest("[data-order-range]");
+    if (!button || $("queryOrdersBtn").disabled) return;
+    setOrderDateRange(button.dataset.orderRange);
+    await queryOrders();
+  });
+  ["orderBeginTime", "orderEndTime"].forEach(id => $(id).addEventListener("change", updateOrderDateSummary));
+
+  $("closeOrderDetailBtn").addEventListener("click", closeOrderDetail);
+  $("copyOrderDetailBtn").addEventListener("click", copyOrderDetailNumber);
+  $("orderDetailOverlay").addEventListener("click", event => {
+    if (event.target.id === "orderDetailOverlay") closeOrderDetail();
+  });
+  document.addEventListener("keydown", event => {
+    if ($("orderDetailOverlay").classList.contains("hidden")) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeOrderDetail();
+    }
+    if (event.key === "Tab") {
+      const first = $("closeOrderDetailBtn");
+      const last = $("copyOrderDetailBtn");
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
   });
 
   $("resetOrderFilterBtn").addEventListener("click", async () => {
@@ -8613,6 +8823,7 @@
     await submitChannelForm();
   });
 
+
   $("addChannelForm").addEventListener("invalid", (event) => {
     const label = event.target.closest("label");
     const fieldName = label
@@ -8666,6 +8877,11 @@
   });
 
   $("closeQrBtn").addEventListener("click", hideCashierQr);
+
+  $("qrProductPicker").addEventListener("change", event => {
+    const picker = event.target.closest("select[data-channel-cashier-product]");
+    if (picker) selectCashierQrProduct(picker.dataset.channelCashierProduct, picker.value);
+  });
 
   $("qrModal").addEventListener("click", (event) => {
     if (event.target.id === "qrModal") hideCashierQr();

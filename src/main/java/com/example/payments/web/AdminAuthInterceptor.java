@@ -65,7 +65,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     }
 
     private static boolean isPublic(String path, String method, HttpServletRequest request) {
-        if ("GET".equalsIgnoreCase(method) && Set.of("/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs",
+        if ("GET".equalsIgnoreCase(method) && Set.of("/ui-theme.css", "/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs",
                 "/docs/merchant-api.md").contains(path)) {
             return true;
         }

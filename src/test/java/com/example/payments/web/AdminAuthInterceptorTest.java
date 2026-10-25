@@ -20,13 +20,37 @@ class AdminAuthInterceptorTest {
 
     @Test
     void onlyExplicitPublicIntegrationFilesAreReadableWithoutLogin() throws Exception {
-        for (String path : new String[]{"/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs", "/docs/merchant-api.md"}) {
+        for (String path : new String[]{"/ui-theme.css", "/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs", "/docs/merchant-api.md"}) {
             assertThat(allowed("GET", path)).as(path).isTrue();
             assertThat(allowed("POST", path)).as(path).isFalse();
         }
         assertThat(allowed("GET", "/sdk/private.properties")).isFalse();
         assertThat(allowed("GET", "/docs/private.md")).isFalse();
         assertThat(allowed("GET", "/api/v1/merchants")).isFalse();
+    }
+
+    @Test
+    void anonymousThemeGetSupportsContextPathAndCacheVersion() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/gateway/ui-theme.css");
+        request.setContextPath("/gateway");
+        request.setQueryString("ui=20261025");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        assertThat(interceptor.preHandle(request, response, new Object())).isTrue();
+        assertThat(response.getRedirectedUrl()).isNull();
+        assertThat(response.getStatus()).isEqualTo(200);
+    }
+
+    @Test
+    void themeExceptionDoesNotExposeOtherFilesOrProtectedApis() throws Exception {
+        for (String path : new String[]{"/private.css", "/ui-theme.css/private", "/ui-theme.css.bak"}) {
+            assertThat(allowed("GET", path)).as(path).isFalse();
+        }
+        MockHttpServletResponse response = new MockHttpServletResponse();
+        assertThat(interceptor.preHandle(new MockHttpServletRequest("GET", "/api/v1/orders/recent"),
+                response, new Object())).isFalse();
+        assertThat(response.getStatus()).isEqualTo(401);
+        assertThat(response.getContentAsString()).contains("UNAUTHENTICATED");
     }
 
     private boolean allowed(String method, String path) throws Exception {
