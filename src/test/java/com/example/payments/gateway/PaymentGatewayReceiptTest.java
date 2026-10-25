@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
@@ -141,8 +142,8 @@ class PaymentGatewayReceiptTest {
         when(f.provider.preauthCapture(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", "CAPTURE",
                 "alipay.trade.pay", PaymentStatus.SUCCESS, Map.of("code", "10000", "total_amount", "3.00")));
         f.gateway.preauthCapture(capture());
-        assertThat(f.sink.receipts.keySet()).containsExactly("AUTH");
-        assertThat(f.sink.receipts.get("AUTH").amount()).isEqualByComparingTo("3.00");
+        assertThat(f.sink.receipts.keySet()).containsExactly("AUTH_PAY_1");
+        assertThat(f.sink.receipts.get("AUTH_PAY_1").amount()).isEqualByComparingTo("3.00");
         assertThat(f.orders.view("AUTH").amount()).isEqualByComparingTo("10.00");
     }
 
@@ -153,29 +154,79 @@ class PaymentGatewayReceiptTest {
         when(f.provider.preauthCapture(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", null,
                 "alipay.trade.pay", PaymentStatus.PENDING, Map.of("code", "10003")));
         f.gateway.preauthCapture(capture());
-        assertThat(f.orders.view("AUTH").status()).isEqualTo(DemoOrderStatus.COMPLETED);
+        assertThat(f.orders.view("AUTH").status()).isEqualTo(DemoOrderStatus.FROZEN);
         assertThat(f.sink.receipts).isEmpty();
-        assertThat(f.sink.captures.keySet()).containsExactly("AUTH_PAY_1");
+        assertThat(f.orders.view("AUTH_PAY_1").status()).isEqualTo(DemoOrderStatus.UNPAID);
         when(f.provider.query(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", "CAPTURE",
                 "alipay.trade.query", PaymentStatus.SUCCESS,
                 Map.of("code", "10000", "trade_status", "TRADE_SUCCESS", "total_amount", "3.00")));
         f.gateway.query(query("AUTH_PAY_1", "ali-main"));
         f.orders.recordAlipayNotify("AUTH_PAY_1", "CAPTURE", "ali-main", money("3.00"), "TRADE_SUCCESS", true);
         assertThat(f.sink.receipts).hasSize(1);
-        assertThat(f.sink.receipts.get("AUTH").tradeNo()).isEqualTo("CAPTURE");
-        assertThat(f.sink.receipts.get("AUTH").amount()).isEqualByComparingTo("3.00");
+        assertThat(f.sink.receipts.get("AUTH_PAY_1").tradeNo()).isEqualTo("CAPTURE");
+        assertThat(f.sink.receipts.get("AUTH_PAY_1").amount()).isEqualByComparingTo("3.00");
     }
 
     @Test
     void successfulChildQueryCannotOpenUnmarkedHistoricalCapture() {
         Fixture f = new Fixture("ALIPAY");
         f.create("AUTH", true);
-        f.orders.convertPreauthToPay("AUTH", "CAPTURE");
+
         when(f.provider.query(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", "CAPTURE",
                 "alipay.trade.query", PaymentStatus.SUCCESS,
                 Map.of("code", "10000", "trade_status", "TRADE_SUCCESS", "total_amount", "3.00")));
         f.gateway.query(query("AUTH_PAY_1", "ali-main"));
         assertThat(f.sink.receipts).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"20000", "40004"})
+    void ambiguousCaptureFailureNeverReleasesReservationOrResends(String code) {
+        Fixture f = new Fixture("ALIPAY");
+        f.create("AUTH", true);
+        when(f.provider.preauthCapture(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", null,
+                "alipay.trade.pay", PaymentStatus.FAILED, Map.of("code", code,
+                        "sub_code", "20000".equals(code) ? "ACQ.SYSTEM_ERROR" : "ACQ.TRADE_HAS_SUCCESS")));
+        assertThat(f.gateway.preauthCapture(capture()).status()).isEqualTo(PaymentStatus.FAILED);
+        assertThat(f.gateway.preauthCapture(capture()).status()).isEqualTo(PaymentStatus.PENDING);
+        assertThat(f.orders.view("AUTH_PAY_1").status()).isEqualTo(DemoOrderStatus.UNPAID);
+        assertThatThrownBy(() -> f.gateway.preauthCapture(new PreauthCaptureRequest("AUTH", "ANOTHER", "AUTH-NO",
+                "Capture", money("1"), null, null, "COMPLETE", null, List.of("ali-main"), Map.of())))
+                .isInstanceOf(IllegalStateException.class);
+        verify(f.provider, times(1)).preauthCapture(eq(f.channel), any());
+        when(f.provider.query(eq(f.channel), any())).thenReturn(alipay("ali-main", "AUTH_PAY_1", "TRADE",
+                "alipay.trade.query", PaymentStatus.SUCCESS,
+                Map.of("code", "10000", "trade_status", "TRADE_SUCCESS", "total_amount", "3")));
+        f.gateway.query(query("AUTH_PAY_1", "ali-main"));
+        assertThat(f.orders.view("AUTH_PAY_1").status()).isEqualTo(DemoOrderStatus.COMPLETED);
+    }
+
+    @Test
+    void unsentCaptureOnDisabledChannelDoesNotRemainPending() {
+        Fixture f = new Fixture("ALIPAY");
+        f.create("AUTH", true);
+        f.channel.setDailyEnabled(false);
+        assertThat(f.gateway.preauthCapture(capture()).code()).isEqualTo("NO_MATCHING_CHANNEL");
+        assertThat(f.orders.view("AUTH_PAY_1").status()).isEqualTo(DemoOrderStatus.CLOSED);
+        assertThat(f.orders.view("AUTH").status()).isEqualTo(DemoOrderStatus.FROZEN);
+        verify(f.provider, never()).preauthCapture(any(), any());
+        f.channel.setDailyEnabled(true);
+        assertThat(f.orders.reservePreauthCapture(new PreauthCaptureRequest("AUTH", "RETRY", "AUTH-NO", "Capture",
+                money("3"), null, null, "COMPLETE", null, List.of("ali-main"), Map.of()), "ali-main")).isNull();
+    }
+
+    @Test
+    void callbackBeforeSynchronousPendingResponseKeepsActualCollection() {
+        Fixture f = new Fixture("ALIPAY");
+        f.create("AUTH", true);
+        when(f.provider.preauthCapture(eq(f.channel), any())).thenAnswer(invocation -> {
+            f.orders.recordAlipayNotify("AUTH_PAY_1", "CAPTURE", "ali-main", money("3"), "TRADE_SUCCESS", true);
+            return alipay("ali-main", "AUTH_PAY_1", null, "alipay.trade.pay", PaymentStatus.PENDING, Map.of("code", "10003"));
+        });
+        f.gateway.preauthCapture(capture());
+        assertThat(f.orders.view("AUTH_PAY_1").status()).isEqualTo(DemoOrderStatus.COMPLETED);
+        assertThat(f.orders.view("AUTH").status()).isEqualTo(DemoOrderStatus.UNFROZEN);
+        assertThat(f.sink.receipts).hasSize(1);
     }
 
     private static class Fixture {

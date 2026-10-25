@@ -95,6 +95,7 @@ class DouyinPaymentReconciliationServiceTest {
                 "0.00",
                 new BigDecimal("3.00"),
                 "3.00",
+                BigDecimal.ZERO, "0.00",
                 DemoOrderStatus.UNPAID,
                 "unpaid",
                 "2026-07-22 12:00:00",

@@ -8,3 +8,5 @@
 - [部署与升级](merchant-api-deployment.md)
 
 协议根路径为 `/api/v1/merchant-api`，提供 check、pay、query、cancel、refund。MD5/RSA2 是签名方式，使用同一组接口。新客户端发送 `X-Merchant-Response-Signature: canonical-v1` 以选择可跨语言验签的响应表示；旧客户端无该头时保留原响应协议。
+
+预授权实扣使用独立收款子单。子单沿用父单的商户通知地址，通知的 `outTradeNo`、`totalAmount` 分别为实扣子单号和实际收款金额，可选 `parentOutTradeNo` 指向原预授权订单并参与签名。查询与退款使用子单号，父单保留冻结资金信息。详见完整接入规范的“接收平台通知”。

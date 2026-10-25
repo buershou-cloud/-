@@ -1044,13 +1044,13 @@ node --env-file=.env merchant-example.mjs query ./query.json</pre>
   function renderOrders(orders) {
     $("portalOrders").innerHTML = orders.map((order) => `
       <tr>
-        <td>${order.outTradeNo}</td>
-        <td>${order.tradeNo || "-"}</td>
-        <td>${order.channelId || "-"}</td>
-        <td>${order.productName}</td>
-        <td>${order.amountText}</td>
-        <td><span class="${statusClass(order.status)}">${order.statusText}</span></td>
-        <td>${order.createdAt}</td>
+        <td>${escapeHtml(order.outTradeNo)}</td>
+        <td>${escapeHtml(order.tradeNo || "-")}</td>
+        <td>${escapeHtml(order.channelId || "-")}</td>
+        <td>${escapeHtml(order.productName)}</td>
+        <td>${escapeHtml(order.amountText)}</td>
+        <td><span class="${statusClass(order.status)}">${escapeHtml(order.statusText)}</span></td>
+        <td>${escapeHtml(order.createdAt)}</td>
       </tr>
     `).join("");
   }

@@ -24,6 +24,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,10 +62,49 @@ class MerchantNotifyServiceTest {
         assertThat(persisted.path("delivered").asBoolean()).isTrue();
         assertThat(persisted.path("payload").path("totalAmount").asText()).isEqualTo("1.00");
         assertThat(persisted.path("payload").path("sign").asText()).isEqualTo("signature");
+        assertThat(persisted.path("payload").has("parentOutTradeNo")).isFalse();
         assertThat(persisted.toString()).doesNotContain("md5Key", "privateKey");
         ArgumentCaptor<HttpRequest> request = ArgumentCaptor.forClass(HttpRequest.class);
         verify(client).send(request.capture(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
         assertThat(request.getValue().uri().toString()).isEqualTo("https://merchant.example/notify");
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void captureNotificationSignsActualChildAmountAndKeepsParentLinkAcrossDeliveryRestart() throws Exception {
+        prepare();
+        DemoOrderView captured = order();
+        when(captured.outTradeNo()).thenReturn("CAPTURE-20");
+        when(captured.amount()).thenReturn(new BigDecimal("20.00"));
+        when(orders.merchantNotifyTarget("CAPTURE-20"))
+                .thenReturn(Optional.of(new DemoOrderService.MerchantNotifyTarget("M1", "https://merchant.example/notify")));
+        when(orders.captureParentOutTradeNo("CAPTURE-20")).thenReturn("AUTH-100");
+        HttpResponse<String> unavailable = response(503, "retry");
+        HttpResponse<String> acknowledged = response(200, "success");
+        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+                .thenReturn(unavailable, acknowledged);
+
+        service(initialTime).notifyPayment(captured, "TRADE_SUCCESS");
+
+        JsonNode payload = delivery().path("payload");
+        assertThat(payload.path("outTradeNo").asText()).isEqualTo("CAPTURE-20");
+        assertThat(payload.path("parentOutTradeNo").asText()).isEqualTo("AUTH-100");
+        assertThat(payload.path("totalAmount").asText()).isEqualTo("20.00");
+        assertThat(payload.path("status").asText()).isEqualTo("COMPLETED");
+
+        when(orders.merchantNotifyTarget("CAPTURE-20")).thenReturn(Optional.empty());
+        when(orders.captureParentOutTradeNo("CAPTURE-20")).thenReturn(null);
+        service(Clock.offset(initialTime, Duration.ofSeconds(6))).retryPending();
+
+        assertThat(delivery().path("delivered").asBoolean()).isTrue();
+        assertThat(delivery().path("payload").path("parentOutTradeNo").asText()).isEqualTo("AUTH-100");
+        ArgumentCaptor<Map<String, Object>> signedPayloads = ArgumentCaptor.forClass((Class) Map.class);
+        verify(signatures, times(2)).signForMerchant(any(), eq("MD5"), signedPayloads.capture());
+        assertThat(signedPayloads.getAllValues()).allSatisfy(signed -> assertThat(signed)
+                .containsEntry("outTradeNo", "CAPTURE-20")
+                .containsEntry("parentOutTradeNo", "AUTH-100")
+                .containsEntry("totalAmount", "20.00"));
+        verify(orders, times(1)).captureParentOutTradeNo("CAPTURE-20");
     }
 
     @Test

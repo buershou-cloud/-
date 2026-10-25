@@ -38,7 +38,7 @@ function setup(options = {}) {
     payoutBusinessText: value => String(value || '-'),
     productCell: order => order.profitShared ? '已分账' : '收款产品', refundCell: () => '未退款', statusCell: () => '已完成',
     orderActionCell: order => `<button data-order-action="refund" data-order-no="${order.outTradeNo}">退款</button>`,
-    renderProfitShareOrders() {}, refreshSummaryViews() {}, renderPayouts() {},
+    renderProfitShareOrders() {}, refreshSummaryViews() {}, loadFinancialSummary: async () => {}, renderPayouts() {},
     setDashboardResult: result => { elements.dashboardResult.textContent = result.message; },
     closeOrderMenus() {},
     request: async (url, config) => {

@@ -197,6 +197,10 @@ public class MerchantNotifyService {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("merchantId", order.merchantId());
         payload.put("outTradeNo", order.outTradeNo());
+        String parentOutTradeNo = orderService.captureParentOutTradeNo(order.outTradeNo());
+        if (parentOutTradeNo != null && !parentOutTradeNo.isBlank()) {
+            payload.put("parentOutTradeNo", parentOutTradeNo);
+        }
         payload.put("tradeNo", order.tradeNo());
         payload.put("channelId", order.channelId());
         payload.put("productName", order.productName());

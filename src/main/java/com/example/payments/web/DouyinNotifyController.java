@@ -163,8 +163,16 @@ public class DouyinNotifyController {
 
         String outTradeNo = required(payload, "out_trade_no");
         String tradeState = required(payload, "trade_state");
+        if (!hasText(channel.getDouyin().getAppId())
+                || !channel.getDouyin().getAppId().equals(text(payload, "appid"))
+                || !hasText(channel.getDouyin().getMchId())
+                || !channel.getDouyin().getMchId().equals(text(payload, "mchid"))) {
+            return ResponseEntity.badRequest().build();
+        }
         BigDecimal confirmedAmount = receiptAmount(payload);
-        DemoOrderView order = orderService.recordPaymentResult(
+        DemoOrderView order;
+        try {
+            order = orderService.recordPaymentResult(
                 outTradeNo,
                 text(payload, "transaction_id"),
                 channelId,
@@ -175,7 +183,10 @@ public class DouyinNotifyController {
                         && hasText(channel.getDouyin().getMchId())
                         && channel.getDouyin().getMchId().equals(text(payload, "mchid")),
                 confirmedAmount
-        );
+            );
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().build();
+        }
         merchantNotifyService.notifyPayment(order, tradeState);
         log.info("Processed Douyin payment notification channel={} outTradeNo={} tradeState={} localStatus={}",
                 channelId, outTradeNo, tradeState, order.status());
@@ -189,7 +200,7 @@ public class DouyinNotifyController {
             return new BigDecimal(String.valueOf(amount.get("total")))
                     .setScale(0, RoundingMode.UNNECESSARY).movePointLeft(2);
         } catch (NumberFormatException | ArithmeticException ex) {
-            // Preserve existing callback processing; malformed receipt evidence simply cannot notify.
+            // A malformed amount fails the order identity check before any state change or notification.
             return BigDecimal.ZERO;
         }
     }

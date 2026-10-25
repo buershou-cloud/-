@@ -1,6 +1,7 @@
 package com.example.payments.order;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 public class DemoOrder {
 
@@ -14,6 +15,8 @@ public class DemoOrder {
     private BigDecimal amount;
     private BigDecimal refundedAmount = BigDecimal.ZERO;
     private BigDecimal preauthUnfrozenAmount = BigDecimal.ZERO;
+    private BigDecimal preauthCapturedAmount = BigDecimal.ZERO;
+    private LocalDateTime paidAt;
     private DemoOrderStatus status;
     private String createdAt;
     private boolean preAuthorization;
@@ -105,6 +108,13 @@ public class DemoOrder {
     public BigDecimal getPreauthUnfrozenAmount() {
         return preauthUnfrozenAmount == null ? BigDecimal.ZERO : preauthUnfrozenAmount;
     }
+
+    public BigDecimal getPreauthCapturedAmount() { return preauthCapturedAmount; }
+    public void setPreauthCapturedAmount(BigDecimal value) {
+        preauthCapturedAmount = value == null ? BigDecimal.ZERO : value;
+    }
+    public LocalDateTime getPaidAt() { return paidAt; }
+    public void setPaidAt(LocalDateTime value) { paidAt = value; }
 
     public void setPreauthUnfrozenAmount(BigDecimal preauthUnfrozenAmount) {
         this.preauthUnfrozenAmount = preauthUnfrozenAmount == null ? BigDecimal.ZERO : preauthUnfrozenAmount;

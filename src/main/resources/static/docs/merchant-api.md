@@ -176,6 +176,8 @@ SDK会先验平台响应签名，再返回对象。例如：
 
 `merchantId, outTradeNo, tradeNo, channelId, productName, totalAmount, tradeStatus, status, notifyTime, signType, sign`
 
+预授权实扣子单还包含可选的 `parentOutTradeNo`，表示原预授权订单号，并参与通知签名。实扣子单沿用父单配置的商户通知地址；`outTradeNo` 是本次实扣子单号，`totalAmount` 是本次实际收款金额。例如冻结 100 元后实扣 20 元，收款通知的金额为 `20.00`，不会把父单的 100 元当作收款金额。普通支付通知不包含此字段。
+
 这是平台签名的 camelCase 表单，不是支付宝原始通知。`status=COMPLETED` 表示普通支付完成；其他状态不得无条件发货。`tradeStatus` 是上游原始状态，仅作补充。`totalAmount` 为两位小数字符串。通知没有请求用的 nonce/timestamp，使用 `notifyTime`；可能因重试延迟，不能直接套用请求15分钟窗口拒绝重试。
 
 签名方式采用当前商户默认模式：包含 MD5 时默认 MD5，否则 RSA2。RSA2 通知用平台公钥验证。若要求通知必须 RSA2，将商户签名模式设为仅 RSA2，并在验签处限制 `expectedSignType: 'RSA2'`。
@@ -198,6 +200,8 @@ const notice = verifyNotification(formBody, {
 ```
 
 重复通知是正常情况。网站应以自己的订单状态做幂等更新，不要每收到一次通知就增加一次余额或发一次货。通知未到时，可从网站后端主动查原支付订单作为补偿。
+
+对于带 `parentOutTradeNo` 的实扣通知，网站应在验签后核对父授权归属和本次实扣金额，以子单 `outTradeNo` 记录每笔实扣并去重。后续查询、退款使用该子单号；父单继续表示预授权冻结及剩余资金状态，不能用父单原冻结金额代替实扣金额。
 
 ## 7. 超时、重复请求与常见错误
 

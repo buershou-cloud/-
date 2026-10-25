@@ -152,6 +152,42 @@ The default onboarding operation follows the Alipay official direct-pay standard
 
 The API still accepts `outBizNo` for the local request shape and maps it into `biz_content.external_id` for the direct-pay standard onboarding method.
 
+## Payment state and reporting
+
+Payment notifications must match an existing order's application, channel, trade
+identity and amount before changing its state or notifying the merchant. Invalid
+or unknown notifications are rejected; they do not create local payment orders.
+
+Preauthorization captures now have an explicit persisted relationship to the
+original authorization and a separate collection order for the actual captured
+amount. A pending or uncertain capture leaves the original authorization frozen
+and blocks another capture or unfreeze until the original result is reconciled.
+Repeating an already reserved capture number returns its recorded result instead
+of sending another payment. An order number ending in `_PAY_1` has no special
+meaning by itself. The admin conversion response contains `gateway`, the
+authorization `order`, and its `captureOrder` (when reserved); refunds use the
+collection order and its actual amount. Apply the preauthorization-capture
+migration described in [database setup](database/mysql/README.md) when upgrading.
+
+The admin-only `GET /api/v1/orders/summary?today=2026-10-25&month=2026-10`
+returns unfiltered dashboard and report totals. Receipts are grouped by `paid_at`
+and successful refund transactions by `completed_at`, including cross-day and
+partial refunds. Dates use the database's business-local timestamp convention;
+the browser supplies the requested day and month. Historical rows without a
+completion timestamp appear under “时间未记录” rather than being assigned to the
+order creation date. Fee and settlement amounts are estimates; settlement and
+reconciliation remain unconfirmed until there is evidence from the payment
+platform. Filtering the order list does not change these global totals.
+
+CI uses JDK 21 and Node.js 22. Both Java and JavaScript tests run for pushes, pull
+requests and published releases; package publication only runs after release
+checks succeed. Run the same checks locally with:
+
+```bash
+mvn verify
+node --test src/test/js/*.test.cjs
+```
+
 ## Production Notes
 
 Before production, still harden these areas:
