@@ -2337,7 +2337,7 @@
       }
     }
   </style>
-  <link rel="stylesheet" href="ui-theme.css?ui=20261025">
+  <link rel="stylesheet" href="ui-theme.css?v=20261026">
 </head>
 <body class="ui-admin">
 <svg aria-hidden="true" style="display:none">
@@ -7431,7 +7431,7 @@
     }
     const selected = new Set(enabledChannelProducts(channel));
     $("channelEditorProducts").innerHTML = channelProductIds(channel).map(product =>
-      `<label><input type="checkbox" data-channel-form-product value="${html(product)}" ${selected.has(product) ? "checked" : ""}>${html(productLabels[product] || product)}</label>`).join("");
+      `<label><input type="checkbox" data-channel-form-product value="${html(product)}" ${selected.has(product) ? "checked" : ""}><span>${html(productLabels[product] || product)}</span></label>`).join("");
   }
 
   function selectCashierQrProduct(channelId, product) {

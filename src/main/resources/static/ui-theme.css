@@ -27,13 +27,13 @@
   background: var(--page);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
 
-:is(.ui-admin, .ui-merchant, .ui-cashier, .ui-login) :is(h1, h2, h3) {
-  font-weight: 650;
+:is(.ui-admin, .ui-merchant, .ui-cashier, .ui-login) :is(h1, h2, h3, h4) {
+  font-weight: 700;
   line-height: 1.4;
 }
 
@@ -49,7 +49,7 @@
 :is(.ui-admin, .ui-merchant, .ui-cashier, .ui-login) :is(label, .field-label, .api-label) {
   color: #475569;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :is(body.ui-admin, body.ui-merchant, body.ui-cashier, body.ui-login) :where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]):not([type="file"]), select, textarea) {
@@ -61,7 +61,7 @@
   background: #fff;
   color: var(--text);
   font-size: 14px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.5;
 }
 
@@ -86,7 +86,7 @@
   background: var(--primary);
   color: #fff;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.4;
   box-shadow: none;
   transition: background .15s ease, border-color .15s ease, color .15s ease;
@@ -158,7 +158,7 @@
 
 :is(.ui-admin, .ui-merchant) .panel-title {
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 :is(.ui-admin, .ui-merchant) .panel-body {
@@ -178,7 +178,7 @@
 
 :is(.ui-admin, .ui-merchant) table {
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
@@ -196,7 +196,7 @@
   padding: 10px 14px;
   color: #334155;
   font-size: 13px;
-  font-weight: 400;
+  font-weight: 500;
 }
 
 :is(.ui-admin, .ui-merchant) tbody tr:hover {
@@ -207,7 +207,7 @@
   min-height: 24px;
   padding: 2px 8px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.5;
 }
 
@@ -238,7 +238,7 @@
 
 :is(.ui-admin, .ui-merchant) :is(.amount-cell, .money-cell, .amount-neutral, .amount-green, .amount-red) {
   text-align: right;
-  font-weight: 500;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
@@ -247,7 +247,7 @@
 :is(.ui-admin, .ui-merchant) :is(.muted, .field-hint, .pagination, .portal-message) { font-weight: 400; }
 
 :is(.ui-admin, .ui-merchant) :is(.page-btn, .pagination-size select, .pagination-jump input, .segmented-btn, .copy-btn) {
-  font-weight: 500;
+  font-weight: 600;
 }
 
 :is(.ui-admin, .ui-merchant) :is(.operation-result, .order-filter-note, .order-empty) {
@@ -260,23 +260,23 @@
 .ui-admin .app { grid-template-columns: 236px minmax(0, 1fr); }
 .ui-admin .sidebar { position: sticky; top: 0; height: 100dvh; overflow-y: auto; background: #111827; }
 .ui-admin .shell { min-width: 0; }
-.ui-admin .brand { height: 64px; font-size: 17px; font-weight: 650; }
+.ui-admin .brand { height: 64px; font-size: 17px; font-weight: 700; }
 .ui-admin .brand-mark svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .ui-admin .nav { display: block; padding: 12px 12px 24px; }
-.ui-admin .nav-title { display: block; padding: 18px 10px 6px; color: #94a3b8; font-size: 11px; font-weight: 500; }
-.ui-admin :is(.nav-btn, .nav-group-toggle) { min-height: 42px; font-weight: 500; }
+.ui-admin .nav-title { display: block; padding: 18px 10px 6px; color: #94a3b8; font-size: 11px; font-weight: 600; }
+.ui-admin :is(.nav-btn, .nav-group-toggle) { min-height: 42px; font-weight: 600; }
 .ui-admin .nav-btn.active { font-weight: 600; }
 .ui-admin .topbar { min-height: 64px; padding: 0 24px; }
-.ui-admin .top-title { font-size: 18px; font-weight: 650; }
-.ui-admin :is(.top-action-btn, .admin-dot) { font-weight: 500; }
+.ui-admin .top-title { font-size: 18px; font-weight: 700; }
+.ui-admin :is(.top-action-btn, .admin-dot) { font-weight: 600; }
 .ui-admin .content { padding: 24px; }
 .ui-admin .overview-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
 .ui-admin .metric-card { min-height: 104px; padding: 20px; border-radius: 8px; box-shadow: var(--shadow); }
-.ui-admin .metric-title { color: #64748b; font-size: 12px; font-weight: 500; }
-.ui-admin .metric-value { margin-top: 4px; font-size: 25px; font-weight: 650; letter-spacing: -.4px; }
+.ui-admin .metric-title { color: #64748b; font-size: 12px; font-weight: 600; }
+.ui-admin .metric-value { margin-top: 4px; font-size: 25px; font-weight: 700; letter-spacing: -.4px; }
 .ui-admin .metric-sub { color: #64748b; font-weight: 400; }
 .ui-admin .small-stat strong { font-weight: 600; font-variant-numeric: tabular-nums; }
-.ui-admin .small-stat span { font-weight: 500; }
+.ui-admin .small-stat span { font-weight: 600; }
 .ui-admin .form-grid { gap: 16px; }
 .ui-admin .work-grid { gap: 20px; }
 .ui-admin .channel-table { min-width: 800px; }
@@ -291,7 +291,7 @@
 .ui-admin .channel-more-menu .btn + .btn { margin-top: 4px; }
 .ui-admin .channel-table tbody tr:nth-last-child(-n+2):not(:first-child) .channel-more-menu { top: auto; bottom: calc(100% + 6px); }
 .ui-admin .channel-table tbody tr:only-child .channel-more-menu { position: static; margin-top: 6px; box-shadow: none; }
-.ui-admin .order-number-link { padding: 2px 0; border: 0; background: transparent; color: var(--primary); font: inherit; font-weight: 500; cursor: pointer; text-align: left; }
+.ui-admin .order-number-link { padding: 2px 0; border: 0; background: transparent; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
 .ui-admin .order-number-link:hover { color: var(--primary-hover); text-decoration: underline; text-underline-offset: 3px; }
 .ui-admin .order-filter-primary { align-items: end; }
 .ui-admin .filter-submit-actions { align-items: center; align-self: end; flex-wrap: nowrap; margin: 0; }
@@ -300,7 +300,7 @@
 .ui-admin .order-quick-filters .btn { min-height: 30px; padding: 4px 10px; font-size: 12px; }
 .ui-admin .order-filter-note { color: #64748b; font-size: 12px; }
 .ui-admin .order-filter-more { margin: 0 0 6px; border: 0; }
-.ui-admin :is(.order-filter-more, .order-filter-explanation) > summary { width: fit-content; padding: 6px 0; color: #475569; cursor: pointer; font-size: 12px; font-weight: 500; }
+.ui-admin :is(.order-filter-more, .order-filter-explanation) > summary { width: fit-content; padding: 6px 0; color: #475569; cursor: pointer; font-size: 12px; font-weight: 600; }
 .ui-admin .order-filter-more[open] { padding-bottom: 8px; }
 .ui-admin .order-filter-grid { margin-top: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-subtle); }
 .ui-admin .order-filter-explanation { margin: 0 0 12px; font-size: 12px; }
@@ -310,7 +310,7 @@
 .ui-admin .order-detail-overlay { position: fixed; inset: 0; z-index: 120; display: flex; justify-content: flex-end; background: rgba(15, 23, 42, .4); }
 .ui-admin .order-detail-drawer { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: min(560px, 100%); height: 100%; min-height: 0; background: #fff; box-shadow: -12px 0 40px rgba(15, 23, 42, .15); }
 .ui-admin .order-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
-.ui-admin .order-detail-head h2 { margin: 2px 0 0; font-size: 18px; font-weight: 650; }
+.ui-admin .order-detail-head h2 { margin: 2px 0 0; font-size: 18px; font-weight: 700; }
 .ui-admin .order-detail-head .muted { font-size: 12px; }
 .ui-admin .order-detail-body { overflow-y: auto; overscroll-behavior: contain; padding: 24px; }
 .ui-admin .detail-section { padding: 0 0 24px; border-bottom: 1px solid var(--line); }
@@ -320,7 +320,7 @@
 .ui-admin .detail-overview { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .ui-admin .detail-overview > .muted:first-child { flex-basis: 100%; }
 .ui-admin .detail-overview p { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; }
-.ui-admin .detail-amount { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
+.ui-admin .detail-amount { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.5px; }
 .ui-admin .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; margin: 0; }
 .ui-admin .detail-grid dt { margin-bottom: 4px; color: #64748b; font-size: 12px; }
 .ui-admin .detail-value { margin: 0; overflow-wrap: anywhere; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -329,11 +329,20 @@
 .ui-admin #orderDetailFeedback { color: var(--green); font-size: 13px; }
 .ui-admin .channel-editor-options { padding: 16px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-subtle); }
 .ui-admin .product-checks { gap: 12px; }
-.ui-admin .channel-modal-head h3 { font-size: 18px; font-weight: 650; }
+.ui-admin .channel-editor-options h4 { margin: 0 0 14px; font-size: 14px; font-weight: 700; }
+.ui-admin .channel-editor-options > .muted { margin: 12px 0 0; font-size: 12px; line-height: 1.7; }
+.ui-admin .channel-form-section-title { margin: 8px 0 0; font-size: 14px; font-weight: 700; }
+.ui-admin #channelEditorProducts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ui-admin #channelEditorProducts > label { display: flex; align-items: center; gap: 10px; min-width: 0; min-height: 46px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: #334155; font-size: 13px; font-weight: 600; line-height: 1.5; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.ui-admin #channelEditorProducts > label:hover { border-color: #93c5fd; background: #f8faff; }
+.ui-admin #channelEditorProducts > label:has(input:checked) { border-color: #93c5fd; background: var(--primary-soft); color: var(--primary-hover); }
+.ui-admin #channelEditorProducts input[type="checkbox"] { flex: 0 0 18px; width: 18px; height: 18px; min-height: 18px; margin: 0; padding: 0; }
+.ui-admin #channelEditorProducts > label > span { min-width: 0; overflow-wrap: anywhere; }
+.ui-admin .channel-modal-head h3 { font-size: 18px; font-weight: 700; }
 .ui-admin .channel-modal-body { padding: 24px; }
 .ui-admin .channel-dialog { box-shadow: 0 16px 64px rgba(15, 23, 42, .18); }
 .ui-admin .profit-confirm { border-radius: 10px; }
-.ui-admin .profit-confirm-value { font-weight: 650; }
+.ui-admin .profit-confirm-value { font-weight: 700; }
 
 /* Merchant workspace */
 .ui-merchant .shell { max-width: 1600px; padding: 32px; }
@@ -343,13 +352,13 @@
 .ui-merchant .topbar .muted { margin-top: 5px; }
 .ui-merchant .portal-card { grid-template-columns: 200px minmax(0, 1fr); }
 .ui-merchant .portal-tabs { gap: 4px; min-height: 560px; padding: 16px 12px; background: #fff; }
-.ui-merchant .portal-nav-label { padding: 16px 12px 6px; color: #64748b; font-size: 11px; font-weight: 500; }
-.ui-merchant .portal-tab { min-height: 42px; padding: 8px 12px; font-weight: 500; }
+.ui-merchant .portal-nav-label { padding: 16px 12px 6px; color: #64748b; font-size: 11px; font-weight: 600; }
+.ui-merchant .portal-tab { min-height: 42px; padding: 8px 12px; font-weight: 600; }
 .ui-merchant .portal-tab.active { background: var(--primary-soft); color: var(--primary-hover); box-shadow: none; font-weight: 600; }
 .ui-merchant .portal-tab:hover:not(.active) { background: var(--surface-subtle); }
 .ui-merchant :is(.portal-section, .order-section, .doc-section, .integration-section) { padding: 24px; }
 .ui-merchant .portal-section { border-bottom-style: solid; }
-.ui-merchant .section-title { margin: 0 0 20px; font-size: 17px; font-weight: 650; }
+.ui-merchant .section-title { margin: 0 0 20px; font-size: 17px; font-weight: 700; }
 .ui-merchant .api-row { grid-template-columns: 144px minmax(0, 1fr); gap: 16px; max-width: 960px; margin-bottom: 20px; padding-right: 0; }
 .ui-merchant .api-label { padding-top: 9px; text-align: left; }
 .ui-merchant :is(.api-actions, .confirm-row) { width: auto; max-width: 800px; margin-left: 160px; margin-right: 0; }
@@ -365,18 +374,18 @@
 .ui-merchant .credential-field .credential-toggle { border-left: 0; border-right: 0; border-radius: 0; }
 .ui-merchant .stats { gap: 16px; }
 .ui-merchant .stat { padding: 20px; background: #fff; }
-.ui-merchant .stat span { font-weight: 500; }
-.ui-merchant .stat strong { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.ui-merchant .stat span { font-weight: 600; }
+.ui-merchant .stat strong { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .ui-merchant .order-toolbar { gap: 16px; margin-bottom: 20px; }
 .ui-merchant .order-filters { gap: 12px; }
 .ui-merchant :is(.order-summary, .order-pagination) { color: #64748b; font-size: 13px; font-weight: 400; }
 .ui-merchant .order-empty { padding: 40px 20px; text-align: center; color: #64748b; }
-.ui-merchant .order-number { color: var(--text); font-weight: 500; }
+.ui-merchant .order-number { color: var(--text); font-weight: 600; }
 .ui-merchant .copy-order-btn { margin-left: 6px; padding: 3px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--primary); cursor: pointer; font: inherit; font-size: 12px; }
 .ui-merchant .copy-order-btn:hover { background: var(--primary-soft); }
 .ui-merchant .merchant-qr-image { max-width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; }
 .ui-merchant :is(.doc-section p, .integration-section p, .integration-head p) { font-weight: 400; }
-.ui-merchant :is(.doc-card span, .doc-section code, .integration-badge, .integration-section summary) { font-weight: 500; }
+.ui-merchant :is(.doc-card span, .doc-section code, .integration-badge, .integration-section summary) { font-weight: 600; }
 .ui-merchant :is(.doc-card strong, .integration-step strong) { font-weight: 600; }
 .ui-merchant .integration-head { padding: 28px 24px; background: #f8faff; }
 .ui-merchant .integration-head h2 { font-size: 22px; }
@@ -387,23 +396,23 @@
 
 /* Customer checkout */
 .ui-cashier .shell { width: min(520px, calc(100% - 32px)); padding: 32px 0; }
-.ui-cashier .brand { gap: 12px; margin-bottom: 24px; font-size: 20px; font-weight: 650; }
+.ui-cashier .brand { gap: 12px; margin-bottom: 24px; font-size: 20px; font-weight: 700; }
 .ui-cashier .logo { width: 40px; height: 40px; border-radius: 8px; font-weight: 600; }
 .ui-cashier :is(.card, .pay-panel, .continue-panel, .payment-status-card) { border-radius: 10px; box-shadow: var(--shadow); }
 .ui-cashier .head { padding: 24px; }
 .ui-cashier .head h1 { margin-bottom: 6px; font-size: 21px; }
 .ui-cashier .head p { color: #64748b; font-size: 13px; }
 .ui-cashier form { gap: 20px; padding: 24px; }
-.ui-cashier input.amount { height: 64px; font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.ui-cashier input.amount { height: 64px; font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ui-cashier .btn { height: 48px; font-size: 16px; font-weight: 600; }
 .ui-cashier :is(.message, .payment-code-status, .continue-panel p, .payment-code-upload, .continue-button) { font-weight: 400; }
-.ui-cashier .continue-button { min-height: 44px; font-size: 14px; font-weight: 500; }
+.ui-cashier .continue-button { min-height: 44px; font-size: 14px; font-weight: 600; }
 .ui-cashier .payment-code-upload { background: var(--primary-soft); color: var(--primary-hover); border-color: #bfdbfe; }
 .ui-cashier .message { padding: 14px 16px; }
 .ui-cashier .message.ok { background: var(--green-soft); border-color: #bbf7d0; color: var(--green); }
 .ui-cashier .message.bad { background: var(--red-soft); border-color: #fecaca; color: var(--red); }
 .ui-cashier .pay-qr { border-radius: 8px; }
-.ui-cashier .payment-status-title { font-size: 20px; font-weight: 650; }
+.ui-cashier .payment-status-title { font-size: 20px; font-weight: 700; }
 .ui-cashier .payment-status-amount { font-size: 32px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .ui-cashier .payment-status-meta { color: #64748b; font-size: 13px; font-weight: 400; overflow-wrap: anywhere; }
 
@@ -417,9 +426,9 @@
 .ui-login label { margin-bottom: 20px; }
 .ui-login .btn { min-height: 44px; margin-top: 4px; font-size: 15px; }
 .ui-login :is(.message, .verify-dialog-sub, .verify-head, .verify-track) { font-weight: 400; }
-.ui-login .verify-dialog-title { font-size: 18px; font-weight: 650; }
+.ui-login .verify-dialog-title { font-size: 18px; font-weight: 700; }
 .ui-login .verify-dialog { border-radius: 10px; }
-.ui-login .modal-close { font-weight: 500; }
+.ui-login .modal-close { font-weight: 600; }
 
 @media (max-width: 1400px) {
   .ui-admin .work-grid:not(.sharing-workspace) { grid-template-columns: minmax(0, 1fr); }
@@ -540,6 +549,9 @@
   .ui-admin .channel-modal { padding: 10px; }
   .ui-admin .channel-modal-body { padding: 16px; }
   .ui-admin :is(.channel-form-grid, .requirements-grid, .product-picker-grid) { grid-template-columns: minmax(0, 1fr); }
+  .ui-admin #channelEditorProducts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .ui-admin #channelEditorProducts > label { gap: 8px; padding: 10px; }
+  .ui-admin .channel-editor-options { padding: 12px; }
   .ui-admin .channel-modal-head { gap: 10px; padding: 14px 16px; }
   .ui-merchant .shell { padding: 16px 12px; }
   .ui-merchant .topbar { flex-direction: row; align-items: center; gap: 12px; }
