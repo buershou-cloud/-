@@ -5,6 +5,7 @@ import com.example.payments.config.PaymentGatewayProperties;
 import com.example.payments.domain.PaymentStatus;
 import com.example.payments.gateway.GatewayException;
 import com.example.payments.gateway.douyin.DouyinPayClient;
+import com.example.payments.gateway.douyin.DouyinRefundEvidence;
 import com.example.payments.gateway.douyin.DouyinProfitSharingState;
 import com.example.payments.gateway.douyin.DouyinSignatureSupport;
 import com.example.payments.gateway.douyin.DouyinTradeState;
@@ -127,11 +128,12 @@ public class DouyinNotifyController {
                 );
             }
             String refundStatus = refundNotificationStatus(eventType, payload);
-            orderService.recordDouyinRefundNotify(
-                    outRefundNo,
-                    refundStatus,
-                    firstText(text(payload, "refund_id"), text(payload, "refund_no"))
-            );
+            try {
+                orderService.recordDouyinRefundNotify(channelId,
+                        DouyinRefundEvidence.fromNotification(channel, payload, text(resource, "mchid")), refundStatus);
+            } catch (IllegalArgumentException ex) {
+                return ResponseEntity.badRequest().build();
+            }
             log.info("Processed Douyin refund notification channel={} outRefundNo={} status={}",
                     channelId, outRefundNo, refundStatus);
             return ResponseEntity.ok().build();

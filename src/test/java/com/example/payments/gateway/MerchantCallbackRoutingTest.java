@@ -71,15 +71,20 @@ class MerchantCallbackRoutingTest {
     }
 
     @Test
-    void publicCashierReservesBeforeCallingProviderWithoutChangingCallback() {
+    void publicCashierReservesServerOwnedCallbackBeforeCallingProvider() {
         Fixture f = fixture("https://gateway.example/api/v1/alipay/notify/ali");
         PayCreateRequest original = request(Map.of("cashier", true));
 
         f.service.payPublic(original);
 
         var sequence = inOrder(f.orders, f.provider);
-        sequence.verify(f.orders).reserveMerchantPayment("M10001", "默认商户", "ali", original);
-        sequence.verify(f.provider).pay(f.channel, original);
+        ArgumentCaptor<PayCreateRequest> reserved = ArgumentCaptor.forClass(PayCreateRequest.class);
+        sequence.verify(f.orders).reserveMerchantPayment(eq("M10001"), eq("默认商户"), eq("ali"), reserved.capture());
+        sequence.verify(f.provider).pay(f.channel, reserved.getValue());
+        assertThat(reserved.getValue().notifyUrl()).isEqualTo("https://gateway.example/api/v1/alipay/notify/ali");
+        assertThat(reserved.getValue().outTradeNo()).isEqualTo(original.outTradeNo());
+        assertThat(reserved.getValue().totalAmount()).isEqualByComparingTo(original.totalAmount());
+        assertThat(original.notifyUrl()).isEqualTo("https://merchant.example/payment-notify");
     }
 
     @Test

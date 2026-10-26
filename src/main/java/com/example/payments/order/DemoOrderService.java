@@ -1,5 +1,7 @@
 package com.example.payments.order;
 
+import com.example.payments.gateway.douyin.DouyinRefundEvidence;
+
 import com.example.payments.domain.GatewayResponse;
 import com.example.payments.domain.PayCreateRequest;
 import com.example.payments.domain.PaymentStatus;
@@ -10,6 +12,8 @@ import com.example.payments.domain.PaymentProduct;
 import com.example.payments.merchant.api.MerchantApiException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -18,6 +22,7 @@ import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -408,6 +413,18 @@ public class DemoOrderService {
     }
 
     public synchronized DemoOrderView recordRefund(RefundCreateRequest request, GatewayResponse response) {
+        if (databaseBacked()) {
+            return refundTransaction().execute(status -> {
+                DemoOrder original = orderByIdentifierOrThrow(request.outTradeNo(), request.tradeNo());
+                jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                        String.class, original.getOutTradeNo());
+                return recordRefundInternal(request, response);
+            });
+        }
+        return recordRefundInternal(request, response);
+    }
+
+    private DemoOrderView recordRefundInternal(RefundCreateRequest request, GatewayResponse response) {
         DemoOrder order = orderByIdentifierOrThrow(request.outTradeNo(), request.tradeNo());
         BigDecimal refundAmount = money(request.refundAmount());
         if (refundAmount.compareTo(BigDecimal.ZERO) <= 0) {
@@ -466,14 +483,33 @@ public class DemoOrderService {
     }
 
     public synchronized DemoOrderView recordDouyinRefundNotify(
-            String outRefundNo,
-            String refundStatus,
-            String refundId
+            String channelId,
+            DouyinRefundEvidence evidence,
+            String refundStatus
     ) {
         if (!databaseBacked()) {
             throw new IllegalStateException("Douyin refund notifications require database mode");
         }
-        String localStatus = normalizeDouyinRefundStatus(refundStatus);
+        if (!hasText(channelId) || evidence == null || !hasText(evidence.outRefundNo())
+                || (!hasText(evidence.outTradeNo()) && !hasText(evidence.transactionId()))
+                || !hasText(evidence.refundId()) || evidence.refundAmount() == null
+                || evidence.refundAmount().signum() <= 0) {
+            throw new IllegalArgumentException("Douyin refund identity and amount are required");
+        }
+        return refundTransaction().execute(status -> recordDouyinRefundInternal(channelId, evidence, refundStatus));
+    }
+
+    private TransactionTemplate refundTransaction() {
+        TransactionTemplate transaction = new TransactionTemplate(
+                new DataSourceTransactionManager(Objects.requireNonNull(jdbcTemplate.getDataSource())));
+        // MySQL defaults to REPEATABLE READ. An identifier lookup before waiting for the order lock
+        // must not pin the refund aggregate to a snapshot from before another instance committed.
+        transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
+        return transaction;
+    }
+
+    private DemoOrderView recordDouyinRefundInternal(String channelId, DouyinRefundEvidence evidence, String refundStatus) {
+        String outRefundNo = evidence.outRefundNo();
         String outTradeNo;
         try {
             outTradeNo = jdbcTemplate.queryForObject(
@@ -484,10 +520,37 @@ public class DemoOrderService {
         } catch (EmptyResultDataAccessException ex) {
             throw new IllegalArgumentException("Refund order does not exist: " + outRefundNo);
         }
+        // Match the reservation lock order: payment first, then refund. Other instances use the same DB lock.
+        jdbcTemplate.queryForObject("SELECT out_trade_no FROM pay_order WHERE out_trade_no = ? FOR UPDATE",
+                String.class, outTradeNo);
+        Map<String, Object> refund = jdbcTemplate.queryForMap(
+                "SELECT out_trade_no, channel_id, merchant_id, trade_no, refund_amount, code, message FROM refund_order WHERE out_request_no = ? FOR UPDATE",
+                outRefundNo);
+        DemoOrder order = order(outTradeNo);
+        if (!channelId.equals(refund.get("channel_id")) || !channelId.equals(order.getChannelId())
+                || !Objects.equals(refund.get("merchant_id"), order.getMerchantId())
+                || !Objects.equals(refund.get("out_trade_no"), order.getOutTradeNo())
+                || (hasText(evidence.outTradeNo()) && !evidence.outTradeNo().equals(order.getOutTradeNo()))
+                || (hasText(evidence.transactionId()) && (!evidence.transactionId().equals(order.getTradeNo())
+                    || (refund.get("trade_no") != null && !evidence.transactionId().equals(refund.get("trade_no")))))
+                || evidence.refundAmount().compareTo(new BigDecimal(refund.get("refund_amount").toString())) != 0
+                || (evidence.totalAmount() != null && evidence.totalAmount().compareTo(order.getAmount()) != 0)) {
+            throw new IllegalArgumentException("Douyin refund evidence does not match the original order and refund reservation");
+        }
+        String rawResponse = jdbcTemplate.queryForObject("SELECT raw_response FROM refund_order WHERE out_request_no = ?",
+                String.class, outRefundNo);
+        ObjectNode storedResponse = refundResponse(rawResponse);
+        String storedRefundId = storedRefundId(storedResponse, refund.get("code"), refund.get("message"));
+        if (hasText(storedRefundId) && !evidence.refundId().equals(storedRefundId)) {
+            throw new IllegalArgumentException("Douyin platform refund ID does not match the reserved refund");
+        }
+        storedResponse.put("verified_refund_id", evidence.refundId());
+        String localStatus = normalizeDouyinRefundStatus(refundStatus);
         jdbcTemplate.update("""
                 UPDATE refund_order
                 SET code = CASE WHEN status = 'SUCCESS' THEN code ELSE ? END,
                     message = CASE WHEN status = 'SUCCESS' THEN message ELSE ? END,
+                    raw_response = ?,
                     completed_at = CASE
                         WHEN status = 'SUCCESS' THEN completed_at
                         WHEN ? IN ('SUCCESS', 'FAILED') THEN CURRENT_TIMESTAMP
@@ -500,18 +563,43 @@ public class DemoOrderService {
                     END
                 WHERE out_request_no = ?
                 """,
-                nullIfBlank(refundId),
+                nullIfBlank(evidence.refundId()),
                 nullIfBlank(refundStatus),
+                json(storedResponse),
                 localStatus,
                 localStatus,
                 localStatus,
                 outRefundNo
         );
-        DemoOrder order = order(outTradeNo);
         order.setRefundedAmount(successfulRefundAmount(outTradeNo));
         applyRefundStatus(order);
         persist(order);
         return DemoOrderView.from(order);
+    }
+
+    private static ObjectNode refundResponse(String value) {
+        if (!hasText(value)) return JSON.createObjectNode();
+        try {
+            JsonNode node = JSON.readTree(value);
+            if (node instanceof ObjectNode object) return object;
+            throw new IllegalArgumentException("Invalid stored refund response");
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("Invalid stored refund response", ex);
+        }
+    }
+
+    private static String storedRefundId(ObjectNode response, Object code, Object message) {
+        for (JsonNode value : List.of(response.path("verified_refund_id"), response.path("raw").path("refund_id"),
+                response.path("raw").path("data").path("refund_id"))) {
+            if (value.isTextual() && hasText(value.textValue())) return value.textValue();
+        }
+        // Earlier callback versions stored the platform refund ID in code, with the upstream state in message.
+        if (code instanceof String id && hasText(id) && message instanceof String state
+                && List.of("SUCCESS", "FAILED", "FAIL", "CLOSED", "PROCESSING", "PENDING", "ABNORMAL", "REFUNDED")
+                .contains(state.toUpperCase(Locale.ROOT))
+                && !List.of("SUCCESS", "FAILED", "FAIL", "CLOSED", "PROCESSING", "PENDING", "ABNORMAL", "REFUNDED", "0")
+                .contains(id.toUpperCase(Locale.ROOT))) return id;
+        return null;
     }
 
     /** Reserve the real capture identity and its collection order before contacting the provider. */
@@ -1745,14 +1833,25 @@ public class DemoOrderService {
             BigDecimal refundAmount
     ) {
         List<Map<String, Object>> existing = jdbcTemplate.queryForList(
-                "SELECT out_trade_no, merchant_id, refund_amount FROM refund_order WHERE out_request_no = ?",
+                "SELECT out_trade_no, merchant_id, refund_amount, code, message FROM refund_order WHERE out_request_no = ? FOR UPDATE",
                 request.outRequestNo());
+        ObjectNode responseToStore = JSON.valueToTree(response);
         if (!existing.isEmpty()) {
             Map<String, Object> previous = existing.getFirst();
             if (!Objects.equals(previous.get("out_trade_no"), order.getOutTradeNo())
                     || !Objects.equals(previous.get("merchant_id"), order.getMerchantId())
                     || new BigDecimal(previous.get("refund_amount").toString()).compareTo(refundAmount) != 0) {
                 throw refundConflict();
+            }
+            String previousResponse = jdbcTemplate.queryForObject("SELECT raw_response FROM refund_order WHERE out_request_no = ?",
+                    String.class, request.outRequestNo());
+            String knownId = storedRefundId(refundResponse(previousResponse), previous.get("code"), previous.get("message"));
+            String receivedId = storedRefundId(responseToStore, null, null);
+            if (hasText(knownId)) {
+                if (hasText(receivedId) && !knownId.equals(receivedId)) {
+                    throw new IllegalArgumentException("Platform refund ID does not match the existing refund");
+                }
+                responseToStore.put("verified_refund_id", knownId);
             }
         }
         String refundStatus = switch (response.status()) {
@@ -1769,7 +1868,7 @@ public class DemoOrderService {
                     trade_no = VALUES(trade_no),
                     channel_id = VALUES(channel_id),
                     refund_amount = VALUES(refund_amount),
-                    status = IF(status = 'SUCCESS', status, VALUES(status)),
+                    status = CASE WHEN status = 'SUCCESS' THEN status ELSE VALUES(status) END,
                     refund_reason = VALUES(refund_reason),
                     code = VALUES(code),
                     message = VALUES(message),
@@ -1786,7 +1885,7 @@ public class DemoOrderService {
                 nullIfBlank(request.refundReason()),
                 nullIfBlank(response.code()),
                 nullIfBlank(response.message()),
-                json(response),
+                json(responseToStore),
                 refundStatus
         );
     }

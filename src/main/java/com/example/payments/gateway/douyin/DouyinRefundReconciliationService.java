@@ -70,11 +70,16 @@ public class DouyinRefundReconciliationService {
             PaymentGatewayProperties.Channel channel = channelRegistry.find(refund.channelId())
                     .orElseThrow(() -> new IllegalStateException("Unknown Douyin channel: " + refund.channelId()));
             GatewayResponse response = paymentProvider.queryRefund(channel, refund.outRequestNo());
+            if (response.status() != PaymentStatus.SUCCESS && response.status() != PaymentStatus.FAILED
+                    && response.status() != PaymentStatus.CLOSED) return;
+            DouyinRefundEvidence evidence = DouyinRefundEvidence.fromQueryResponse(channel, response.raw());
+            if (!refund.outRequestNo().equals(evidence.outRefundNo())
+                    || (evidence.outTradeNo() != null && !refund.outTradeNo().equals(evidence.outTradeNo()))) {
+                throw new IllegalArgumentException("Douyin refund query does not match the requested refund");
+            }
             if (response.status() == PaymentStatus.SUCCESS) {
                 orderService.recordDouyinRefundNotify(
-                        refund.outRequestNo(),
-                        "SUCCESS",
-                        response.tradeNo()
+                        refund.channelId(), evidence, "SUCCESS"
                 );
                 log.info(
                         "Reconciled successful Douyin refund outRefundNo={} outTradeNo={} channel={}",
@@ -85,9 +90,7 @@ public class DouyinRefundReconciliationService {
             } else if (response.status() == PaymentStatus.FAILED
                     || response.status() == PaymentStatus.CLOSED) {
                 orderService.recordDouyinRefundNotify(
-                        refund.outRequestNo(),
-                        "FAILED",
-                        response.tradeNo()
+                        refund.channelId(), evidence, "FAILED"
                 );
             }
         } catch (RuntimeException ex) {

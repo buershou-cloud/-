@@ -25,6 +25,7 @@ import com.example.payments.domain.ProfitSharingReturnQueryRequest;
 import com.example.payments.domain.ProfitSharingReturnRequest;
 import com.example.payments.domain.RefundCreateRequest;
 import com.example.payments.gateway.PaymentGatewayService;
+import com.example.payments.gateway.PublicCashierPaymentRequest;
 import com.example.payments.merchant.api.MerchantApiException;
 import com.example.payments.onboarding.OnboardingRecordService;
 import com.example.payments.order.DemoOrderService;
@@ -45,17 +46,11 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Locale;
-import java.util.Set;
 
 @Validated
 @RestController
 @RequestMapping("/api/v1/payments")
 public class PaymentController {
-    private static final Set<String> PUBLIC_PAYMENT_RESERVED_EXTRA = Set.of(
-            "merchantapirequest", "outtradeno", "tradeno", "outorderno", "outrequestno", "outrefundno",
-            "totalamount", "refundamount", "amount", "alipaymethod", "preauthmethod");
-
     private final PaymentGatewayService paymentGatewayService;
     private final ComplaintAutoQueryService complaintAutoQueryService;
     private final OnboardingRecordService onboardingRecordService;
@@ -81,16 +76,15 @@ public class PaymentController {
             @Valid @RequestBody PayCreateRequest request,
             HttpServletRequest servletRequest
     ) {
-        Map<String, Object> extra = new LinkedHashMap<>(request.extra() == null ? Map.of() : request.extra());
-        if (extra.keySet().stream().anyMatch(key -> key != null
-                && PUBLIC_PAYMENT_RESERVED_EXTRA.contains(key.replace("_", "").toLowerCase(Locale.ROOT)))) {
-            throw new IllegalArgumentException("extra must not override payment identifiers, amount, API method or merchant API authentication");
-        }
+        request = PublicCashierPaymentRequest.sanitize(request);
+        Map<String, Object> extra = new LinkedHashMap<>(request.extra());
         orderService.ensureNewPaymentOrder(request.outTradeNo());
-        extra.putIfAbsent("payer_client_ip", RequestUrlSupport.clientIp(servletRequest));
+        extra.put("payer_client_ip", RequestUrlSupport.clientIp(servletRequest));
         String userAgent = servletRequest.getHeader("User-Agent");
         if (userAgent != null && !userAgent.isBlank()) {
-            extra.putIfAbsent("user_agent", userAgent.trim());
+            extra.put("user_agent", userAgent.trim());
+        } else {
+            extra.remove("user_agent");
         }
         return paymentGatewayService.payPublic(new PayCreateRequest(
                 request.product(),

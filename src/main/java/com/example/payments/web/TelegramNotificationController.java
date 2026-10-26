@@ -53,7 +53,7 @@ public class TelegramNotificationController {
 
     private boolean superAdministrator(HttpServletRequest request) {
         String username = AdminSession.username(request);
-        return AdminSession.isAuthenticated(request) && authService.hasUsername(username) && authService.isSuperAdministrator(username);
+        return AdminSession.isAuthenticated(request, authService) && authService.isSuperAdministrator(username);
     }
 
     private static ResponseEntity<Map<String, String>> forbidden() {

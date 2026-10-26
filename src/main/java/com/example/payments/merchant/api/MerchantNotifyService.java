@@ -6,6 +6,7 @@ import com.example.payments.order.DemoOrderService;
 import com.example.payments.order.DemoOrderStatus;
 import com.example.payments.order.DemoOrderView;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,13 +18,10 @@ import java.io.IOException;
 import java.math.RoundingMode;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -31,12 +29,19 @@ import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,29 +52,33 @@ public class MerchantNotifyService {
     private final DemoMerchantService merchantService;
     private final MerchantSignatureService signatureService;
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
+    private static final Object[] CREATION_LOCKS = java.util.stream.IntStream.range(0, 64)
+            .mapToObj(ignored -> new Object()).toArray();
+    private final MerchantCallbackTransport transport;
     private final Path outboxDirectory;
     private final Clock clock;
+    private final Executor executor;
+    private final Set<Path> scheduled = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public MerchantNotifyService(DemoOrderService orderService, DemoMerchantService merchantService,
             MerchantSignatureService signatureService, ObjectMapper objectMapper,
             @Value("${payment.merchant.notify-outbox-directory:data/merchant-notifications}") String outboxDirectory) {
         this(orderService, merchantService, signatureService, objectMapper, Path.of(outboxDirectory),
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build(),
-                Clock.systemUTC());
+                new SafeMerchantCallbackClient(), Clock.systemUTC(), callbackExecutor());
     }
 
     MerchantNotifyService(DemoOrderService orderService, DemoMerchantService merchantService,
             MerchantSignatureService signatureService, ObjectMapper objectMapper, Path outboxDirectory,
-            HttpClient httpClient, Clock clock) {
+            MerchantCallbackTransport transport, Clock clock, Executor executor) {
         this.orderService = orderService;
         this.merchantService = merchantService;
         this.signatureService = signatureService;
         this.objectMapper = objectMapper;
-        this.httpClient = httpClient;
+        this.transport = transport;
         this.outboxDirectory = outboxDirectory.toAbsolutePath().normalize();
         this.clock = clock;
+        this.executor = executor;
         try {
             Files.createDirectories(this.outboxDirectory);
         } catch (IOException ex) {
@@ -78,7 +87,7 @@ public class MerchantNotifyService {
     }
 
     /** Persist before acknowledging upstream; network failures are retried independently. */
-    public synchronized void notifyPayment(DemoOrderView order, String tradeStatus) {
+    public void notifyPayment(DemoOrderView order, String tradeStatus) {
         if (order == null || order.status() == null || order.status() == DemoOrderStatus.UNPAID) {
             return;
         }
@@ -89,35 +98,40 @@ public class MerchantNotifyService {
         if (!order.merchantId().equals(target.get().merchantId())) {
             throw new IllegalStateException("Merchant notification target does not own the order");
         }
-        URI callback = callbackUri(target.get().notifyUrl());
+        URI callback = SafeMerchantCallbackClient.callbackUri(target.get().notifyUrl());
         String eventId = eventId(order.merchantId(), order.outTradeNo(), order.status().name());
         Path file = outboxDirectory.resolve(eventId + ".json");
-        try (FileChannel lockChannel = lockChannel(file); FileLock ignored = lockChannel.lock()) {
-            Delivery delivery;
-            if (Files.exists(file)) {
-                delivery = read(file);
-            } else {
-                delivery = new Delivery(eventId, order.merchantId(), order.outTradeNo(), callback.toString(),
-                        payload(order, tradeStatus), 0, clock.millis(), false, null);
-                write(file, delivery);
+        // An existing file is atomically complete. Never wait on its in-flight HTTP delivery lock.
+        if (!Files.exists(file)) {
+            synchronized (CREATION_LOCKS[(eventId.hashCode() & Integer.MAX_VALUE) % CREATION_LOCKS.length]) {
+                if (!Files.exists(file)) {
+                    try (FileChannel lockChannel = lockChannel(file); FileLock ignored = lockChannel.lock()) {
+                        if (!Files.exists(file)) {
+                            Delivery delivery = new Delivery(eventId, order.merchantId(), order.outTradeNo(), callback.toString(),
+                                    payload(order, tradeStatus), 0, clock.millis(), false, null);
+                            write(file, delivery);
+                        }
+                    } catch (IOException ex) {
+                        throw new IllegalStateException("Cannot persist merchant notification for " + order.outTradeNo(), ex);
+                    }
+                }
             }
-            deliverIfDue(file, delivery);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Cannot persist merchant notification for " + order.outTradeNo(), ex);
         }
+        enqueue(file);
     }
 
     @Scheduled(initialDelayString = "${payment.merchant.notify-retry-initial-delay-ms:5000}",
             fixedDelayString = "${payment.merchant.notify-retry-delay-ms:5000}")
-    public synchronized void retryPending() {
+    public void retryPending() {
         try (var files = Files.list(outboxDirectory)) {
             int attempted = 0;
             for (Path file : files.filter(path -> path.getFileName().toString().endsWith(".json")).sorted().toList()) {
                 if (attempted >= 20 || Thread.currentThread().isInterrupted()) {
                     break;
                 }
-                try (FileChannel lockChannel = lockChannel(file); FileLock ignored = lockChannel.lock()) {
-                    if (deliverIfDue(file, read(file))) {
+                try {
+                    Delivery delivery = read(file);
+                    if (!delivery.delivered() && delivery.nextAttemptAt() <= clock.millis() && enqueue(file)) {
                         attempted++;
                     }
                 } catch (IOException | RuntimeException ex) {
@@ -127,6 +141,42 @@ public class MerchantNotifyService {
         } catch (IOException ex) {
             log.error("Cannot read merchant notification outbox", ex);
         }
+    }
+
+    private boolean enqueue(Path file) {
+        if (!scheduled.add(file)) return false;
+        try {
+            executor.execute(() -> {
+                try (FileChannel lockChannel = lockChannel(file); FileLock lock = lockChannel.tryLock()) {
+                    if (lock != null) deliverIfDue(file, read(file));
+                } catch (OverlappingFileLockException ignored) {
+                    // Another instance in this JVM is delivering; its durable state will govern retries.
+                } catch (IOException | RuntimeException ex) {
+                    log.error("Cannot process merchant notification outbox entry {}", file.getFileName(), ex);
+                } finally {
+                    scheduled.remove(file);
+                }
+            });
+            return true;
+        } catch (RejectedExecutionException ex) {
+            scheduled.remove(file);
+            // The durable record remains available to the next scheduled retry; never send on the caller thread.
+            return false;
+        }
+    }
+
+    private static ExecutorService callbackExecutor() {
+        return new ThreadPoolExecutor(2, 2, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), task -> {
+            Thread thread = new Thread(task, "merchant-callback-delivery");
+            thread.setDaemon(true);
+            return thread;
+        }, new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    @PreDestroy
+    void close() throws IOException {
+        if (executor instanceof ExecutorService service) service.shutdownNow();
+        transport.close();
     }
 
     private boolean deliverIfDue(Path file, Delivery delivery) throws IOException {
@@ -142,11 +192,8 @@ public class MerchantNotifyService {
             payload.remove("sign");
             payload.put("signType", signType);
             payload.put("sign", signatureService.signForMerchant(merchant, signType, payload));
-            HttpRequest request = HttpRequest.newBuilder(callbackUri(delivery.notifyUrl()))
-                    .timeout(Duration.ofSeconds(5))
-                    .header("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8")
-                    .POST(HttpRequest.BodyPublishers.ofString(form(payload), StandardCharsets.UTF_8)).build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            MerchantCallbackTransport.Result response = transport.post(
+                    SafeMerchantCallbackClient.callbackUri(delivery.notifyUrl()), form(payload));
             success = response.statusCode() >= 200 && response.statusCode() < 300
                     && response.body() != null && "success".equalsIgnoreCase(response.body().trim());
             if (!success) {
@@ -183,11 +230,8 @@ public class MerchantNotifyService {
             try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
                 channel.force(true);
             }
-            try {
-                Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException ex) {
-                Files.move(temporary, file, StandardCopyOption.REPLACE_EXISTING);
-            }
+            // Readers use the complete file without taking a delivery lock. Require atomic publication.
+            Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } finally {
             Files.deleteIfExists(temporary);
         }
@@ -209,20 +253,6 @@ public class MerchantNotifyService {
         payload.put("status", order.status().name());
         payload.put("notifyTime", Instant.now(clock).toString());
         return payload;
-    }
-
-    private static URI callbackUri(String value) {
-        URI uri;
-        try {
-            uri = URI.create(value);
-        } catch (RuntimeException ex) {
-            throw new IllegalArgumentException("Merchant notifyUrl must be an absolute HTTP(S) URL", ex);
-        }
-        if (uri.getHost() == null || uri.getUserInfo() != null || uri.getFragment() != null
-                || !("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))) {
-            throw new IllegalArgumentException("Merchant notifyUrl must be an absolute HTTP(S) URL without user information or fragment");
-        }
-        return uri;
     }
 
     private static String eventId(String merchantId, String outTradeNo, String status) {

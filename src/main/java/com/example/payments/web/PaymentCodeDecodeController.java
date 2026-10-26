@@ -18,12 +18,16 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.ImageReadParam;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Semaphore;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -37,28 +41,81 @@ public class PaymentCodeDecodeController {
     );
     private static final Pattern DIGITS = Pattern.compile("(?<!\\d)(\\d{10,32})(?!\\d)");
     private static final Map<DecodeHintType, Object> HINTS = decodeHints();
+    private static final long MAX_FILE_BYTES = 8L * 1024 * 1024;
+    private static final long MAX_SOURCE_PIXELS = 20_000_000L;
+    private static final long MAX_DECODE_PIXELS = 2_000_000L;
+    private static final int MAX_DIMENSION = 8192;
+    // Reject excess concurrent work instead of queuing unbounded image allocations.
+    private final Semaphore decodeSlots = new Semaphore(2);
 
     @PostMapping("/decode")
     public PaymentCodeDecodeResponse decode(@RequestParam("file") MultipartFile file) throws IOException {
         if (file == null || file.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "请上传付款码照片");
         }
-        BufferedImage image = ImageIO.read(file.getInputStream());
-        if (image == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法读取图片，请上传 JPG/PNG 图片");
+        if (file.getSize() > MAX_FILE_BYTES) {
+            throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "图片不能超过 8 MB");
         }
-        String text = decodeImage(image);
-        if (text == null || text.isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "没有识别到二维码或条形码，请换一张清晰照片");
+        if (!decodeSlots.tryAcquire()) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "图片识别繁忙，请稍后重试");
         }
-        return new PaymentCodeDecodeResponse(text, extractPaymentCode(text));
+        try {
+            BufferedImage image = readBoundedImage(file);
+            try {
+                String text = decodeImage(image);
+                if (text == null || text.isBlank()) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "没有识别到二维码或条形码，请换一张清晰照片");
+                }
+                return new PaymentCodeDecodeResponse(text, extractPaymentCode(text));
+            } finally {
+                image.flush();
+            }
+        } catch (IOException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法读取图片，请上传完整的 JPG/PNG 图片", ex);
+        } finally {
+            decodeSlots.release();
+        }
+    }
+
+    private static BufferedImage readBoundedImage(MultipartFile file) throws IOException {
+        try (var input = file.getInputStream(); var images = new MemoryCacheImageInputStream(input)) {
+            var readers = ImageIO.getImageReaders(images);
+            if (!readers.hasNext()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "无法读取图片，请上传 JPG/PNG 图片");
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(images, true, true);
+                int width = reader.getWidth(0);
+                int height = reader.getHeight(0);
+                // Read dimensions before allocating/decompressing the raster (compressed files can be tiny).
+                if (width <= 0 || height <= 0 || width > MAX_DIMENSION || height > MAX_DIMENSION
+                        || (long) width * height > MAX_SOURCE_PIXELS) {
+                    throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "图片尺寸过大，请裁剪到付款码区域后重试");
+                }
+                int sample = 1;
+                while ((long) ((width + sample - 1) / sample) * ((height + sample - 1) / sample) > MAX_DECODE_PIXELS) {
+                    sample++;
+                }
+                ImageReadParam param = reader.getDefaultReadParam();
+                param.setSourceSubsampling(sample, sample, 0, 0);
+                return reader.read(0, param);
+            } finally {
+                reader.dispose();
+            }
+        }
     }
 
     static String decodeImage(BufferedImage image) {
-        for (BufferedImage candidate : imageVariants(image)) {
-            String text = decodeCandidate(candidate);
-            if (text != null && !text.isBlank()) {
-                return text;
+        String text = decodeCandidate(image);
+        if (!text.isBlank()) return text;
+        for (int degrees : new int[]{90, 180, 270}) {
+            BufferedImage candidate = rotate(image, degrees);
+            try {
+                text = decodeCandidate(candidate);
+                if (!text.isBlank()) return text;
+            } finally {
+                candidate.flush();
             }
         }
         return "";
@@ -98,15 +155,6 @@ public class PaymentCodeDecodeController {
         BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
         Result result = new MultiFormatReader().decode(bitmap, HINTS);
         return result.getText();
-    }
-
-    private static List<BufferedImage> imageVariants(BufferedImage image) {
-        return List.of(
-                image,
-                rotate(image, 90),
-                rotate(image, 180),
-                rotate(image, 270)
-        );
     }
 
     private static BufferedImage rotate(BufferedImage image, int degrees) {

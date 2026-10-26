@@ -34,6 +34,29 @@ class TelegramNotificationServiceTest {
     private final FakeTransport transport = new FakeTransport();
 
     @Test
+    void defaultDailyTotalsUseBeijingMidnightAndExplicitZonesArePreserved() throws Exception {
+        assertThat(TelegramNotificationService.configuredZone(null)).isEqualTo(ZoneId.of("Asia/Shanghai"));
+        assertThat(TelegramNotificationService.configuredZone("bad-zone")).isEqualTo(ZoneId.of("Asia/Shanghai"));
+        assertThat(TelegramNotificationService.configuredZone("Asia/Bangkok")).isEqualTo(ZoneId.of("Asia/Bangkok"));
+        // Exercise Spring's injected default as well as the fallback.
+        var constructor = TelegramNotificationService.class.getConstructor(ObjectMapper.class, String.class, String.class);
+        assertThat(constructor.getParameters()[2].getAnnotation(org.springframework.beans.factory.annotation.Value.class).value())
+                .isEqualTo("${payment.telegram.time-zone:Asia/Shanghai}");
+        clock.instant = Instant.parse("2026-10-09T15:59:59Z");
+        var service = new TelegramNotificationService(mapper, directory, transport, clock,
+                TelegramNotificationService.configuredZone(null));
+        service.saveSettings(new TelegramNotificationService.SettingsUpdate(true, CHAT, TOKEN));
+        service.enqueueConfirmedReceipt(receipt("BEIJING-BEFORE"));
+        clock.advance(2);
+        service.enqueueConfirmedReceipt(receipt("BEIJING-AFTER"));
+        service.sendPending();
+        assertThat(day("2026-10-09").entries()).hasSize(1);
+        assertThat(day("2026-10-10").entries()).hasSize(1);
+        assertThat(transport.calls).anySatisfy(call -> assertThat(call.text())
+                .contains("2026-10-10 00:00:01 +08:00", "今日（2026-10-10）已收 1 笔"));
+    }
+
+    @Test
     void defaultIsDisabledAndNeverContactsTelegramOrCreatesAnOutbox() {
         TelegramNotificationService service = service();
         assertThat(service.settings()).isEqualTo(new TelegramNotificationService.SettingsView(false, false, "", ""));

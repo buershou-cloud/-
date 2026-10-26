@@ -2,6 +2,7 @@ package com.example.payments.web;
 
 import com.example.payments.auth.AdminAuthService;
 import com.example.payments.auth.AdminSession;
+import com.example.payments.merchant.DemoMerchantService;
 import com.example.payments.order.OrderSummaryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,9 +23,9 @@ class OrderSummaryControllerTest {
 
     @BeforeEach
     void setup() {
-        when(auth.hasUsername("admin")).thenReturn(true);
+        when(auth.matchesSession("admin", "current-admin-credential")).thenReturn(true);
         mvc = MockMvcBuilders.standaloneSetup(new OrderSummaryController(service))
-                .addInterceptors(new AdminAuthInterceptor(auth))
+                .addInterceptors(new AdminAuthInterceptor(auth, mock(DemoMerchantService.class)))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 
@@ -46,6 +47,7 @@ class OrderSummaryControllerTest {
                 List.of(new OrderSummaryService.ReportRow("2026-10-25", 1, new BigDecimal("100"),
                         new BigDecimal("30"), "UNCONFIRMED"))));
         mvc.perform(get("/api/v1/orders/summary").sessionAttr(AdminSession.USERNAME_ATTRIBUTE, "admin")
+                        .sessionAttr(AdminSession.CREDENTIAL_ATTRIBUTE, "current-admin-credential")
                         .param("today", "2026-10-25").param("month", "2026-10")
                         .param("outTradeNo", "filtered-order"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.todayTradeAmount").value(100))

@@ -1,6 +1,7 @@
 package com.example.payments.web;
 
 import com.example.payments.auth.AdminAuthService;
+import com.example.payments.merchant.DemoMerchantService;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -9,7 +10,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class AdminAuthInterceptorTest {
-    private final AdminAuthInterceptor interceptor = new AdminAuthInterceptor(mock(AdminAuthService.class));
+    private final AdminAuthInterceptor interceptor = new AdminAuthInterceptor(mock(AdminAuthService.class), mock(DemoMerchantService.class));
 
     @Test
     void allowsSignedDouyinCallbackToReachItsVerificationController() throws Exception {

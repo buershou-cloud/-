@@ -39,10 +39,16 @@ public class MerchantPortalController {
             HttpServletRequest servletRequest
     ) {
         boolean demoLogin = Boolean.TRUE.equals(request.demoLogin())
-                && AdminSession.isAuthenticated(servletRequest)
-                && adminAuthService.hasUsername(AdminSession.username(servletRequest));
+                && AdminSession.isAuthenticated(servletRequest, adminAuthService);
         DemoMerchantView merchant = merchantService.login(request.merchantId(), request.md5Key(), demoLogin);
-        MerchantSession.login(servletRequest, merchant.merchantId());
+        if (demoLogin) {
+            // The administrator shortcut must not leave an independent merchant identity
+            // that outlives a revoked administrator session.
+            MerchantSession.logout(servletRequest);
+            servletRequest.changeSessionId();
+        } else {
+            MerchantSession.login(servletRequest, merchant);
+        }
         List<DemoOrderView> orders = orderService.byMerchant(merchant.merchantId());
         return new MerchantPortalView(merchant, orders, RequestUrlSupport.apiBase(servletRequest));
     }

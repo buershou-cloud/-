@@ -102,6 +102,26 @@ public class AdminAuthService {
         );
     }
 
+    public synchronized String authenticateSession(String username, String password) {
+        return verify(username, password) ? sessionFingerprint(requiredCredential(username)) : null;
+    }
+
+    public synchronized boolean matchesSession(String username, String fingerprint) {
+        if (isBlank(username) || isBlank(fingerprint)) {
+            return false;
+        }
+        Credential credential = credentials.get(username.trim());
+        return credential != null && MessageDigest.isEqual(
+                sessionFingerprint(credential).getBytes(StandardCharsets.UTF_8),
+                fingerprint.getBytes(StandardCharsets.UTF_8)
+        );
+    }
+
+    private static String sessionFingerprint(Credential credential) {
+        // The persisted salt changes even when a password is changed back to its old value.
+        return hash("admin-session-v1:" + credential.username() + ":" + credential.passwordHash(), credential.salt());
+    }
+
     public synchronized void changePassword(String username, String oldPassword, String newPassword) {
         Credential credential = requiredCredential(username);
         if (!verify(credential.username(), oldPassword)) {

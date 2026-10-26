@@ -7658,7 +7658,7 @@
     $("newChannelAppId").value = channel.appId || "";
     $("newChannelAlipayPublicKey").value = "";
     $("newChannelMerchantPrivateKey").value = "";
-    $("newChannelAppAuthToken").value = channel.appAuthToken || "";
+    $("newChannelAppAuthToken").value = "";
     $("newChannelCredentialMode").value = channel.credentialMode || "PUBLIC_KEY";
     $("newChannelSubMerchantId").value = channel.subMerchantId || "";
     $("newChannelPayMin").value = channel.payMin ?? "";
@@ -7689,7 +7689,9 @@
     $("newDouyinEncryptKey").placeholder = channel.hasDouyinEncryptKey
       ? "已保存，留空不修改通知密钥"
       : "必须正好 32 字节";
-    $("newChannelAppAuthToken").placeholder = "服务商/直付通授权 token，可留空";
+    $("newChannelAppAuthToken").placeholder = channel.hasAppAuthToken
+      ? "已保存，留空不修改授权令牌"
+      : "服务商/直付通授权 token，可留空";
     syncProviderFields();
     syncChannelEditorOptions();
     showChannelModal();

@@ -121,6 +121,8 @@ public class PaymentGatewayService {
 
     /** Public cashier payments must reserve the same global order namespace as signed merchant requests. */
     public GatewayResponse payPublic(PayCreateRequest request) {
+        long started = System.nanoTime();
+        request = PublicCashierPaymentRequest.sanitize(request);
         MerchantRouting merchantRouting = merchantRouting(request);
         Collection<String> requestedChannels = channelIds(request.channelIds(), merchantRouting);
         if (merchantRouting != null && (merchantRouting.channelIds() == null || merchantRouting.channelIds().isEmpty()
@@ -138,11 +140,22 @@ public class PaymentGatewayService {
             return new GatewayResponse(null, PaymentStatus.FAILED, "NO_MATCHING_CHANNEL", ex.getMessage(),
                     null, null, null, null, routeFailureRaw(request.product(), requestedChannels, request.totalAmount(), mode), List.of());
         }
-        orderService.reserveMerchantPayment(extraText(request.extra(), "merchantId", "M10001"),
-                extraText(request.extra(), "merchantName", "默认商户"), selected.getId(), request);
-        GatewayResponse response = execute(request.product(), List.of(selected.getId()), request.totalAmount(), RoutingMode.PRIORITY,
-                channel -> provider(channel).pay(channel, request));
-        recordOrder(request, response);
+        PayCreateRequest prepared = PublicCashierPaymentRequest.forChannel(request, selected);
+        long routed = System.nanoTime();
+        orderService.reserveMerchantPayment(extraText(prepared.extra(), "merchantId", "M10001"),
+                extraText(prepared.extra(), "merchantName", "默认商户"), selected.getId(), prepared);
+        long reserved = System.nanoTime();
+        GatewayResponse response = execute(prepared.product(), List.of(selected.getId()), prepared.totalAmount(), RoutingMode.PRIORITY,
+                channel -> provider(channel).pay(channel, prepared));
+        long upstreamFinished = System.nanoTime();
+        recordOrder(prepared, response);
+        long finished = System.nanoTime();
+        String timing = "Cashier creation product={} channel={} routeMs={} reserveMs={} providerMs={} persistMs={} totalMs={}";
+        Object[] stages = {prepared.product(), selected.getId(), (routed - started) / 1_000_000,
+                (reserved - routed) / 1_000_000, (upstreamFinished - reserved) / 1_000_000,
+                (finished - upstreamFinished) / 1_000_000, (finished - started) / 1_000_000};
+        if (finished - started >= 500_000_000L) log.info(timing, stages);
+        else log.debug(timing, stages);
         return response;
     }
 

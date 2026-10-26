@@ -3,6 +3,7 @@ package com.example.payments.web;
 import com.example.payments.auth.AdminSession;
 import com.example.payments.auth.AdminAuthService;
 import com.example.payments.merchant.MerchantSession;
+import com.example.payments.merchant.DemoMerchantService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
@@ -17,9 +18,11 @@ import java.util.Set;
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
     private final AdminAuthService authService;
+    private final DemoMerchantService merchantService;
 
-    public AdminAuthInterceptor(AdminAuthService authService) {
+    public AdminAuthInterceptor(AdminAuthService authService, DemoMerchantService merchantService) {
         this.authService = authService;
+        this.merchantService = merchantService;
     }
 
     private static final Set<String> PUBLIC_PAGES = Set.of(
@@ -51,8 +54,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     }
 
     private boolean authenticated(HttpServletRequest request) {
-        return AdminSession.isAuthenticated(request)
-                && authService.hasUsername(AdminSession.username(request));
+        return AdminSession.isAuthenticated(request, authService);
     }
 
     private static String normalizedPath(HttpServletRequest request) {
@@ -64,7 +66,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
         return path.isBlank() ? "/" : path;
     }
 
-    private static boolean isPublic(String path, String method, HttpServletRequest request) {
+    private boolean isPublic(String path, String method, HttpServletRequest request) {
         if ("GET".equalsIgnoreCase(method) && Set.of("/ui-theme.css", "/merchant-integration.js", "/sdk/merchant-client.mjs", "/sdk/merchant-example.mjs",
                 "/docs/merchant-api.md").contains(path)) {
             return true;
@@ -103,7 +105,7 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
             return true;
         }
         if (path.matches("/api/v1/merchants/[^/]+/(reset-md5|generate-rsa2|sign-mode)")) {
-            return MerchantSession.isMerchant(request, merchantId(path));
+            return "POST".equalsIgnoreCase(method) && MerchantSession.isMerchant(request, merchantId(path), merchantService);
         }
         return "POST".equalsIgnoreCase(method) && path.equals("/api/v1/payments/pay");
     }
