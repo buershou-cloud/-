@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -226,27 +227,24 @@ public class ChannelRegistry {
             douyin.setNotifyUrl(nullIfBlank(rs.getString("douyin_notify_url")));
             douyin.setReturnUrl(nullIfBlank(rs.getString("douyin_return_url")));
             douyin.setH5AppName(firstText(rs.getString("douyin_h5_app_name"), "支付平台"));
-            channel.setProducts(loadProducts(channel.getId()));
             return channel;
         });
+        Map<String, Set<PaymentProduct>> products = loaded.isEmpty() ? Map.of() : loadProducts();
+        loaded.forEach(channel -> channel.setProducts(products.getOrDefault(channel.getId(), Set.of())));
         channels.clear();
         loaded.forEach(channel -> channels.put(channel.getId(), channel));
     }
 
-    private Set<PaymentProduct> loadProducts(String channelId) {
-        List<String> values = jdbcTemplate.queryForList(
-                "SELECT product FROM pay_channel_product WHERE channel_id = ? ORDER BY product",
-                String.class,
-                channelId
-        );
-        LinkedHashSet<PaymentProduct> products = new LinkedHashSet<>();
-        for (String value : values) {
+    private Map<String, Set<PaymentProduct>> loadProducts() {
+        Map<String, Set<PaymentProduct>> products = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT channel_id, product FROM pay_channel_product ORDER BY product", rs -> {
             try {
-                products.add(PaymentProduct.valueOf(value));
+                PaymentProduct product = PaymentProduct.valueOf(rs.getString("product"));
+                products.computeIfAbsent(rs.getString("channel_id"), ignored -> new LinkedHashSet<>()).add(product);
             } catch (IllegalArgumentException ignored) {
                 // Ignore historical/unknown product codes so one bad row does not break boot.
             }
-        }
+        });
         return products;
     }
 

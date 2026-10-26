@@ -144,7 +144,7 @@ public class ChannelController {
                 hasText(channel.getAlipay().getAppCertContent()),
                 hasText(channel.getAlipay().getAlipayCertContent()),
                 hasText(channel.getAlipay().getAlipayRootCertContent()),
-                channel.getAlipay().getAppAuthToken(),
+                null,
                 hasText(channel.getAlipay().getAppAuthToken()),
                 channel.getAlipay().getSubMerchantId(),
                 hasText(channel.getAlipay().getSubMerchantId()),
@@ -198,7 +198,9 @@ public class ChannelController {
         setIfPresent(request.appCertContent(), alipay::setAppCertContent);
         setIfPresent(request.alipayCertContent(), alipay::setAlipayCertContent);
         setIfPresent(request.alipayRootCertContent(), alipay::setAlipayRootCertContent);
-        setIfPresent(request.appAuthToken(), alipay::setAppAuthToken);
+        if (hasText(request.appAuthToken())) {
+            alipay.setAppAuthToken(request.appAuthToken().trim());
+        }
         setIfPresent(request.subMerchantId(), alipay::setSubMerchantId);
         setIfPresent(request.notifyUrl(), alipay::setNotifyUrl);
         setIfPresent(request.returnUrl(), alipay::setReturnUrl);

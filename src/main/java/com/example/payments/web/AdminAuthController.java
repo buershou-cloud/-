@@ -40,7 +40,7 @@ public class AdminAuthController {
     @GetMapping("/session")
     public AdminSessionView session(HttpServletRequest request) {
         String username = AdminSession.username(request);
-        boolean authenticated = AdminSession.isAuthenticated(request) && authService.hasUsername(username);
+        boolean authenticated = AdminSession.isAuthenticated(request, authService);
         return new AdminSessionView(authenticated, authenticated ? username : null);
     }
 
@@ -57,11 +57,12 @@ public class AdminAuthController {
         if (!graphicVerificationService.verify(request, loginRequest.verificationId(), loginRequest.verificationX())) {
             throw new IllegalArgumentException("图形验证未通过，请重新验证");
         }
-        if (!authService.verify(loginRequest.username(), loginRequest.password())) {
+        String fingerprint = authService.authenticateSession(loginRequest.username(), loginRequest.password());
+        if (fingerprint == null) {
             throw new IllegalArgumentException("账号或密码不正确");
         }
         String username = loginRequest.username().trim();
-        request.getSession(true).setAttribute(AdminSession.USERNAME_ATTRIBUTE, username);
+        AdminSession.login(request, username, fingerprint);
         return new AdminSessionView(true, username);
     }
 
@@ -79,11 +80,9 @@ public class AdminAuthController {
             @RequestBody AdminPasswordChangeRequest changeRequest,
             HttpServletRequest request
     ) {
-        if (!AdminSession.isAuthenticated(request)) {
-            throw new IllegalStateException("请先登录后台");
-        }
         String username = requiredSessionUsername(request);
         authService.changePassword(username, changeRequest.oldPassword(), changeRequest.newPassword());
+        AdminSession.login(request, username, authService.authenticateSession(username, changeRequest.newPassword()));
         return new AdminSessionView(true, username);
     }
 
@@ -100,7 +99,7 @@ public class AdminAuthController {
         String currentUsername = requiredSessionUsername(request);
         authService.changeUsername(currentUsername, changeRequest.currentPassword(), changeRequest.newUsername());
         String newUsername = changeRequest.newUsername().trim();
-        request.getSession(true).setAttribute(AdminSession.USERNAME_ATTRIBUTE, newUsername);
+        AdminSession.login(request, newUsername, authService.authenticateSession(newUsername, changeRequest.currentPassword()));
         return securityView(newUsername);
     }
 
@@ -156,9 +155,9 @@ public class AdminAuthController {
         );
     }
 
-    private static String requiredSessionUsername(HttpServletRequest request) {
+    private String requiredSessionUsername(HttpServletRequest request) {
         String username = AdminSession.username(request);
-        if (username == null || username.isBlank()) {
+        if (!AdminSession.isAuthenticated(request, authService)) {
             throw new IllegalStateException("请先登录后台");
         }
         return username;

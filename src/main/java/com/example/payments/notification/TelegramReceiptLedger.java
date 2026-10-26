@@ -50,7 +50,8 @@ final class TelegramReceiptLedger {
 
     void recover() throws IOException {
         Path receipts = receipts();
-        if (Files.exists(receipts.resolve("pending.json"))) {
+        if (Files.exists(receipts.resolve("pending.json")) || Files.isDirectory(receipts.resolve("events"))
+                || Files.isDirectory(receipts.resolve("days"))) {
             NotificationFiles.locked(receipts.resolve("ledger.lock"), true, () -> {
                 recoverLocked(receipts);
                 return true;
@@ -60,16 +61,18 @@ final class TelegramReceiptLedger {
     }
 
     private void recoverLocked(Path receipts) throws IOException {
+        ensureDayIndex(receipts);
         Path pending = receipts.resolve("pending.json");
         if (Files.exists(pending)) apply(receipts, NotificationFiles.read(mapper, pending, Entry.class));
     }
 
     private void apply(Path receipts, Entry entry) throws IOException {
         validateEntry(entry);
-        Map<String, BigDecimal> entries = readDay(receipts, entry.day());
+        String indexedDay = confirmationDay(entry);
+        Map<String, BigDecimal> entries = readDay(receipts, indexedDay);
         BigDecimal previous = entries.putIfAbsent(entry.eventId(), entry.amount());
         if (previous != null && previous.compareTo(entry.amount()) != 0) throw new IOException("Receipt amount conflict");
-        NotificationFiles.write(mapper, receipts.resolve("days").resolve(entry.day() + ".json"), new Day(entries));
+        NotificationFiles.write(mapper, receipts.resolve("days").resolve(indexedDay + ".json"), new Day(entries));
         Path event = receipts.resolve("events").resolve(entry.eventId() + ".json");
         if (!Files.exists(event)) NotificationFiles.write(mapper, event, entry);
         if (entry.chatId() != null) {
@@ -79,10 +82,90 @@ final class TelegramReceiptLedger {
         Files.deleteIfExists(receipts.resolve("pending.json"));
     }
 
+    private void ensureDayIndex(Path receipts) throws IOException {
+        Path metadata = receipts.resolve("day-index.json");
+        if (Files.exists(metadata)) {
+            DayIndex index;
+            try {
+                index = NotificationFiles.read(mapper, metadata, DayIndex.class);
+            } catch (IOException ex) {
+                index = null;
+            }
+            if (index != null && index.complete() && timeZone.getId().equals(index.timeZone())) return;
+        }
+
+        // Events and the write-ahead journal are authoritative; day files are a rebuildable index.
+        // In particular, never rewrite the original message/target snapshots of pending deliveries.
+        Map<String, Map<String, BigDecimal>> days = new LinkedHashMap<>();
+        Map<String, BigDecimal> knownAmounts = new LinkedHashMap<>();
+        Path events = receipts.resolve("events");
+        if (Files.isDirectory(events)) {
+            try (var files = Files.list(events)) {
+                for (Path file : (Iterable<Path>) files.filter(path -> path.getFileName().toString().matches("[a-f0-9]{64}\\.json"))::iterator) {
+                    Entry entry = NotificationFiles.read(mapper, file, Entry.class);
+                    validateEntry(entry);
+                    if (!file.getFileName().toString().equals(entry.eventId() + ".json")) {
+                        throw new IOException("Receipt event identity conflict");
+                    }
+                    indexEntry(days, knownAmounts, entry);
+                }
+            }
+        }
+        Path pending = receipts.resolve("pending.json");
+        if (Files.exists(pending)) {
+            Entry entry = NotificationFiles.read(mapper, pending, Entry.class);
+            validateEntry(entry);
+            Path event = events.resolve(entry.eventId() + ".json");
+            if (Files.exists(event) && !entry.equals(NotificationFiles.read(mapper, event, Entry.class))) {
+                throw new IOException("Pending receipt conflicts with committed event");
+            }
+            indexEntry(days, knownAmounts, entry);
+        }
+
+        Path daily = receipts.resolve("days");
+        java.util.List<Path> previousDays = java.util.List.of();
+        if (Files.isDirectory(daily)) {
+            try (var files = Files.list(daily)) {
+                previousDays = files.filter(path -> path.getFileName().toString().matches("\\d{4}-\\d{2}-\\d{2}\\.json")).toList();
+            }
+            // Refuse to silently erase money if an old installation has lost its event journals.
+            for (Path file : previousDays) {
+                String day = file.getFileName().toString().substring(0, 10);
+                for (var item : readDay(receipts, day).entrySet()) {
+                    BigDecimal amount = knownAmounts.get(item.getKey());
+                    if (amount == null || amount.compareTo(item.getValue()) != 0) {
+                        throw new IOException("Daily receipt has no matching timestamped event; repair ledger before changing time zone");
+                    }
+                }
+            }
+        }
+
+        // Mark incomplete before changing any day files. A crash (even during a zone rollback)
+        // causes the next holder of ledger.lock to rebuild everything from immutable events again.
+        NotificationFiles.write(mapper, metadata, new DayIndex(timeZone.getId(), false));
+        for (var day : days.entrySet()) {
+            NotificationFiles.write(mapper, daily.resolve(day.getKey() + ".json"), new Day(day.getValue()));
+        }
+        for (Path file : previousDays) {
+            if (!days.containsKey(file.getFileName().toString().substring(0, 10))) Files.deleteIfExists(file);
+        }
+        NotificationFiles.write(mapper, metadata, new DayIndex(timeZone.getId(), true));
+    }
+
+    private void indexEntry(Map<String, Map<String, BigDecimal>> days, Map<String, BigDecimal> knownAmounts, Entry entry) {
+        days.computeIfAbsent(confirmationDay(entry), ignored -> new LinkedHashMap<>()).put(entry.eventId(), entry.amount());
+        knownAmounts.put(entry.eventId(), entry.amount());
+    }
+
+    private String confirmationDay(Entry entry) {
+        return Instant.ofEpochMilli(entry.confirmedAt()).atZone(timeZone).toLocalDate().toString();
+    }
+
     private static void validateEntry(Entry entry) throws IOException {
         if (entry == null || entry.eventId() == null || !entry.eventId().matches("[a-f0-9]{64}")
                 || entry.day() == null || !entry.day().matches("\\d{4}-\\d{2}-\\d{2}")
                 || entry.amount() == null || entry.amount().signum() <= 0 || entry.todayCount() <= 0
+                || entry.confirmedAt() <= 0
                 || entry.todayAmount() == null || entry.todayAmount().compareTo(entry.amount()) < 0
                 || entry.text() == null || entry.text().length() > 4096
                 || (entry.chatId() == null) != (entry.tokenFingerprint() == null)) {
@@ -146,6 +229,7 @@ final class TelegramReceiptLedger {
 
     record Totals(long count, BigDecimal amount) { }
     record Day(Map<String, BigDecimal> entries) { }
+    record DayIndex(String timeZone, boolean complete) { }
     record Entry(String eventId, String day, BigDecimal amount, long confirmedAt, long todayCount,
                  BigDecimal todayAmount, String chatId, String tokenFingerprint, String text) { }
     interface MessageFactory { String create(Instant confirmedAt, Totals totals); }

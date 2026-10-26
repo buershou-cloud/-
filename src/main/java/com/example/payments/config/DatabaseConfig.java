@@ -1,11 +1,12 @@
 package com.example.payments.config;
 
+import com.zaxxer.hikari.HikariDataSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import javax.sql.DataSource;
 
@@ -13,8 +14,9 @@ import javax.sql.DataSource;
 @ConditionalOnProperty(name = "payment.database.enabled", havingValue = "true")
 public class DatabaseConfig {
 
-    @Bean
-    public DataSource paymentDataSource(
+    @Bean(destroyMethod = "close")
+    @ConfigurationProperties("payment.database.pool")
+    public HikariDataSource paymentDataSource(
             @Value("${payment.database.url:}") String url,
             @Value("${payment.database.username:}") String username,
             @Value("${payment.database.password:}") String password,
@@ -23,9 +25,12 @@ public class DatabaseConfig {
         if (!hasText(url)) {
             throw new IllegalStateException("payment.database.url is required when payment.database.enabled=true");
         }
-        DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        HikariDataSource dataSource = new HikariDataSource();
+        dataSource.setPoolName("payment-database");
+        dataSource.setMaximumPoolSize(10);
+        dataSource.setMinimumIdle(2);
         dataSource.setDriverClassName(driverClassName);
-        dataSource.setUrl(url.trim());
+        dataSource.setJdbcUrl(url.trim());
         dataSource.setUsername(username == null ? "" : username.trim());
         dataSource.setPassword(password == null ? "" : password);
         return dataSource;

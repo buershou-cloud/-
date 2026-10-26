@@ -15,9 +15,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -26,6 +24,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.Optional;
+import java.util.ArrayDeque;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -44,29 +47,91 @@ class MerchantNotifyServiceTest {
     private final DemoOrderService orders = mock(DemoOrderService.class);
     private final DemoMerchantService merchants = mock(DemoMerchantService.class);
     private final MerchantSignatureService signatures = mock(MerchantSignatureService.class);
-    private final HttpClient client = mock(HttpClient.class);
+    private final MerchantCallbackTransport client = mock(MerchantCallbackTransport.class);
+
+    @Test
+    void persistsBeforeDispatchAndRestartRetriesWhenWorkerWasNeverRun() throws Exception {
+        prepare();
+        var queued = new ArrayDeque<Runnable>();
+        var service = new MerchantNotifyService(orders, merchants, signatures, json, directory, client,
+                initialTime, queued::add);
+        service.notifyPayment(order(), "TRADE_SUCCESS");
+
+        assertThat(delivery().path("attempts").asInt()).isZero();
+        assertThat(delivery().path("delivered").asBoolean()).isFalse();
+        assertThat(queued).hasSize(1);
+        verify(client, never()).post(any(), any());
+        when(client.post(any(), any())).thenReturn(response(200, "success"));
+        service(initialTime).retryPending();
+        assertThat(delivery().path("delivered").asBoolean()).isTrue();
+    }
+
+    @Test
+    void blockedCallbackDoesNotDelayCallerOrDuplicateNotificationAcrossInstances() throws Exception {
+        prepare();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var workers = Executors.newSingleThreadExecutor();
+        when(client.post(any(), any())).thenAnswer(call -> {
+            assertThat(delivery().path("attempts").asInt()).isZero();
+            entered.countDown();
+            if (!release.await(5, TimeUnit.SECONDS)) throw new IOException("test callback timed out");
+            return response(200, "success");
+        });
+        var service = new MerchantNotifyService(orders, merchants, signatures, json, directory, client,
+                initialTime, workers);
+        try {
+            org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1),
+                    () -> service.notifyPayment(order(), "TRADE_SUCCESS"));
+            assertThat(entered.await(2, TimeUnit.SECONDS)).isTrue();
+            org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(Duration.ofSeconds(1), () -> {
+                service.notifyPayment(order(), "TRADE_SUCCESS");
+                service(initialTime).notifyPayment(order(), "TRADE_SUCCESS");
+                service(initialTime).retryPending();
+            });
+            verify(client, times(1)).post(any(), any());
+        } finally {
+            release.countDown();
+            workers.shutdown();
+            assertThat(workers.awaitTermination(3, TimeUnit.SECONDS)).isTrue();
+        }
+        assertThat(delivery().path("delivered").asBoolean()).isTrue();
+    }
+
+    @Test
+    void fullDispatchQueueLeavesDurableRetryWithoutSendingOnCallerThread() throws Exception {
+        prepare();
+        var service = new MerchantNotifyService(orders, merchants, signatures, json, directory, client,
+                initialTime, task -> { throw new RejectedExecutionException("full"); });
+        service.notifyPayment(order(), "TRADE_SUCCESS");
+        assertThat(delivery().path("attempts").asInt()).isZero();
+        verify(client, never()).post(any(), any());
+        when(client.post(any(), any())).thenReturn(response(200, "success"));
+        service(initialTime).retryPending();
+        assertThat(delivery().path("delivered").asBoolean()).isTrue();
+    }
 
     @Test
     void notifiesWithoutJdbcAndDeduplicatesAcknowledgedStateAcrossRestart() throws Exception {
         prepare();
-        HttpResponse<String> acknowledged = response(200, " success\n");
-        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(acknowledged);
+        MerchantCallbackTransport.Result acknowledged = response(200, " success\n");
+        when(client.post(any(), any())).thenReturn(acknowledged);
         MerchantNotifyService service = service(initialTime);
 
         service.notifyPayment(order(), "TRADE_SUCCESS");
         service.notifyPayment(order(), "TRADE_FINISHED");
         service(Clock.offset(initialTime, Duration.ofDays(1))).notifyPayment(order(), "TRADE_SUCCESS");
 
-        verify(client, times(1)).send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        verify(client, times(1)).post(any(), any());
         JsonNode persisted = delivery();
         assertThat(persisted.path("delivered").asBoolean()).isTrue();
         assertThat(persisted.path("payload").path("totalAmount").asText()).isEqualTo("1.00");
         assertThat(persisted.path("payload").path("sign").asText()).isEqualTo("signature");
         assertThat(persisted.path("payload").has("parentOutTradeNo")).isFalse();
         assertThat(persisted.toString()).doesNotContain("md5Key", "privateKey");
-        ArgumentCaptor<HttpRequest> request = ArgumentCaptor.forClass(HttpRequest.class);
-        verify(client).send(request.capture(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
-        assertThat(request.getValue().uri().toString()).isEqualTo("https://merchant.example/notify");
+        ArgumentCaptor<URI> request = ArgumentCaptor.forClass(URI.class);
+        verify(client).post(request.capture(), any());
+        assertThat(request.getValue().toString()).isEqualTo("https://merchant.example/notify");
     }
 
     @Test
@@ -79,9 +144,9 @@ class MerchantNotifyServiceTest {
         when(orders.merchantNotifyTarget("CAPTURE-20"))
                 .thenReturn(Optional.of(new DemoOrderService.MerchantNotifyTarget("M1", "https://merchant.example/notify")));
         when(orders.captureParentOutTradeNo("CAPTURE-20")).thenReturn("AUTH-100");
-        HttpResponse<String> unavailable = response(503, "retry");
-        HttpResponse<String> acknowledged = response(200, "success");
-        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+        MerchantCallbackTransport.Result unavailable = response(503, "retry");
+        MerchantCallbackTransport.Result acknowledged = response(200, "success");
+        when(client.post(any(), any()))
                 .thenReturn(unavailable, acknowledged);
 
         service(initialTime).notifyPayment(captured, "TRADE_SUCCESS");
@@ -110,8 +175,8 @@ class MerchantNotifyServiceTest {
     @Test
     void failedDeliveryIsAlreadyOnDiskThenRetriesAfterRestartWithoutOrderLookup() throws Exception {
         prepare();
-        HttpResponse<String> acknowledged = response(200, "success");
-        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+        MerchantCallbackTransport.Result acknowledged = response(200, "success");
+        when(client.post(any(), any()))
                 .thenAnswer(invocation -> {
                     assertThat(delivery().path("attempts").asInt()).isZero();
                     throw new IOException("offline");
@@ -122,10 +187,10 @@ class MerchantNotifyServiceTest {
 
         when(orders.merchantNotifyTarget("ORDER")).thenReturn(Optional.empty());
         service(Clock.offset(initialTime, Duration.ofSeconds(4))).retryPending();
-        verify(client, times(1)).send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        verify(client, times(1)).post(any(), any());
         service(Clock.offset(initialTime, Duration.ofSeconds(6))).retryPending();
 
-        verify(client, times(2)).send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        verify(client, times(2)).post(any(), any());
         assertThat(delivery().path("delivered").asBoolean()).isTrue();
         assertThat(delivery().path("attempts").asInt()).isEqualTo(2);
     }
@@ -134,8 +199,8 @@ class MerchantNotifyServiceTest {
     @CsvSource({"200,ok", "503,success", "302,success"})
     void requiresBothSuccessfulHttpStatusAndSuccessAcknowledgement(int status, String body) throws Exception {
         prepare();
-        HttpResponse<String> unacknowledged = response(status, body);
-        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any())).thenReturn(unacknowledged);
+        MerchantCallbackTransport.Result unacknowledged = response(status, body);
+        when(client.post(any(), any())).thenReturn(unacknowledged);
 
         service(initialTime).notifyPayment(order(), "TRADE_SUCCESS");
 
@@ -147,9 +212,9 @@ class MerchantNotifyServiceTest {
     void retryResignsWithCurrentMerchantCredentialsAndKeepsOriginalNotificationTime() throws Exception {
         prepare();
         when(signatures.signForMerchant(any(), eq("MD5"), any())).thenReturn("old-signature", "new-signature");
-        HttpResponse<String> unavailable = response(500, "failed");
-        HttpResponse<String> acknowledged = response(200, "success");
-        when(client.send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any()))
+        MerchantCallbackTransport.Result unavailable = response(500, "failed");
+        MerchantCallbackTransport.Result acknowledged = response(200, "success");
+        when(client.post(any(), any()))
                 .thenReturn(unavailable, acknowledged);
         service(initialTime).notifyPayment(order(), "TRADE_SUCCESS");
         String originalTime = delivery().path("payload").path("notifyTime").asText();
@@ -167,7 +232,7 @@ class MerchantNotifyServiceTest {
 
         assertThatThrownBy(() -> service(initialTime).notifyPayment(order(), "TRADE_SUCCESS"))
                 .isInstanceOf(IllegalArgumentException.class);
-        verify(client, never()).send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        verify(client, never()).post(any(), any());
         try (var files = Files.list(directory)) {
             assertThat(files.filter(path -> path.toString().endsWith(".json"))).isEmpty();
         }
@@ -181,7 +246,7 @@ class MerchantNotifyServiceTest {
         service(initialTime).notifyPayment(unpaid, "WAIT_BUYER_PAY");
 
         verify(orders, never()).merchantNotifyTarget(any());
-        verify(client, never()).send(any(), org.mockito.ArgumentMatchers.<HttpResponse.BodyHandler<String>>any());
+        verify(client, never()).post(any(), any());
     }
 
     private void prepare() {
@@ -193,7 +258,7 @@ class MerchantNotifyServiceTest {
     }
 
     private MerchantNotifyService service(Clock clock) {
-        return new MerchantNotifyService(orders, merchants, signatures, json, directory, client, clock);
+        return new MerchantNotifyService(orders, merchants, signatures, json, directory, client, clock, Runnable::run);
     }
 
     private JsonNode delivery() throws IOException {
@@ -215,11 +280,7 @@ class MerchantNotifyServiceTest {
         return order;
     }
 
-    @SuppressWarnings("unchecked")
-    private static HttpResponse<String> response(int code, String body) {
-        HttpResponse<String> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(code);
-        when(response.body()).thenReturn(body);
-        return response;
+    private static MerchantCallbackTransport.Result response(int code, String body) {
+        return new MerchantCallbackTransport.Result(code, body);
     }
 }

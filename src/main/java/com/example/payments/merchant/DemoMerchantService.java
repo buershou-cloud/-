@@ -9,15 +9,20 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -31,6 +36,7 @@ public class DemoMerchantService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String DEFAULT_STATUS = "正常";
     private static final String DEFAULT_SETTLEMENT_STATUS = "待结算";
+    private static final Set<String> ACTIVE_STATUSES = Set.of("正常", "姝ｅ父", "ACTIVE", "ENABLED");
 
     private final Map<String, DemoMerchant> merchants = new LinkedHashMap<>();
     private final JdbcTemplate jdbcTemplate;
@@ -191,13 +197,77 @@ public class DemoMerchantService {
 
     public synchronized DemoMerchantView login(String merchantId, String md5Key, boolean demoLogin) {
         DemoMerchant merchant = merchant(merchantId);
+        if (!activeStatus(merchant.getStatus())) {
+            throw new IllegalArgumentException("商户已禁用，无法登录商户门户");
+        }
         if (!demoLogin && !merchant.getMd5Key().equals(md5Key)) {
             throw new IllegalArgumentException("鍟嗘埛鍙锋垨 MD5 瀵嗛挜涓嶆纭?");
         }
         return DemoMerchantView.from(merchant);
     }
 
+    public static String portalSessionFingerprint(DemoMerchantView merchant) {
+        return portalSessionFingerprint(merchant.merchantId(), merchant.md5Key(), merchant.rsa2PublicKey(), merchant.signMode(), merchant.status());
+    }
+
+    public synchronized boolean matchesPortalSession(String merchantId, String fingerprint) {
+        if (!hasText(merchantId) || !hasText(fingerprint)) {
+            return false;
+        }
+        if (databaseBacked()) {
+            try {
+                // Session checks must not calculate balances or load routing channels.
+                return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                        SELECT merchant_id, status, md5_key, rsa2_public_key, sign_mode
+                        FROM merchant WHERE merchant_id = ?
+                        """, (rs, rowNum) -> activeStatus(rs.getString("status")) && sameFingerprint(
+                        portalSessionFingerprint(rs.getString("merchant_id"), rs.getString("md5_key"),
+                                rs.getString("rsa2_public_key"), firstText(rs.getString("sign_mode"), "MD5_RSA2"),
+                                rs.getString("status")), fingerprint), merchantId));
+            } catch (EmptyResultDataAccessException ex) {
+                return false;
+            }
+        }
+        DemoMerchant merchant = merchants.get(merchantId);
+        return merchant != null && activeStatus(merchant.getStatus()) && sameFingerprint(
+                portalSessionFingerprint(DemoMerchantView.from(merchant)), fingerprint);
+    }
+
+    private static boolean activeStatus(String status) {
+        return status != null && ACTIVE_STATUSES.contains(status.trim());
+    }
+
+    private static boolean sameFingerprint(String expected, String actual) {
+        return MessageDigest.isEqual(expected.getBytes(StandardCharsets.UTF_8), actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String portalSessionFingerprint(String merchantId, String md5Key, String rsaPublicKey, String signMode, String status) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (String value : new String[]{"merchant-session-v1", merchantId, md5Key, rsaPublicKey, signMode, status}) {
+                byte[] bytes = (value == null ? "" : value).getBytes(StandardCharsets.UTF_8);
+                digest.update(java.nio.ByteBuffer.allocate(Integer.BYTES).putInt(bytes.length).array());
+                digest.update(bytes);
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 is unavailable", ex);
+        }
+    }
+
     public synchronized MerchantRouting routing(String merchantId) {
+        if (databaseBacked()) {
+            try {
+                String mode = jdbcTemplate.queryForObject("SELECT routing_mode FROM merchant WHERE merchant_id = ?",
+                        String.class, merchantId);
+                // Routing never needs order totals or credentials; release the first connection before bindings.
+                Set<String> bindings = loadMerchantChannels(merchantId).stream().filter(DemoMerchantService::hasText)
+                        .map(String::trim).collect(java.util.stream.Collectors.toUnmodifiableSet());
+                return new MerchantRouting(bindings, routingMode(mode));
+            } catch (EmptyResultDataAccessException ex) {
+                throw new IllegalArgumentException("Merchant does not exist: " + merchantId);
+            }
+        }
         DemoMerchant merchant = merchant(merchantId);
         return new MerchantRouting(merchant.getChannelIds(), merchant.getRoutingMode());
     }
@@ -219,53 +289,53 @@ public class DemoMerchantService {
     }
 
     private List<DemoMerchant> loadMerchants() {
-        return jdbcTemplate.query("""
+        List<DemoMerchant> loaded = jdbcTemplate.query("""
                 SELECT merchant_id, name, fee_rate, status, settlement_status, md5_key,
                        platform_public_key, rsa2_public_key, rsa2_private_key, sign_mode, routing_mode
                 FROM merchant
                 ORDER BY merchant_id
-                """, (rs, rowNum) -> new DemoMerchant(
-                rs.getString("merchant_id"),
-                rs.getString("name"),
-                rs.getBigDecimal("fee_rate"),
-                rs.getString("status"),
-                merchantAmount(rs.getString("merchant_id")),
-                rs.getString("md5_key"),
-                platformRsa.publicKey(),
-                rs.getString("rsa2_public_key"),
-                rs.getString("rsa2_private_key"),
-                firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
-                firstText(rs.getString("sign_mode"), "MD5_RSA2"),
-                loadMerchantChannels(rs.getString("merchant_id")),
-                routingMode(rs.getString("routing_mode"))
-        ));
+                """, this::mapMerchant);
+        if (loaded.isEmpty()) return loaded;
+        Map<String, BigDecimal> amounts = new LinkedHashMap<>();
+        jdbcTemplate.query("""
+                SELECT merchant_id, COALESCE(SUM(amount), 0) AS amount FROM pay_order
+                WHERE status IN ('COMPLETED', 'FROZEN') GROUP BY merchant_id
+                """, rs -> { amounts.put(rs.getString("merchant_id"), rs.getBigDecimal("amount")); });
+        Map<String, Set<String>> bindings = new LinkedHashMap<>();
+        jdbcTemplate.query("SELECT merchant_id, channel_id FROM merchant_channel ORDER BY created_at, channel_id",
+                rs -> { bindings.computeIfAbsent(rs.getString("merchant_id"), ignored -> new LinkedHashSet<>())
+                        .add(rs.getString("channel_id")); });
+        for (DemoMerchant merchant : loaded) {
+            merchant.setTodayAmount(amounts.getOrDefault(merchant.getMerchantId(), BigDecimal.ZERO));
+            merchant.setChannelIds(bindings.getOrDefault(merchant.getMerchantId(), Set.of()));
+        }
+        return loaded;
     }
 
     private DemoMerchant readMerchant(String merchantId) {
         try {
-            return jdbcTemplate.queryForObject("""
+            DemoMerchant merchant = jdbcTemplate.queryForObject("""
                     SELECT merchant_id, name, fee_rate, status, settlement_status, md5_key,
                            platform_public_key, rsa2_public_key, rsa2_private_key, sign_mode, routing_mode
                     FROM merchant
                     WHERE merchant_id = ?
-                    """, (rs, rowNum) -> new DemoMerchant(
-                    rs.getString("merchant_id"),
-                    rs.getString("name"),
-                    rs.getBigDecimal("fee_rate"),
-                    rs.getString("status"),
-                    merchantAmount(rs.getString("merchant_id")),
-                    rs.getString("md5_key"),
-                    platformRsa.publicKey(),
-                    rs.getString("rsa2_public_key"),
-                    rs.getString("rsa2_private_key"),
-                    firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
-                    firstText(rs.getString("sign_mode"), "MD5_RSA2"),
-                    loadMerchantChannels(rs.getString("merchant_id")),
-                    routingMode(rs.getString("routing_mode"))
-            ), merchantId);
+                    """, this::mapMerchant, merchantId);
+            // JdbcTemplate has closed the row cursor and returned its connection before enrichment.
+            merchant.setTodayAmount(merchantAmount(merchantId));
+            merchant.setChannelIds(loadMerchantChannels(merchantId));
+            return merchant;
         } catch (EmptyResultDataAccessException ex) {
             throw new IllegalArgumentException("Merchant does not exist: " + merchantId);
         }
+    }
+
+    private DemoMerchant mapMerchant(ResultSet rs, int rowNum) throws SQLException {
+        return new DemoMerchant(
+                rs.getString("merchant_id"), rs.getString("name"), rs.getBigDecimal("fee_rate"),
+                rs.getString("status"), BigDecimal.ZERO, rs.getString("md5_key"), platformRsa.publicKey(),
+                rs.getString("rsa2_public_key"), rs.getString("rsa2_private_key"),
+                firstText(rs.getString("settlement_status"), DEFAULT_SETTLEMENT_STATUS),
+                firstText(rs.getString("sign_mode"), "MD5_RSA2"), Set.of(), routingMode(rs.getString("routing_mode")));
     }
 
     private BigDecimal merchantAmount(String merchantId) {

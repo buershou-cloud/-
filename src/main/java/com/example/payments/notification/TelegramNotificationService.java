@@ -43,7 +43,7 @@ public class TelegramNotificationService implements ConfirmedReceiptSink {
     @Autowired
     public TelegramNotificationService(ObjectMapper mapper,
             @Value("${payment.telegram.directory:data/telegram-notifications}") String directory,
-            @Value("${payment.telegram.time-zone:Asia/Bangkok}") String timeZone) {
+            @Value("${payment.telegram.time-zone:Asia/Shanghai}") String timeZone) {
         this(mapper, configuredPath(directory), new TelegramBotClient(mapper), Clock.systemUTC(), configuredZone(timeZone));
     }
 
@@ -363,8 +363,8 @@ public class TelegramNotificationService implements ConfirmedReceiptSink {
         try { return Path.of(value); } catch (RuntimeException ex) { return null; }
     }
 
-    private static ZoneId configuredZone(String value) {
-        try { return ZoneId.of(value); } catch (RuntimeException ex) { return ZoneId.of("Asia/Bangkok"); }
+    static ZoneId configuredZone(String value) {
+        try { return ZoneId.of(value); } catch (RuntimeException ex) { return ZoneId.of("Asia/Shanghai"); }
     }
 
     public record SettingsView(boolean enabled, boolean tokenConfigured, String chatId, String lastError) { }
